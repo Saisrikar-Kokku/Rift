@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Dictionary - Rift</title>
+    <link href="../shared/fonts.css" rel="stylesheet">
+    <link href="../shared/tailwind.css" rel="stylesheet">
+    <link href="../shared/modal.css" rel="stylesheet">
+    <style>
+        .rift-sidebar {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            bottom: 0 !important;
+            width: 220px !important;
+            background-color: #111117 !important;
+            border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+            z-index: 50 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            padding: 24px 14px !important;
+            box-sizing: border-box !important;
+        }
+    </style>
+</head>
+<body class="bg-surface-container-lowest font-body-md text-body-md text-on-surface antialiased select-none">
+    <!-- Standardized Fixed Sidebar -->
+    <aside class="rift-sidebar">
+        <div style="display: flex; flex-direction: column; gap: 24px;">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 4px 8px;">
+                <img alt="Rift Logo" style="height: 32px; width: auto; object-fit: contain;" src="../assets/logo.svg">
+                <span style="font-size: 18px; font-weight: 700; color: #e4e1ea; letter-spacing: -0.02em;">Rift</span>
+            </div>
+            <nav style="display: flex; flex-direction: column; gap: 4px;">
+                <a href="home.html"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; color: #938ea1; font-size: 14px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#1a1a24'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#938ea1';">
+                    <span class="material-symbols-outlined text-[19px]">home</span>
+                    <span>Home</span>
+                </a>
+                <a href="history.html"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; color: #938ea1; font-size: 14px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#1a1a24'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#938ea1';">
+                    <span class="material-symbols-outlined text-[19px]">schedule</span>
+                    <span>History</span>
+                </a>
+                <a href="dictionary.html" aria-current="page"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; background-color: #1f1f28; color: #e4e1ea; font-size: 14px; font-weight: 600; text-decoration: none;">
+                    <span class="material-symbols-outlined text-[19px] text-primary" style="color: #cabeff;">book_2</span>
+                    <span>Dictionary</span>
+                </a>
+                <a href="shortcuts.html"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; color: #938ea1; font-size: 14px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#1a1a24'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#938ea1';">
+                    <span class="material-symbols-outlined text-[19px]">keyboard</span>
+                    <span>Shortcuts</span>
+                </a>
+                <a href="settings.html"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; color: #938ea1; font-size: 14px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#1a1a24'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#938ea1';">
+                    <span class="material-symbols-outlined text-[19px]">settings</span>
+                    <span>Settings</span>
+                </a>
+            </nav>
+        </div>
+        <div style="padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08); padding-left: 8px; padding-right: 8px; display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #938ea1;">v1.0.0</span>
+            <div style="display: flex; align-items: center; gap: 6px;" title="Engine Ready">
+                <span style="height: 8px; width: 8px; border-radius: 50%; background-color: #45dfa9; box-shadow: 0 0 8px rgba(69,223,169,0.8);"></span>
+                <span style="font-size: 11px; color: #938ea1; font-family: 'JetBrains Mono', monospace;">Ready</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="pl-[220px] min-h-screen flex flex-col bg-surface-container-lowest">
+        <!-- Top App Bar Header -->
+        <header class="fixed top-0 left-[220px] right-0 h-14 bg-surface-container-lowest/80 backdrop-blur-xl border-b border-white/[0.08] z-40 flex items-center justify-between px-space-24">
+            <div class="flex items-center gap-space-12">
+                <div class="flex items-center gap-space-6 px-space-8 py-space-4 rounded-full bg-surface-container border border-white/[0.08]">
+                    <span class="h-1.5 w-1.5 rounded-full bg-tertiary shadow-[0_0_6px_rgba(69,223,169,0.7)]"></span>
+                    <span id="headerEngineText" class="font-mono-code text-mono-code text-on-surface-variant">Whisper-Large-v3</span>
+                </div>
+                <div class="flex items-center gap-space-6 px-space-8 py-space-4 rounded bg-surface-container border border-white/[0.08]">
+                    <span id="headerShortcutBadge" class="font-kbd-shortcut text-kbd-shortcut text-outline font-mono-code">Right Alt</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-space-12">
+                <div class="flex items-center gap-space-6 px-space-8 py-space-4 rounded-full bg-surface-container border border-white/[0.08]">
+                    <span class="h-2 w-2 rounded-full bg-tertiary shadow-[0_0_8px_rgba(69,223,169,0.7)]"></span>
+                    <span class="font-mono-code text-mono-code text-on-surface font-medium">Ready</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="w-full pt-20 px-space-24 pb-space-32 flex-1 bg-surface-container-lowest relative">
+            <div class="flex flex-col w-full max-w-6xl mx-auto pb-space-32 gap-space-24">
+                <!-- Header Section -->
+                <div class="flex flex-col md:flex-row md:items-end justify-between gap-space-16 pb-space-8">
+                    <div class="flex flex-col gap-space-6">
+                        <div class="flex items-center gap-space-10">
+                            <h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight font-semibold">Custom Dictionary</h1>
+                            <span id="activeRulesBadge" class="inline-flex items-center px-space-8 py-space-2 rounded-full bg-surface-container-high text-on-surface-variant font-mono-code text-caption font-medium border border-white/[0.08]">
+                                <span class="h-1.5 w-1.5 rounded-full bg-tertiary mr-1.5 animate-pulse"></span>
+                                <span id="activeRulesCount">0 active rules</span>
+                            </span>
+                        </div>
+                        <p class="font-body-md text-body-md text-outline">
+                            Map spoken phrases to exact text — optimized for technical terms, symbols, acronyms, and command syntax.
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-space-12 flex-wrap">
+                        <!-- Search Input -->
+                        <div class="relative min-w-[260px]">
+                            <span class="material-symbols-outlined absolute left-space-10 top-1/2 -translate-y-1/2 text-outline text-[18px] pointer-events-none">search</span>
+                            <input id="ruleSearchInput" type="text" placeholder="Filter dictionary rules... (Ctrl+F)"
+                                class="w-full h-9 pl-9 pr-14 bg-surface-container-lowest text-on-surface placeholder:text-outline/60 font-body-sm text-body-sm rounded-xl border border-white/[0.08] focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all">
+                            <span class="absolute right-space-8 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded bg-surface-container border border-white/[0.08] font-kbd-shortcut text-[10px] text-outline font-mono-code">Ctrl+F</span>
+                        </div>
+                        <!-- Add Phrase Button -->
+                        <button id="openAddModalBtn"
+                            class="h-9 px-space-16 rounded-xl bg-primary text-on-primary font-body-md text-body-md font-semibold inline-flex items-center gap-space-8 shadow-lg shadow-primary/20 hover:opacity-95 active:scale-[0.98] transition-all">
+                            <span class="material-symbols-outlined text-[18px]">add</span>
+                            <span>Add Phrase</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Presets & Category Bar -->
+                <div class="flex items-center justify-between gap-space-12 py-space-6 border-b border-white/[0.04]">
+                    <div class="flex items-center gap-space-8 flex-wrap" id="categoryChips">
+                        <span class="font-mono-code text-caption text-outline uppercase tracking-wider">Presets:</span>
+                        <button data-cat="all" class="cat-btn px-space-8 py-1 rounded-lg bg-surface-container-high text-on-surface font-mono-code text-caption hover:bg-surface-container-highest transition-colors">
+                            All Rules (<span id="catCountAll">0</span>)
+                        </button>
+                        <button data-cat="CLI & Git" class="cat-btn px-space-8 py-1 rounded-lg bg-surface-container text-outline hover:text-on-surface hover:bg-surface-container-high transition-colors font-mono-code text-caption">
+                            CLI &amp; Git (<span id="catCountCLI">0</span>)
+                        </button>
+                        <button data-cat="Dev Mentions" class="cat-btn px-space-8 py-1 rounded-lg bg-surface-container text-outline hover:text-on-surface hover:bg-surface-container-high transition-colors font-mono-code text-caption">
+                            Dev Mentions (<span id="catCountDev">0</span>)
+                        </button>
+                        <button data-cat="Syntax" class="cat-btn px-space-8 py-1 rounded-lg bg-surface-container text-outline hover:text-on-surface hover:bg-surface-container-high transition-colors font-mono-code text-caption">
+                            Syntax (<span id="catCountSyntax">0</span>)
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-space-8 font-mono-code text-caption text-outline">
+                        <span>Engine: <span class="text-tertiary">Real-time Regex AST</span></span>
+                    </div>
+                </div>
+
+                <!-- Main Table Container -->
+                <div class="bg-surface-container-low rounded-xl border border-white/[0.08] overflow-hidden shadow-2xl">
+                    <!-- Table Header -->
+                    <div class="grid grid-cols-12 px-space-20 py-space-10 bg-surface-container border-b border-white/[0.06] font-mono-code text-caption text-outline uppercase tracking-wider select-none">
+                        <div class="col-span-4 flex items-center gap-space-6">
+                            <span>Spoken Phrase</span>
+                        </div>
+                        <div class="col-span-4 flex items-center gap-space-6">
+                            <span>Transforms To</span>
+                        </div>
+                        <div class="col-span-2 flex items-center gap-space-6">
+                            <span>Scope / Tag</span>
+                        </div>
+                        <div class="col-span-2 flex items-center justify-end gap-space-6">
+                            <span>Status &amp; Actions</span>
+                        </div>
+                    </div>
+
+                    <!-- Rule Rows List -->
+                    <div id="dictionaryRows" class="divide-y divide-white/[0.04]">
+                        <!-- Populated dynamically via bridge.js -->
+                    </div>
+
+                    <!-- Empty State -->
+                    <div id="emptyDictState" class="hidden flex-col items-center justify-center py-16 text-center gap-3">
+                        <span class="material-symbols-outlined text-[42px] text-outline/40">book_2</span>
+                        <h3 class="font-headline-sm font-medium text-on-surface">No dictionary rules found</h3>
+                        <p class="font-body-sm text-outline max-w-sm">Add phrases you speak frequently to replace them automatically with code, symbols, or formatting.</p>
+                    </div>
+                </div>
+
+                <!-- Bottom Action & Helper Section -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-space-16 pt-space-4">
+                    <!-- Pro-Tip Card -->
+                    <div class="md:col-span-2 p-space-16 rounded-xl bg-surface-container-low border border-white/[0.08] flex items-start gap-space-12 relative overflow-hidden">
+                        <div class="h-8 w-8 rounded-lg bg-surface-container-lowest border border-white/[0.08] flex items-center justify-center text-tertiary shrink-0">
+                            <span class="material-symbols-outlined text-[18px]">terminal</span>
+                        </div>
+                        <div class="flex flex-col gap-space-2 min-w-0">
+                            <div class="flex items-center gap-space-6">
+                                <span class="font-mono-code text-caption text-tertiary uppercase font-medium">Pro-tip</span>
+                                <span class="font-mono-code text-caption text-outline">• Automatic normalization</span>
+                            </div>
+                            <p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+                                Say phrases naturally. Rift’s substitution engine normalizes conversational fillers and matches case-insensitively before injecting the replacement into active windows.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Import / Export Card -->
+                    <div class="p-space-16 rounded-xl bg-surface-container-low border border-white/[0.08] flex flex-col justify-between gap-space-12">
+                        <div class="flex items-center justify-between">
+                            <span class="font-mono-code text-caption text-outline uppercase tracking-wider">Sync &amp; Backups</span>
+                            <span class="font-mono-code text-caption text-tertiary">Local JSON</span>
+                        </div>
+                        <div class="flex items-center gap-space-8">
+                            <button id="importBtn"
+                                class="flex-1 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high border border-white/[0.08] text-on-surface font-body-sm text-body-sm font-medium flex items-center justify-center gap-1.5 transition-colors">
+                                <span class="material-symbols-outlined text-[15px] text-outline">file_upload</span>
+                                <span>Import</span>
+                            </button>
+                            <button id="exportBtn"
+                                class="flex-1 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high border border-white/[0.08] text-on-surface font-body-sm text-body-sm font-medium flex items-center justify-center gap-1.5 transition-colors">
+                                <span class="material-symbols-outlined text-[15px] text-outline">file_download</span>
+                                <span>Export JSON</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <script src="../shared/qwebchannel.js"></script>
+    <script src="../shared/bridge.js"></script>
+    <script src="../shared/modal.js"></script>
+    <script src="../shared/toast.js"></script>
+    <script>
+        (function() {
+            const rowsContainer = document.getElementById('dictionaryRows');
+            const emptyDictState = document.getElementById('emptyDictState');
+            const activeRulesCount = document.getElementById('activeRulesCount');
+            const catCountAll = document.getElementById('catCountAll');
+            const searchInput = document.getElementById('ruleSearchInput');
+            const openAddModalBtn = document.getElementById('openAddModalBtn');
+            const importBtn = document.getElementById('importBtn');
+            const exportBtn = document.getElementById('exportBtn');
+            const catButtons = document.querySelectorAll('.cat-btn');
+            const headerShortcutBadge = document.getElementById('headerShortcutBadge');
+            const headerEngineText = document.getElementById('headerEngineText');
+
+            let allRules = [];
+            let activeCategory = 'all';
+
+            function matchesCategoryTag(tag, category) {
+                if (category === 'all') return true;
+                const lowTag = (tag || '').toLowerCase();
+                const lowCat = category.toLowerCase();
+                if (category === 'CLI & Git') {
+                    return lowTag.includes('git') || lowTag.includes('cli') || lowTag.includes('cmd') || lowTag.includes('command') || lowTag.includes('npm');
+                }
+                if (category === 'Dev Mentions') {
+                    return lowTag.includes('mention') || lowTag.includes('dev') || lowTag.includes('file') || lowTag.includes('acronym');
+                }
+                if (category === 'Syntax') {
+                    return lowTag.includes('syntax') || lowTag.includes('code') || lowTag.includes('snippet');
+                }
+                return lowTag.includes(lowCat);
+            }
+
+            function renderRules() {
+                rowsContainer.innerHTML = '';
+                const query = (searchInput.value || '').toLowerCase().trim();
+                let visibleCount = 0;
+                let activeCount = 0;
+
+                allRules.forEach(rule => {
+                    const phrase = (rule.phrase || '').toLowerCase();
+                    const replacement = (rule.replacement || '').toLowerCase();
+                    const tag = (rule.tag || '').trim();
+                    const isEnabled = rule.enabled !== false;
+
+                    if (isEnabled) activeCount++;
+
+                    const matchesSearch = !query || phrase.includes(query) || replacement.includes(query) || tag.toLowerCase().includes(query);
+                    const matchesCategory = matchesCategoryTag(tag, activeCategory);
+
+                    if (matchesSearch && matchesCategory) {
+                        visibleCount++;
+                        const row = createRow(rule);
+                        rowsContainer.appendChild(row);
+                    }
+                });
+
+                if (visibleCount === 0) {
+                    emptyDictState.classList.remove('hidden');
+                    emptyDictState.classList.add('flex');
+                } else {
+                    emptyDictState.classList.add('hidden');
+                    emptyDictState.classList.remove('flex');
+                }
+
+                activeRulesCount.textContent = `${activeCount} active rules`;
+                catCountAll.textContent = allRules.length;
+
+                let cCli = 0, cDev = 0, cSyn = 0;
+                allRules.forEach(r => {
+                    const t = r.tag || '';
+                    if (matchesCategoryTag(t, 'CLI & Git')) cCli++;
+                    if (matchesCategoryTag(t, 'Dev Mentions')) cDev++;
+                    if (matchesCategoryTag(t, 'Syntax')) cSyn++;
+                });
+                const elCli = document.getElementById('catCountCLI');
+                const elDev = document.getElementById('catCountDev');
+                const elSyn = document.getElementById('catCountSyntax');
+                if (elCli) elCli.textContent = cCli;
+                if (elDev) elDev.textContent = cDev;
+                if (elSyn) elSyn.textContent = cSyn;
+            }
+
+            function createRow(rule) {
+                const div = document.createElement('div');
+                div.className = 'grid grid-cols-12 items-center px-space-20 py-space-12 hover:bg-white/[0.02] transition-colors group';
+                div.dataset.id = rule.id;
+
+                const tagLabel = rule.tag || 'Custom';
+                const isEnabled = rule.enabled !== false;
+
+                div.innerHTML = `
+                    <div class="col-span-4 flex items-center gap-space-12 pr-space-8">
+                        <div class="h-7 w-7 rounded-lg bg-surface-container-lowest flex items-center justify-center border border-white/[0.08] text-primary group-hover:border-primary/40 transition-colors">
+                            <span class="material-symbols-outlined text-[16px]">mic</span>
+                        </div>
+                        <div class="flex flex-col min-w-0">
+                            <span class="font-body-md text-on-surface font-medium truncate font-mono-code">"${escapeHtml(rule.phrase)}"</span>
+                            <span class="font-mono-code text-[10px] text-outline">Spoken pattern</span>
+                        </div>
+                    </div>
+                    <div class="col-span-4 flex items-center gap-space-8 pr-space-8">
+                        <span class="material-symbols-outlined text-[14px] text-outline/60 shrink-0">arrow_forward</span>
+                        <span class="inline-flex items-center gap-1.5 px-space-8 py-1 rounded-md bg-primary/10 border border-primary/20 text-primary font-mono-code text-body-sm font-medium truncate">
+                            ${escapeHtml(rule.replacement)}
+                        </span>
+                    </div>
+                    <div class="col-span-2">
+                        <span class="inline-flex items-center px-space-8 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-mono-code text-caption border border-white/[0.06]">
+                            ${escapeHtml(tagLabel)}
+                        </span>
+                    </div>
+                    <div class="col-span-2 flex items-center justify-end gap-space-8">
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" class="sr-only peer toggle-enable" ${isEnabled ? 'checked' : ''}>
+                            <div class="w-8 h-4 bg-surface-container-lowest rounded-full peer peer-checked:bg-primary border border-white/[0.1] peer-checked:border-transparent transition-all after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-on-surface-variant after:peer-checked:bg-on-primary after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-4"></div>
+                        </label>
+                        <button class="edit-btn h-7 w-7 rounded-lg text-outline hover:text-on-surface hover:bg-surface-container flex items-center justify-center transition-colors" title="Edit phrase">
+                            <span class="material-symbols-outlined text-[16px]">edit</span>
+                        </button>
+                        <button class="delete-btn h-7 w-7 rounded-lg text-outline hover:text-error hover:bg-error-container/20 flex items-center justify-center transition-colors" title="Delete phrase">
+                            <span class="material-symbols-outlined text-[16px]">delete</span>
+                        </button>
+                    </div>
+                `;
+
+                // Wire Toggle
+                const toggle = div.querySelector('.toggle-enable');
+                toggle.addEventListener('change', async () => {
+                    try {
+                        await window.rift.updateDictionaryEntry(rule.id, { enabled: toggle.checked });
+                        rule.enabled = toggle.checked;
+                        renderRules();
+                    } catch (e) {
+                        window.showToast('Failed to update rule status', 'error');
+                    }
+                });
+
+                // Wire Edit
+                const editBtn = div.querySelector('.edit-btn');
+                editBtn.addEventListener('click', async () => {
+                    const res = await window.showDictionaryModal(rule);
+                    if (res) {
+                        try {
+                            await window.rift.updateDictionaryEntry(rule.id, res);
+                            Object.assign(rule, res);
+                            renderRules();
+                            window.showToast('Rule updated', 'success');
+                        } catch (e) {
+                            window.showToast('Failed to update rule', 'error');
+                        }
+                    }
+                });
+
+                // Wire Delete
+                const delBtn = div.querySelector('.delete-btn');
+                delBtn.addEventListener('click', async () => {
+                    const ok = await window.showConfirmModal({
+                        title: 'Delete Dictionary Rule',
+                        message: `Delete rule for "${rule.phrase}"?`,
+                        confirmText: 'Delete'
+                    });
+                    if (!ok) return;
+                    try {
+                        await window.rift.deleteDictionaryEntry(rule.id);
+                        allRules = allRules.filter(r => r.id !== rule.id);
+                        renderRules();
+                        window.showToast('Rule deleted', 'info');
+                    } catch (e) {
+                        window.showToast('Failed to delete rule', 'error');
+                    }
+                });
+
+                return div;
+            }
+
+            function escapeHtml(str) {
+                if (!str) return '';
+                return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+
+            async function loadDictionary() {
+                try {
+                    const list = await window.rift.getDictionary();
+                    allRules = Array.isArray(list) ? list : [];
+                    renderRules();
+                } catch (e) {
+                    console.error('Failed to load dictionary:', e);
+                }
+            }
+
+            // Search filter
+            searchInput.addEventListener('input', renderRules);
+
+            // Ctrl+F shortcut
+            window.addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+                    e.preventDefault();
+                    searchInput.focus();
+                }
+            });
+
+            // Category filter buttons
+            catButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    catButtons.forEach(b => {
+                        b.className = 'cat-btn px-space-8 py-1 rounded-lg bg-surface-container text-outline hover:text-on-surface hover:bg-surface-container-high transition-colors font-mono-code text-caption';
+                    });
+                    btn.className = 'cat-btn px-space-8 py-1 rounded-lg bg-surface-container-high text-on-surface font-mono-code text-caption hover:bg-surface-container-highest transition-colors';
+                    activeCategory = btn.getAttribute('data-cat');
+                    renderRules();
+                });
+            });
+
+            // Add phrase button
+            openAddModalBtn.addEventListener('click', async () => {
+                const res = await window.showDictionaryModal(null);
+                if (res) {
+                    try {
+                        const newEntry = await window.rift.addDictionaryEntry(res);
+                        if (newEntry) {
+                            allRules.push(newEntry);
+                        } else {
+                            await loadDictionary();
+                        }
+                        renderRules();
+                        window.showToast(`Added phrase "${res.phrase}"`, 'success');
+                    } catch (e) {
+                        window.showToast('Failed to add phrase', 'error');
+                    }
+                }
+            });
+
+            // Import button
+            importBtn.addEventListener('click', async () => {
+                try {
+                    const result = await window.rift.importDictionary();
+                    if (result && result.success) {
+                        await loadDictionary();
+                        window.showToast(`Imported ${result.count || 0} dictionary rules`, 'success');
+                    } else if (result && result.errors && result.errors.length > 0) {
+                        window.showToast('Import error: ' + result.errors[0], 'error');
+                    }
+                } catch (e) {
+                    window.showToast('Import failed', 'error');
+                }
+            });
+
+            // Export button
+            exportBtn.addEventListener('click', async () => {
+                try {
+                    const result = await window.rift.exportDictionary();
+                    if (result && result.success) {
+                        window.showToast('Dictionary exported successfully', 'success');
+                    }
+                } catch (e) {
+                    window.showToast('Export failed', 'error');
+                }
+            });
+
+            // Bridge Ready
+            window.rift.ready(async () => {
+                try {
+                    const sRaw = await window.rift.getSettings();
+                    const s = typeof sRaw === 'string' ? JSON.parse(sRaw) : sRaw;
+                    if (s) {
+                        if (s.inferenceModel) headerEngineText.textContent = s.inferenceModel;
+                        if (s.pushToTalkKey) headerShortcutBadge.textContent = s.pushToTalkKey;
+                    }
+                } catch (e) {}
+
+                loadDictionary();
+            });
+        })();
+    </script>
+</body>
+</html>

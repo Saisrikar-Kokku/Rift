@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Hotkey Setup - Rift</title>
+    <link href="../shared/fonts.css" rel="stylesheet">
+    <link href="../shared/tailwind.css" rel="stylesheet">
+</head>
+<body class="bg-surface-container-lowest text-on-surface font-body-md text-body-md min-h-screen antialiased select-none overflow-hidden">
+    <main class="w-full min-h-screen flex items-center justify-center p-space-16 relative">
+        <div class="flex flex-col w-full items-center justify-center min-h-[calc(100vh-2rem)] py-space-12 relative overflow-hidden">
+            <!-- Ambient Luminescence Anchor -->
+            <div class="absolute w-[540px] h-[340px] bg-gradient-to-tr from-primary-container/10 via-secondary-container/10 to-transparent blur-3xl pointer-events-none -top-24 rounded-full"></div>
+
+            <!-- Top System Header Bar (Clean Minimal Logo) -->
+            <header class="w-full max-w-[520px] flex items-center justify-between px-space-16 py-space-12 mb-space-24 bg-surface-container-low/90 border border-white/[0.08] backdrop-blur-md rounded-2xl shadow-xl">
+                <div class="flex items-center gap-space-8">
+                    <img alt="Rift Logo" class="h-7 w-auto object-contain" src="../assets/logo.svg">
+                    <span class="font-headline-sm text-headline-sm text-on-surface tracking-tight font-semibold">Rift</span>
+                </div>
+                <div class="flex items-center gap-space-6 px-space-10 py-space-4 bg-surface-container-lowest border border-white/[0.06] rounded-full">
+                    <span class="relative flex h-2 w-2">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-tertiary"></span>
+                    </span>
+                    <span class="font-mono-code text-caption text-on-surface font-medium">Ready</span>
+                </div>
+            </header>
+
+            <!-- Central Calibration Card -->
+            <div class="w-full max-w-[520px] bg-surface-container border border-white/[0.08] rounded-2xl p-space-32 shadow-2xl flex flex-col gap-space-24 relative z-10">
+                <!-- Step Header -->
+                <div class="flex flex-col gap-space-12">
+                    <div class="flex items-center justify-between text-caption font-caption text-on-surface-variant uppercase tracking-wider">
+                        <span class="font-mono-code text-caption text-primary">Configuration Phase</span>
+                        <span class="font-mono-code text-caption text-on-surface font-semibold">Step 3 of 3</span>
+                    </div>
+                    <!-- 3-Segment Gradient Progress Track -->
+                    <div class="grid grid-cols-3 gap-space-6 w-full h-[3px]">
+                        <div class="h-full rounded-full bg-gradient-to-r from-primary via-inverse-primary to-secondary-container"></div>
+                        <div class="h-full rounded-full bg-gradient-to-r from-primary via-inverse-primary to-secondary-container"></div>
+                        <div class="h-full rounded-full bg-gradient-to-r from-primary via-inverse-primary to-secondary-container shadow-[0_0_10px_rgba(202,190,255,0.4)]"></div>
+                    </div>
+                    <div class="flex flex-col gap-space-4 mt-space-8">
+                        <h1 class="font-headline-lg text-headline-lg text-on-surface font-semibold tracking-tight">Set your push-to-talk key</h1>
+                        <p class="font-body-md text-body-md text-on-surface-variant">
+                            Hold this key to speak, release to type. Uses a system-wide low-level Windows hook that works everywhere.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Mode Selector: Segmented Control -->
+                <div class="flex flex-col items-center w-full">
+                    <div class="w-full bg-surface-container-lowest p-space-4 rounded-xl flex items-center justify-between border border-white/[0.06]">
+                        <button id="modeSingle" type="button"
+                            class="flex-1 py-space-8 text-center font-caption text-caption font-semibold rounded-lg bg-gradient-to-r from-primary via-inverse-primary to-secondary-container text-on-surface shadow-md transition-all cursor-pointer">
+                            Single Key (e.g. Right Alt)
+                        </button>
+                        <button id="modeCombo" type="button"
+                            class="flex-1 py-space-8 text-center font-caption text-caption font-medium rounded-lg text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer">
+                            Key Combo (e.g. Ctrl+Win)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Mechanical Key Capture Field -->
+                <div class="flex flex-col items-center justify-center w-full">
+                    <div id="captureZone"
+                        class="w-full h-[124px] rounded-xl bg-surface-container-lowest border-2 border-dashed border-outline-variant hover:border-primary flex flex-col items-center justify-center relative group cursor-pointer transition-all duration-300">
+                        <!-- Dynamic Key Pill -->
+                        <div id="activeKeyPill"
+                            class="relative z-10 flex items-center gap-space-10 px-space-20 py-space-10 rounded-full bg-surface-container-high border border-white/[0.08] shadow-lg transition-transform duration-150 transform group-hover:scale-105">
+                            <span class="material-symbols-outlined text-primary text-[18px]">keyboard</span>
+                            <span id="capturedKeyLabel" class="font-headline-md text-headline-md text-on-surface font-semibold tracking-wide select-none font-mono-code">Right Alt</span>
+                            <span class="flex h-2 w-2 relative">
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60"></span>
+                                <span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                            </span>
+                        </div>
+                        <span id="capturePromptText" class="relative z-10 font-caption text-caption text-on-surface-variant mt-space-8 flex items-center gap-space-4 select-none">
+                            <span class="material-symbols-outlined text-[13px] text-outline">touch_app</span>
+                            Click box, then press any key or combo
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Interactive Hardware Test Sandbox -->
+                <div class="flex flex-col gap-space-8 bg-surface-container-low p-space-16 rounded-xl border border-white/[0.06]">
+                    <div class="flex items-center justify-between">
+                        <span class="font-caption text-caption text-on-surface-variant uppercase font-semibold tracking-wider">Hold & Release Test</span>
+                        <button id="testButton" type="button"
+                            class="px-space-12 py-space-6 bg-surface-container hover:bg-surface-bright rounded-lg font-caption text-caption text-on-surface transition-colors flex items-center gap-space-6 active:scale-95 border border-white/[0.06] cursor-pointer">
+                            <span class="material-symbols-outlined text-[14px] text-primary">play_arrow</span>
+                            <span id="testBtnLabel">Test Hold</span>
+                        </button>
+                    </div>
+                    <!-- Real-time Verification Feedback Stream -->
+                    <div id="testStatusBox" class="flex items-center justify-between px-space-12 py-space-8 bg-surface-container-lowest rounded-lg transition-all duration-300">
+                        <div class="flex items-center gap-space-8">
+                            <div class="w-5 h-5 rounded-full bg-tertiary-container/30 flex items-center justify-center">
+                                <span id="testStatusIcon" class="material-symbols-outlined text-tertiary text-[15px] font-bold">check</span>
+                            </div>
+                            <span id="testFeedbackMsg" class="font-body-sm text-body-sm text-on-surface-variant font-medium">Click 'Test Hold', then press & release your key</span>
+                        </div>
+                        <span id="testHoldDuration" class="font-mono-code text-caption text-outline font-medium">--</span>
+                    </div>
+                </div>
+
+                <!-- Navigation Action Row -->
+                <div class="flex items-center justify-between pt-space-8 border-t border-white/[0.06]">
+                    <button id="backBtn" type="button"
+                        class="px-space-16 py-space-10 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low font-body-sm text-body-sm font-medium transition-colors flex items-center gap-space-6 cursor-pointer">
+                        <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+                        <span>Back</span>
+                    </button>
+                    <button id="finishButton" type="button"
+                        class="px-space-24 py-space-12 rounded-full bg-gradient-to-r from-primary via-inverse-primary to-secondary-container text-on-surface font-headline-sm text-headline-sm font-semibold flex items-center gap-space-8 shadow-[0_0_16px_rgba(202,190,255,0.25)] hover:shadow-[0_0_24px_rgba(202,190,255,0.4)] hover:brightness-110 active:scale-98 transition-all cursor-pointer">
+                        <span id="finishBtnText">Finish Setup</span>
+                        <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Footer Telemetry -->
+            <footer class="mt-space-20 max-w-2xl px-space-16 text-center">
+                <div class="inline-flex flex-wrap items-center justify-center gap-x-space-8 gap-y-space-2 font-mono-code text-caption text-on-surface-variant">
+                    <span>Engine: <span class="text-tertiary">Online</span></span>
+                    <span class="text-outline-variant">•</span>
+                    <span>Hook Driver: <span class="text-on-surface">Active (Windows Global Hook)</span></span>
+                    <span class="text-outline-variant">•</span>
+                    <span>Audio: <span class="text-on-surface">WASAPI</span></span>
+                </div>
+            </footer>
+        </div>
+    </main>
+
+    <script src="../shared/qwebchannel.js"></script>
+    <script src="../shared/bridge.js"></script>
+    <script>
+        (function () {
+            const captureZone = document.getElementById('captureZone');
+            const keyLabel = document.getElementById('capturedKeyLabel');
+            const capturePromptText = document.getElementById('capturePromptText');
+            const testBtn = document.getElementById('testButton');
+            const testBtnLabel = document.getElementById('testBtnLabel');
+            const feedbackBox = document.getElementById('testStatusBox');
+            const feedbackMsg = document.getElementById('testFeedbackMsg');
+            const testStatusIcon = document.getElementById('testStatusIcon');
+            const testHoldDuration = document.getElementById('testHoldDuration');
+            const modeSingle = document.getElementById('modeSingle');
+            const modeCombo = document.getElementById('modeCombo');
+            const finishBtn = document.getElementById('finishButton');
+            const finishBtnText = document.getElementById('finishBtnText');
+            const backBtn = document.getElementById('backBtn');
+
+            let currentMode = 'single';
+            let capturedCombo = 'Right Alt';
+            let isCapturing = false;
+
+            // Mode Selector Toggle (does not overwrite captured key)
+            modeSingle.addEventListener('click', () => {
+                currentMode = 'single';
+                modeSingle.className = 'flex-1 py-space-8 text-center font-caption text-caption font-semibold rounded-lg bg-gradient-to-r from-primary via-inverse-primary to-secondary-container text-on-surface shadow-md transition-all cursor-pointer';
+                modeCombo.className = 'flex-1 py-space-8 text-center font-caption text-caption font-medium rounded-lg text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer';
+            });
+
+            modeCombo.addEventListener('click', () => {
+                currentMode = 'combo';
+                modeCombo.className = 'flex-1 py-space-8 text-center font-caption text-caption font-semibold rounded-lg bg-gradient-to-r from-primary via-inverse-primary to-secondary-container text-on-surface shadow-md transition-all cursor-pointer';
+                modeSingle.className = 'flex-1 py-space-8 text-center font-caption text-caption font-medium rounded-lg text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer';
+            });
+
+            // Start global hotkey capture on click
+            captureZone.addEventListener('click', async () => {
+                if (isCapturing) return;
+                isCapturing = true;
+                captureZone.classList.add('border-primary', 'bg-surface-container-high/40');
+                keyLabel.textContent = currentMode === 'combo' ? 'Press Combo (e.g. Ctrl+Win)...' : 'Press Any Key...';
+                keyLabel.classList.add('animate-pulse', 'text-primary');
+                capturePromptText.textContent = 'Listening globally across Windows (any window focused)...';
+
+                try {
+                    await window.rift.startHotkeyCapture(currentMode);
+                } catch (err) {
+                    console.error('startHotkeyCapture failed:', err);
+                    isCapturing = false;
+                    keyLabel.classList.remove('animate-pulse', 'text-primary');
+                    keyLabel.textContent = capturedCombo;
+                }
+            });
+
+            // Back button
+            backBtn.addEventListener('click', () => {
+                window.location.href = 'onboarding-api-key.html';
+            });
+
+            // Finish Setup
+            finishBtn.addEventListener('click', async () => {
+                finishBtn.disabled = true;
+                finishBtnText.textContent = 'Saving...';
+                try {
+                    await window.rift.saveHotkey('push_to_talk', capturedCombo);
+                    await window.rift.saveSettings({
+                        pushToTalkMode: currentMode,
+                        onboardingCompleted: true
+                    });
+                } catch (e) {
+                    console.warn('Failed saving hotkey:', e);
+                }
+                window.location.href = 'home.html';
+            });
+
+            // Test Button
+            testBtn.addEventListener('click', async () => {
+                testBtn.disabled = true;
+                testBtnLabel.textContent = 'Listening...';
+                feedbackMsg.textContent = `Hold and release ${capturedCombo} now...`;
+                feedbackMsg.className = 'font-body-sm text-body-sm text-primary font-medium';
+                testStatusIcon.textContent = 'hourglass_empty';
+                testHoldDuration.textContent = 'waiting...';
+
+                try {
+                    await window.rift.verifyHotkey('push_to_talk');
+                } catch (err) {
+                    testBtn.disabled = false;
+                    testBtnLabel.textContent = 'Test Hold';
+                    feedbackMsg.textContent = 'Verification error.';
+                }
+            });
+
+            // Connect Bridge signals once ready
+            window.rift.ready(async () => {
+                // Preload existing hotkey if configured
+                try {
+                    const hkRaw = await window.rift.getHotkeys();
+                    const hk = typeof hkRaw === 'string' ? JSON.parse(hkRaw) : hkRaw;
+                    if (hk && hk.pushToTalk) {
+                        capturedCombo = hk.pushToTalk;
+                        keyLabel.textContent = capturedCombo;
+                    }
+                    if (hk && hk.mode === 'combo') {
+                        modeCombo.click();
+                    }
+                } catch (e) {
+                    console.warn('Could not load current hotkey:', e);
+                }
+
+                function onHotkeyCaptured(combo) {
+                    if (!isCapturing) return;
+                    isCapturing = false;
+                    captureZone.classList.remove('border-primary', 'bg-surface-container-high/40');
+                    keyLabel.classList.remove('animate-pulse', 'text-primary');
+                    capturePromptText.textContent = 'Click to remap trigger';
+
+                    capturedCombo = combo;
+                    keyLabel.textContent = capturedCombo;
+
+                    try {
+                        window.rift.cancelHotkeyCapture();
+                    } catch (e) {}
+
+                    // Visual celebration flash
+                    feedbackBox.classList.add('bg-tertiary-container/20');
+                    feedbackMsg.textContent = `Registered: ${capturedCombo}`;
+                    feedbackMsg.className = 'font-body-sm text-body-sm text-tertiary font-medium';
+                    testStatusIcon.textContent = 'check_circle';
+                    setTimeout(() => {
+                        feedbackBox.classList.remove('bg-tertiary-container/20');
+                    }, 1200);
+                }
+
+                // In-window keyboard listener
+                let pressedChord = new Set();
+                let maxChord = [];
+                let nonModifierPressed = false;
+
+                function getModifierName(e) {
+                    if (e.code === 'AltRight' || e.key === 'AltGraph' || (e.key === 'Alt' && e.location === 2)) return 'Right Alt';
+                    if (e.code === 'AltLeft' || (e.key === 'Alt' && e.location === 1)) return 'Left Alt';
+                    if (e.code === 'ControlRight' || (e.key === 'Control' && e.location === 2)) return 'Right Ctrl';
+                    if (e.code === 'ControlLeft' || (e.key === 'Control' && e.location === 1)) return 'Left Ctrl';
+                    if (e.code === 'ShiftRight' || (e.key === 'Shift' && e.location === 2)) return 'Right Shift';
+                    if (e.code === 'ShiftLeft' || (e.key === 'Shift' && e.location === 1)) return 'Left Shift';
+                    if (e.key === 'Meta' || e.key === 'OS' || e.code === 'MetaLeft' || e.code === 'MetaRight') return 'Win';
+                    return null;
+                }
+
+                function getNonModifierName(e) {
+                    if (e.key === 'Fn' || e.code === 'Fn' || e.key === 'FnLock' || e.code === 'FnLock' || e.keyCode === 255 || e.which === 255 || e.key === 'WakeUp') return 'Fn';
+                    if (e.code === 'AudioVolumeMute' || e.key === 'AudioVolumeMute') return 'Mute';
+                    if (e.code === 'AudioVolumeDown' || e.key === 'AudioVolumeDown') return 'Volume Down';
+                    if (e.code === 'AudioVolumeUp' || e.key === 'AudioVolumeUp') return 'Volume Up';
+                    if (e.code === 'MediaPlayPause' || e.key === 'MediaPlayPause') return 'Play/Pause';
+                    if (e.code === 'MediaTrackNext' || e.key === 'MediaTrackNext') return 'Next Track';
+                    if (e.code === 'MediaTrackPrevious' || e.key === 'MediaTrackPrevious') return 'Prev Track';
+                    if (e.code === 'MediaStop' || e.key === 'MediaStop') return 'Media Stop';
+
+                    if (e.code && e.code.startsWith('Key') && e.code.length === 4) return e.code.slice(3).toUpperCase();
+                    if (e.code && e.code.startsWith('Digit') && e.code.length === 6) return e.code.slice(5);
+                    if (e.code && /^F\d{1,2}$/i.test(e.code)) return e.code.toUpperCase();
+                    if (e.key && /^F\d{1,2}$/i.test(e.key)) return e.key.toUpperCase();
+                    if (e.code === 'Space' || e.key === ' ') return 'Space';
+                    if (e.code === 'Tab' || e.key === 'Tab') return 'Tab';
+                    if (e.code === 'Enter' || e.key === 'Enter') return 'Enter';
+                    if (e.code === 'Backspace' || e.key === 'Backspace') return 'Backspace';
+                    if (e.code === 'Delete' || e.key === 'Delete') return 'Delete';
+                    if (e.code === 'Insert' || e.key === 'Insert') return 'Insert';
+                    if (e.code === 'Home' || e.key === 'Home') return 'Home';
+                    if (e.code === 'End' || e.key === 'End') return 'End';
+                    if (e.code === 'PageUp') return 'Page Up';
+                    if (e.code === 'PageDown') return 'Page Down';
+                    if (e.code === 'ArrowUp') return 'Up';
+                    if (e.code === 'ArrowDown') return 'Down';
+                    if (e.code === 'ArrowLeft') return 'Left';
+                    if (e.code === 'ArrowRight') return 'Right';
+                    if (e.code === 'Backquote') return '`';
+                    if (e.code && e.code.startsWith('Numpad')) return `Num ${e.code.replace('Numpad', '')}`;
+                    if (e.key && e.key.length === 1) return e.key.toUpperCase();
+                    return e.key || 'Custom';
+                }
+
+                function formatChord(keys) {
+                    if (!keys || keys.length === 0) return '';
+                    if (keys.length === 1) return keys[0];
+
+                    const hasCtrl = keys.some(k => k === 'Ctrl' || k === 'Left Ctrl' || k === 'Right Ctrl');
+                    const hasAlt = keys.some(k => k === 'Alt' || k === 'Left Alt' || k === 'Right Alt');
+                    const hasShift = keys.some(k => k === 'Shift' || k === 'Left Shift' || k === 'Right Shift');
+                    const hasWin = keys.some(k => k === 'Win');
+
+                    const parts = [];
+                    if (hasCtrl) parts.push('Ctrl');
+                    if (hasAlt) parts.push('Alt');
+                    if (hasShift) parts.push('Shift');
+                    if (hasWin) parts.push('Win');
+
+                    for (const k of keys) {
+                        if (['Ctrl', 'Left Ctrl', 'Right Ctrl', 'Alt', 'Left Alt', 'Right Alt', 'Shift', 'Left Shift', 'Right Shift', 'Win'].includes(k)) continue;
+                        if (!parts.includes(k)) parts.push(k);
+                    }
+                    return parts.join('+');
+                }
+
+                window.addEventListener('keydown', (e) => {
+                    if (!isCapturing) return;
+                    if (e.key === 'Escape' && maxChord.length === 0) {
+                        e.preventDefault();
+                        isCapturing = false;
+                        captureZone.classList.remove('border-primary', 'bg-surface-container-high/40');
+                        keyLabel.classList.remove('animate-pulse', 'text-primary');
+                        keyLabel.textContent = capturedCombo;
+                        try { window.rift.cancelHotkeyCapture(); } catch (err) {}
+                        return;
+                    }
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    const mod = getModifierName(e);
+                    if (mod) {
+                        pressedChord.add(mod);
+                        if (!maxChord.includes(mod)) maxChord.push(mod);
+                        keyLabel.textContent = formatChord(maxChord) || 'Press keys...';
+                        return;
+                    }
+
+                    const primary = getNonModifierName(e);
+                    if (!primary) return;
+
+                    if (e.ctrlKey && !maxChord.some(k => k === 'Ctrl' || k === 'Left Ctrl' || k === 'Right Ctrl')) maxChord.push('Ctrl');
+                    if (e.altKey && !maxChord.some(k => k === 'Alt' || k === 'Left Alt' || k === 'Right Alt')) maxChord.push('Alt');
+                    if (e.shiftKey && !maxChord.some(k => k === 'Shift' || k === 'Left Shift' || k === 'Right Shift')) maxChord.push('Shift');
+                    if (e.metaKey && !maxChord.includes('Win')) maxChord.push('Win');
+
+                    pressedChord.add(primary);
+                    if (!maxChord.includes(primary)) maxChord.push(primary);
+                    nonModifierPressed = true;
+                    keyLabel.textContent = formatChord(maxChord) || 'Press keys...';
+
+                    const combo = formatChord(maxChord);
+                    if (combo) onHotkeyCaptured(combo);
+                }, true);
+
+                window.addEventListener('keyup', (e) => {
+                    if (!isCapturing) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    const mod = getModifierName(e);
+                    if (mod) pressedChord.delete(mod);
+                    const nonMod = getNonModifierName(e);
+                    if (nonMod) pressedChord.delete(nonMod);
+
+                    if (!nonModifierPressed && pressedChord.size === 0 && maxChord.length > 0) {
+                        const combo = formatChord(maxChord);
+                        if (combo) onHotkeyCaptured(combo);
+                    }
+                }, true);
+
+                // Listen for captured hotkey event from backend global hook
+                window.rift.on('hotkeyCaptured', (payloadRaw) => {
+                    try {
+                        const payload = typeof payloadRaw === 'string' ? JSON.parse(payloadRaw) : payloadRaw;
+                        const combo = payload.combo || payload.key;
+                        if (combo) {
+                            onHotkeyCaptured(combo);
+                        }
+                    } catch (err) {
+                        console.error('Error handling hotkeyCaptured:', err);
+                    }
+                });
+
+                // Listen for verified hotkey event
+                window.rift.on('hotkeyVerified', (payloadRaw) => {
+                    testBtn.disabled = false;
+                    testBtnLabel.textContent = 'Test Hold';
+                    try {
+                        const payload = typeof payloadRaw === 'string' ? JSON.parse(payloadRaw) : payloadRaw;
+                        const holdSec = ((payload.holdMs || 200) / 1000).toFixed(2);
+                        feedbackMsg.textContent = 'Verified — clean release detected!';
+                        feedbackMsg.className = 'font-body-sm text-body-sm text-tertiary font-medium';
+                        testStatusIcon.textContent = 'check';
+                        testHoldDuration.textContent = `${holdSec}s hold`;
+                    } catch (err) {
+                        console.error('Error handling hotkeyVerified:', err);
+                    }
+                });
+            });
+        })();
+    </script>
+</body>
+</html>

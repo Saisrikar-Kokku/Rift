@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Home - Rift</title>
+    <link href="../shared/fonts.css" rel="stylesheet">
+    <link href="../shared/tailwind.css" rel="stylesheet">
+    <link href="../shared/modal.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #0e0e14;
+            --bg-sidebar: #111117;
+            --bg-card: #14141c;
+            --bg-card-hover: #1b1b26;
+            --bg-container: #1b1b24;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(202, 190, 255, 0.28);
+            --text-primary: #e4e1ea;
+            --text-muted: #938ea1;
+            --accent-purple: #cabeff;
+            --accent-green: #45dfa9;
+            --accent-blue: #b4c5ff;
+        }
+
+        html, body {
+            background-color: var(--bg-base) !important;
+            color: var(--text-primary) !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            min-height: 100vh !important;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Standardized Sidebar */
+        .rift-sidebar {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            bottom: 0 !important;
+            width: 220px !important;
+            background-color: var(--bg-sidebar) !important;
+            border-right: 1px solid var(--border-subtle) !important;
+            z-index: 50 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            padding: 24px 14px !important;
+            box-sizing: border-box !important;
+        }
+
+        /* Top Header Bar */
+        .rift-header {
+            position: fixed !important;
+            top: 0 !important;
+            left: 220px !important;
+            right: 0 !important;
+            height: 56px !important;
+            background-color: rgba(14, 14, 20, 0.9) !important;
+            backdrop-filter: blur(16px) !important;
+            -webkit-backdrop-filter: blur(16px) !important;
+            border-bottom: 1px solid var(--border-subtle) !important;
+            z-index: 40 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            padding: 0 36px !important;
+            box-sizing: border-box !important;
+        }
+
+        /* Main Content Container */
+        .rift-main-area {
+            margin-left: 220px !important;
+            min-height: 100vh !important;
+            background-color: var(--bg-base) !important;
+            padding-top: 84px !important; /* 56px header + 28px breathing room */
+            padding-bottom: 64px !important;
+            padding-left: 40px !important;
+            padding-right: 40px !important;
+            box-sizing: border-box !important;
+        }
+
+        .rift-content {
+            max-width: 1040px !important;
+            margin: 0 auto !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 28px !important;
+        }
+
+        /* 5-Column Metric Card (BridgeVoice Style) */
+        .metrics-bar {
+            display: grid !important;
+            grid-template-columns: repeat(5, 1fr) !important;
+            background-color: var(--bg-card) !important;
+            border: 1px solid var(--border-subtle) !important;
+            border-radius: 16px !important;
+            padding: 22px 24px !important;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3) !important;
+        }
+
+        @media (max-width: 1000px) {
+            .metrics-bar {
+                grid-template-columns: repeat(3, 1fr) !important;
+                gap: 16px !important;
+            }
+        }
+
+        .metric-col {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 8px !important;
+        }
+        .metric-col:not(:last-child) {
+            border-right: 1px solid var(--border-subtle) !important;
+            padding-right: 24px !important;
+        }
+        .metric-col:not(:first-child) {
+            padding-left: 24px !important;
+        }
+
+        .metric-label {
+            display: flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+            font-size: 11px !important;
+            font-weight: 600 !important;
+            letter-spacing: 0.06em !important;
+            text-transform: uppercase !important;
+            color: var(--text-muted) !important;
+        }
+
+        .metric-value {
+            font-size: 32px !important;
+            font-weight: 800 !important;
+            letter-spacing: -0.02em !important;
+            color: var(--text-primary) !important;
+            line-height: 1 !important;
+            margin: 0 !important;
+        }
+
+        /* Recent Activity Cards */
+        .activity-card {
+            background-color: var(--bg-card) !important;
+            border: 1px solid var(--border-subtle) !important;
+            border-radius: 14px !important;
+            padding: 18px 22px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 10px !important;
+            cursor: pointer !important;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+        }
+
+        .activity-card:hover {
+            background-color: var(--bg-card-hover) !important;
+            border-color: var(--border-hover) !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;
+        }
+
+        .activity-text {
+            font-size: 15px !important;
+            line-height: 1.6 !important;
+            color: var(--text-primary) !important;
+            font-weight: 500 !important;
+            word-break: break-word !important;
+        }
+
+        .activity-meta {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            font-size: 12px !important;
+            color: var(--text-muted) !important;
+            font-family: 'JetBrains Mono', monospace !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.04) !important;
+            padding-top: 8px !important;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 7px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.14);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.26);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Standardized Fixed Sidebar -->
+    <aside class="rift-sidebar">
+        <div style="display: flex; flex-direction: column; gap: 24px;">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 4px 8px;">
+                <img alt="Rift Logo" style="height: 32px; width: auto; object-fit: contain;" src="../assets/logo.svg">
+                <span style="font-size: 18px; font-weight: 700; color: #e4e1ea; letter-spacing: -0.02em;">Rift</span>
+            </div>
+            <nav style="display: flex; flex-direction: column; gap: 4px;">
+                <a href="home.html" aria-current="page"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; background-color: #1f1f28; color: #e4e1ea; font-size: 14px; font-weight: 600; text-decoration: none;">
+                    <span class="material-symbols-outlined text-[19px] text-primary">home</span>
+                    <span>Home</span>
+                </a>
+                <a href="history.html"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; color: #938ea1; font-size: 14px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#1a1a24'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#938ea1';">
+                    <span class="material-symbols-outlined text-[19px]">schedule</span>
+                    <span>History</span>
+                </a>
+                <a href="dictionary.html"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; color: #938ea1; font-size: 14px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#1a1a24'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#938ea1';">
+                    <span class="material-symbols-outlined text-[19px]">book_2</span>
+                    <span>Dictionary</span>
+                </a>
+                <a href="shortcuts.html"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; color: #938ea1; font-size: 14px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#1a1a24'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#938ea1';">
+                    <span class="material-symbols-outlined text-[19px]">keyboard</span>
+                    <span>Shortcuts</span>
+                </a>
+                <a href="settings.html"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; color: #938ea1; font-size: 14px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#1a1a24'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#938ea1';">
+                    <span class="material-symbols-outlined text-[19px]">settings</span>
+                    <span>Settings</span>
+                </a>
+            </nav>
+        </div>
+        <div style="padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08); padding-left: 8px; padding-right: 8px; display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #938ea1;">v1.0.0</span>
+            <div style="display: flex; align-items: center; gap: 6px;" title="Engine Ready">
+                <span style="height: 8px; width: 8px; border-radius: 50%; background-color: #45dfa9; box-shadow: 0 0 8px rgba(69,223,169,0.8);"></span>
+                <span style="font-size: 11px; color: #938ea1; font-family: 'JetBrains Mono', monospace;">Ready</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Top App Bar Header -->
+    <header class="rift-header">
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <a href="settings.html" style="display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 9999px; background-color: #1a1a24; border: 1px solid rgba(255,255,255,0.08); text-decoration: none; color: #cac4d7; font-size: 12px; font-family: 'JetBrains Mono', monospace;" title="Configure engine in Settings">
+                <span class="material-symbols-outlined text-tertiary" style="font-size: 15px; color: #45dfa9;">mic</span>
+                <span id="headerEngineText" style="color: #e4e1ea;">MAI-Transcribe 2</span>
+                <span style="color: #938ea1;">• Ultra-Fast</span>
+            </a>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; background-color: #1a1a24; border: 1px solid rgba(255,255,255,0.08); font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #938ea1;">
+                <span id="headerShortcutBadge">Right Alt</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 9999px; background-color: #1a1a24; border: 1px solid rgba(255,255,255,0.08); font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #cac4d7;">
+                <span style="position: relative; display: flex; height: 8px; width: 8px;">
+                    <span style="position: absolute; display: inline-flex; height: 100%; width: 100%; border-radius: 50%; background-color: #45dfa9; opacity: 0.75;" class="animate-ping"></span>
+                    <span style="position: relative; display: inline-flex; border-radius: 50%; height: 8px; width: 8px; background-color: #45dfa9;"></span>
+                </span>
+                <span style="font-weight: 500;">Online</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="rift-main-area">
+        <div class="rift-content">
+
+            <!-- 1. Header Row (Home Title + Subtitle + Share Stats Button) -->
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 14px;">
+                    <div style="height: 48px; width: 48px; border-radius: 14px; background-color: rgba(202, 190, 255, 0.12); border: 1px solid rgba(202, 190, 255, 0.25); display: flex; align-items: center; justify-content: center; color: #cabeff; box-shadow: 0 0 20px rgba(202, 190, 255, 0.1); flex-shrink: 0;">
+                        <span class="material-symbols-outlined" style="font-size: 26px;">grid_view</span>
+                    </div>
+                    <div>
+                        <h1 style="font-size: 24px; font-weight: 700; color: #e4e1ea; letter-spacing: -0.02em; margin: 0;">Home</h1>
+                        <p style="font-size: 13px; color: #938ea1; margin: 2px 0 0 0;">Your usage at a glance.</p>
+                    </div>
+                </div>
+                <button id="shareStatsBtn"
+                    style="display: flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 12px; background-color: #1a1a24; border: 1px solid rgba(255,255,255,0.1); color: #e4e1ea; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s;"
+                    onmouseover="this.style.backgroundColor='#242432'; this.style.borderColor='rgba(255,255,255,0.2)';"
+                    onmouseout="this.style.backgroundColor='#1a1a24'; this.style.borderColor='rgba(255,255,255,0.1)';"
+                    title="Copy stats summary to clipboard">
+                    <span class="material-symbols-outlined" style="font-size: 16px; color: #cabeff;">share</span>
+                    <span>Share stats</span>
+                </button>
+            </div>
+
+            <!-- 2. Pure BridgeVoice 4-Column Horizontal Stats Bar -->
+            <section class="metrics-bar">
+                <!-- WORDS -->
+                <div class="metric-col">
+                    <div class="metric-label">
+                        <span class="material-symbols-outlined" style="font-size: 15px; color: #cabeff;">bolt</span>
+                        <span>WORDS</span>
+                    </div>
+                    <div id="statTotalWords" class="metric-value">
+                        0
+                    </div>
+                </div>
+
+                <!-- SPEAKING TIME -->
+                <div class="metric-col">
+                    <div class="metric-label">
+                        <span class="material-symbols-outlined" style="font-size: 15px; color: #45dfa9;">timer</span>
+                        <span>SPEAKING TIME</span>
+                    </div>
+                    <div id="statSpeakingTime" class="metric-value">
+                        0s
+                    </div>
+                </div>
+
+                <!-- RECORDINGS -->
+                <div class="metric-col">
+                    <div class="metric-label">
+                        <span class="material-symbols-outlined" style="font-size: 15px; color: #b4c5ff;">mic</span>
+                        <span>RECORDINGS</span>
+                    </div>
+                    <div id="statRecordings" class="metric-value">
+                        0
+                    </div>
+                </div>
+
+                <!-- AVG PACE -->
+                <div class="metric-col">
+                    <div class="metric-label">
+                        <span class="material-symbols-outlined" style="font-size: 15px; color: #957dff;">speed</span>
+                        <span>AVG PACE</span>
+                    </div>
+                    <div id="statAvgPace" class="metric-value">
+                        0 <span style="font-size: 15px; font-weight: 400; color: #938ea1;">wpm</span>
+                    </div>
+                </div>
+
+                <!-- USAGE LEFT -->
+                <div class="metric-col" id="colRemainingUsage">
+                    <div class="metric-label">
+                        <span class="material-symbols-outlined" id="statRemainingIcon" style="font-size: 15px; color: #38bdf8;">timelapse</span>
+                        <span id="statRemainingTitle">USAGE LEFT</span>
+                    </div>
+                    <div id="statRemainingTime" class="metric-value" style="font-size: 26px !important;">
+                        --
+                    </div>
+                    <div id="statRemainingSubtext" style="font-size: 11px; color: #938ea1; font-weight: 500; margin-top: 2px; display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        <span id="statRemainingDot" style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background-color: #38bdf8; shrink: 0;"></span>
+                        <span id="statRemainingSubtextText" style="overflow: hidden; text-overflow: ellipsis;">Calculating...</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. Recent Activity Section -->
+            <section style="display: flex; flex-direction: column; gap: 16px;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <h2 style="font-size: 18px; font-weight: 700; color: #e4e1ea; letter-spacing: -0.01em; margin: 0;">Recent Activity</h2>
+                    <a href="history.html" style="font-size: 13px; font-weight: 500; color: #938ea1; text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s;"
+                        onmouseover="this.style.color='#cabeff';"
+                        onmouseout="this.style.color='#938ea1';">
+                        <span>View All</span>
+                        <span class="material-symbols-outlined" style="font-size: 15px;">arrow_forward</span>
+                    </a>
+                </div>
+
+                <!-- Activity List Container -->
+                <div id="recentActivityList" style="display: flex; flex-direction: column; gap: 12px;">
+                    <!-- Dynamic activity cards rendered here -->
+                </div>
+
+                <!-- Empty State Placeholder -->
+                <div id="emptyActivityPlaceholder" style="display: none; border-radius: 16px; border: 1px dashed rgba(255,255,255,0.1); padding: 56px 24px; text-align: center; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background-color: rgba(20,20,28,0.4);">
+                    <span class="material-symbols-outlined" style="font-size: 40px; color: rgba(147,142,161,0.35);">mic_none</span>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <p style="font-size: 15px; font-weight: 600; color: #e4e1ea; margin: 0;">No recent dictations yet</p>
+                        <p style="font-size: 13px; color: #938ea1; margin: 0;">Hold your hotkey (<span id="emptyHotkeyText" style="font-family: 'JetBrains Mono', monospace; color: #cabeff; font-weight: 600;">Right Alt</span>) to dictate anywhere.</p>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <script src="../shared/qwebchannel.js"></script>
+    <script src="../shared/bridge.js"></script>
+    <script src="../shared/toast.js"></script>
+    <script>
+        (function () {
+            // Stat Elements
+            const statTotalWords = document.getElementById('statTotalWords');
+            const statSpeakingTime = document.getElementById('statSpeakingTime');
+            const statRecordings = document.getElementById('statRecordings');
+            const statAvgPace = document.getElementById('statAvgPace');
+            const statRemainingTime = document.getElementById('statRemainingTime');
+            const statRemainingSubtextText = document.getElementById('statRemainingSubtextText');
+            const statRemainingDot = document.getElementById('statRemainingDot');
+            const statRemainingIcon = document.getElementById('statRemainingIcon');
+
+            // Header Elements
+            const headerEngineText = document.getElementById('headerEngineText');
+            const headerShortcutBadge = document.getElementById('headerShortcutBadge');
+            const emptyHotkeyText = document.getElementById('emptyHotkeyText');
+            const shareStatsBtn = document.getElementById('shareStatsBtn');
+
+            // Recent Activity Elements
+            const recentActivityList = document.getElementById('recentActivityList');
+            const emptyActivityPlaceholder = document.getElementById('emptyActivityPlaceholder');
+
+            let currentActiveModel = 'microsoft/mai-transcribe-2';
+
+            function formatFriendlyEngineName(modelStr) {
+                if (!modelStr) return 'MAI-Transcribe 2';
+                const m = modelStr.toLowerCase();
+                if (m.includes('whisper-large-v3-turbo') || m.includes('whisper-turbo')) {
+                    return (m.startsWith('groq/') || m === 'groq') ? 'Groq Turbo (Free)' : 'Whisper Turbo';
+                }
+                if (m.includes('whisper-large-v3')) {
+                    return (m.startsWith('groq/') || m === 'groq') ? 'Groq Whisper (Free)' : 'Whisper Large';
+                }
+                if (m.startsWith('groq/') || m === 'groq') return 'Groq Turbo (Free)';
+                if (m.includes('mai-transcribe-2') || m.includes('mai-transcribe')) return 'MAI-Transcribe 2';
+                if (m.startsWith('local')) return 'Local Whisper';
+                return modelStr;
+            }
+
+            // Format speaking time duration: e.g. "37h 55m", "14m 20s", "9s"
+            function formatSpeakingTime(seconds) {
+                if (!seconds || seconds <= 0) return '0s';
+                const totalSec = Math.round(seconds);
+                if (totalSec < 60) {
+                    return `${totalSec}s`;
+                }
+                const hours = Math.floor(totalSec / 3600);
+                const minutes = Math.floor((totalSec % 3600) / 60);
+                const remainingSec = totalSec % 60;
+
+                if (hours > 0) {
+                    return `${hours}h ${minutes}m`;
+                }
+                return remainingSec > 0 ? `${minutes}m ${remainingSec}s` : `${minutes}m`;
+            }
+
+            // Format clock timestamp: e.g. "10:52 AM"
+            function formatTime(isoString) {
+                if (!isoString) return 'Recent';
+                try {
+                    const d = new Date(isoString);
+                    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+                } catch (e) {
+                    return 'Recent';
+                }
+            }
+
+            // Update Stat Cards
+            function updateDashboardDisplay(stats) {
+                if (!stats) return;
+
+                const words = stats.totalWords || 0;
+                statTotalWords.textContent = words.toLocaleString();
+
+                const speakingSec = stats.totalSpeakingSeconds || 0;
+                statSpeakingTime.textContent = formatSpeakingTime(speakingSec);
+
+                const recordings = stats.totalRecordings || 0;
+                statRecordings.textContent = recordings.toLocaleString();
+
+                const pace = stats.avgPaceWpm || 0;
+                statAvgPace.innerHTML = `${pace} <span style="font-size: 15px; font-weight: 400; color: #938ea1;">wpm</span>`;
+
+                if (stats.remainingUsage) {
+                    const ru = stats.remainingUsage;
+                    if (statRemainingTime) statRemainingTime.textContent = ru.formattedTime || '--';
+                    if (statRemainingSubtextText) statRemainingSubtextText.textContent = ru.subtext || '';
+                    if (statRemainingDot && ru.dotColor) statRemainingDot.style.backgroundColor = ru.dotColor;
+                    if (statRemainingIcon && ru.dotColor) statRemainingIcon.style.color = ru.dotColor;
+                }
+
+                if (stats.currentModel) {
+                    currentActiveModel = stats.currentModel;
+                    if (headerEngineText) headerEngineText.textContent = formatFriendlyEngineName(currentActiveModel);
+                }
+            }
+
+            // Load Recent Activity (Matching BridgeVoice Reference)
+            async function loadRecentActivity() {
+                try {
+                    const histRaw = await window.rift.getHistory(JSON.stringify({ limit: 10 }));
+                    const list = typeof histRaw === 'string' ? JSON.parse(histRaw) : histRaw;
+
+                    recentActivityList.innerHTML = '';
+                    if (!list || list.length === 0) {
+                        emptyActivityPlaceholder.style.display = 'flex';
+                        return;
+                    }
+
+                    emptyActivityPlaceholder.style.display = 'none';
+
+                    list.forEach(entry => {
+                        const card = document.createElement('div');
+                        card.className = 'activity-card';
+
+                        const words = entry.words_count || (entry.text ? entry.text.split(/\s+/).filter(Boolean).length : 0);
+                        const duration = entry.duration_seconds ? `${Math.round(entry.duration_seconds)}s` : '';
+                        const time = formatTime(entry.timestamp);
+
+                        // BridgeVoice metadata style: "10:52 AM · 50 words · 17s"
+                        const metaParts = [time, `${words} words`];
+                        if (duration) metaParts.push(duration);
+
+                        card.innerHTML = `
+                            <div class="activity-text">
+                                ${escapeHtml(entry.text)}
+                            </div>
+                            <div class="activity-meta">
+                                <span>${metaParts.join(' · ')}</span>
+                                <span style="color: #cabeff; font-size: 11px; display: flex; align-items: center; gap: 4px;">
+                                    <span class="material-symbols-outlined" style="font-size: 13px;">content_copy</span>
+                                    <span>Copy</span>
+                                </span>
+                            </div>
+                        `;
+
+                        card.addEventListener('click', async () => {
+                            if (entry.text) {
+                                await window.rift.copyToClipboard(entry.text);
+                                window.showToast({ message: 'Copied dictation to clipboard', type: 'success' });
+                            }
+                        });
+
+                        recentActivityList.appendChild(card);
+                    });
+                } catch (err) {
+                    console.error('Failed to load recent activity:', err);
+                }
+            }
+
+            function escapeHtml(str) {
+                if (!str) return '';
+                return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+
+            // Share stats button
+            shareStatsBtn.addEventListener('click', async () => {
+                const words = statTotalWords.textContent.trim();
+                const time = statSpeakingTime.textContent.trim();
+                const recordings = statRecordings.textContent.trim();
+                const pace = statAvgPace.textContent.trim();
+                const quota = statRemainingTime ? statRemainingTime.textContent.trim() : '';
+                const quotaPart = quota && quota !== '--' ? ` · Quota Left: ${quota}` : '';
+                const text = `🎙 Rift Dictation: ${words} words spoken over ${time} across ${recordings} recordings (${pace})${quotaPart}`;
+
+                try {
+                    await window.rift.copyToClipboard(text);
+                    window.showToast({ message: 'Usage stats copied to clipboard!', type: 'success' });
+                } catch (e) {
+                    console.error(e);
+                }
+            });
+
+            // Bridge readiness
+            window.rift.ready(async () => {
+                // Guard: Verify if user has completed onboarding / configured Groq key
+                try {
+                    const settingsRaw = await window.rift.getSettings();
+                    const s = typeof settingsRaw === 'string' ? JSON.parse(settingsRaw) : settingsRaw;
+                    const keyStatusRaw = await window.rift.getGroqKeyStatus();
+                    const ks = typeof keyStatusRaw === 'string' ? JSON.parse(keyStatusRaw) : keyStatusRaw;
+
+                    const isOnboarded = s && (s.onboardingCompleted || s.onboarding_completed);
+                    const hasKey = ks && (ks.hasKey || ks.isConfigured);
+                    if (!isOnboarded && !hasKey) {
+                        window.location.replace('onboarding-welcome.html');
+                        return;
+                    }
+                } catch (e) {
+                    console.warn('Onboarding check failed:', e);
+                }
+
+                async function updateHotkeys() {
+                    try {
+                        const hkRaw = await window.rift.getHotkeys();
+                        const hk = typeof hkRaw === 'string' ? JSON.parse(hkRaw) : hkRaw;
+                        const key = (hk && hk.pushToTalk) || 'Right Alt';
+                        if (headerShortcutBadge) headerShortcutBadge.textContent = key;
+                        if (emptyHotkeyText) emptyHotkeyText.textContent = key;
+                    } catch (e) {
+                        console.warn(e);
+                    }
+                }
+
+                async function refreshAll() {
+                    try {
+                        const statsRaw = await window.rift.getDashboardStats();
+                        const stats = typeof statsRaw === 'string' ? JSON.parse(statsRaw) : statsRaw;
+                        updateDashboardDisplay(stats);
+                    } catch (e) {}
+                    loadRecentActivity();
+                }
+
+                // 1. Initial Load
+                updateHotkeys();
+                refreshAll();
+
+                // 2. Real-time Backend Event Listeners
+                window.rift.on('transcriptionComplete', () => {
+                    refreshAll();
+                });
+                window.rift.on('transcriptionSuccess', () => {
+                    refreshAll();
+                });
+                window.rift.on('textInjected', () => {
+                    refreshAll();
+                });
+                window.rift.on('usageUpdated', () => {
+                    refreshAll();
+                });
+                window.rift.on('historyCleared', () => {
+                    refreshAll();
+                });
+                window.rift.on('widgetConfigChanged', () => {
+                    updateHotkeys();
+                });
+
+                window.rift.on('settingsChanged', (settingsRaw) => {
+                    try {
+                        const s = typeof settingsRaw === 'string' ? JSON.parse(settingsRaw) : settingsRaw;
+                        if (s && s.inferenceModel) {
+                            currentActiveModel = s.inferenceModel;
+                            if (headerEngineText) headerEngineText.textContent = formatFriendlyEngineName(currentActiveModel);
+                        }
+                    } catch (e) {}
+                    updateHotkeys();
+                });
+
+                // 3. Instant Freshness on Window Focus & Tab Visibility
+                window.addEventListener('focus', () => {
+                    refreshAll();
+                });
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') {
+                        refreshAll();
+                    }
+                });
+
+                // 4. Tight 3s live polling heartbeat ensuring 100% data freshness
+                setInterval(refreshAll, 3000);
+            });
+        })();
+    </script>
+</body>
+</html>

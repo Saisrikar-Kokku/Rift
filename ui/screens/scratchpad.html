@@ -1,0 +1,1758 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+  <title>Rift Scratch Pad & Clipboard</title>
+  <link href="../shared/fonts.css" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #0f0f17;
+      --bg-card: #151522;
+      --bg-elevated: #1d1d2e;
+      --border-subtle: #27273a;
+      --border-focus: #6366f1;
+      --text-primary: #F2F2F7;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-purple: #c084fc;
+      --accent-indigo: #818cf8;
+      --accent-green: #34d399;
+      --accent-red: #ef4444;
+      --accent-amber: #fbbf24;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background-color: var(--bg-base);
+      color: var(--text-primary);
+      font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* ============================================================
+       CUSTOM COMPACT TITLEBAR WITH INTEGRATED DUAL TABS
+       ============================================================ */
+    .titlebar {
+      height: 42px;
+      background: #13131e;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      flex-shrink: 0;
+      cursor: grab;
+      z-index: 50;
+    }
+
+    .titlebar:active {
+      cursor: grabbing;
+    }
+
+    .title-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .title-logo {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* Segmented Navigation Switcher */
+    .segmented-tabs {
+      display: inline-flex;
+      align-items: center;
+      background: #0b0b12;
+      border: 1px solid var(--border-subtle);
+      border-radius: 7px;
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .tab-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: 5px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 120ms ease;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    .tab-toggle:hover {
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .tab-toggle.active {
+      color: #ffffff;
+      background: #232238;
+      border-color: rgba(129, 140, 248, 0.3);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    }
+
+    .tab-pill-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 0 5px;
+      border-radius: 9999px;
+      background: rgba(129, 140, 248, 0.2);
+      color: var(--accent-indigo);
+      line-height: 14px;
+    }
+
+    .title-controls {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .title-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: background 120ms ease, color 120ms ease;
+    }
+
+    .title-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-primary);
+    }
+
+    .title-btn.pinned {
+      color: var(--accent-purple);
+      background: rgba(192, 132, 252, 0.15);
+    }
+
+    .title-btn.close-btn:hover {
+      background: #ef4444;
+      color: #ffffff;
+    }
+
+    /* ============================================================
+       VIEW PANELS (NOTES VS CLIPBOARD)
+       ============================================================ */
+    .view-panel {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .view-panel.active {
+      display: flex;
+    }
+
+    /* ============================================================
+       NOTES VIEW STYLING
+       ============================================================ */
+    .editor-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      background: var(--bg-base);
+    }
+
+    .scratch-textarea {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      padding: 16px;
+      background: transparent;
+      border: none;
+      outline: none;
+      resize: none;
+      font-family: inherit;
+      font-size: 13.5px;
+      line-height: 1.65;
+      color: var(--text-primary);
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    .scratch-textarea::placeholder {
+      color: var(--text-muted);
+      font-weight: 400;
+      font-size: 13px;
+    }
+
+    .scratch-textarea::-webkit-scrollbar {
+      width: 6px;
+    }
+    .scratch-textarea::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .scratch-textarea::-webkit-scrollbar-thumb {
+      background: #27273a;
+      border-radius: 3px;
+    }
+    .scratch-textarea::-webkit-scrollbar-thumb:hover {
+      background: #3a3a52;
+    }
+
+    .status-bar {
+      height: 26px;
+      padding: 0 14px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      background: #11111a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .status-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .dictation-status {
+      display: none;
+      align-items: center;
+      gap: 5px;
+      color: var(--accent-red);
+      font-weight: 600;
+    }
+
+    .dictation-status.active {
+      display: inline-flex;
+    }
+
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-red);
+      animation: recPulse 1.2s infinite ease-in-out;
+    }
+
+    @keyframes recPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(0.85); }
+    }
+
+    .action-toolbar {
+      height: 50px;
+      background: var(--bg-card);
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      flex-shrink: 0;
+      gap: 8px;
+    }
+
+    .toolbar-left, .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 32px;
+      padding: 0 10px;
+      border-radius: 7px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 120ms ease;
+      white-space: nowrap;
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn-secondary {
+      background: #1c1c2b;
+      border-color: #2a2a3e;
+      color: var(--text-primary);
+    }
+
+    .btn-secondary:hover {
+      background: #25253a;
+      border-color: #3b3b55;
+    }
+
+    .btn-polish {
+      background: #231638;
+      border-color: #4a2b77;
+      color: #e9d5ff;
+    }
+
+    .btn-polish:hover {
+      background: #301d4d;
+      border-color: #6b3ba8;
+      color: #f3e8ff;
+    }
+
+    .btn-polish.polishing {
+      pointer-events: none;
+      opacity: 0.8;
+    }
+
+    .btn-mic {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border-radius: 50%;
+      background: #7c5cfa;
+      border: none;
+      color: #ffffff;
+      flex-shrink: 0;
+    }
+
+    .btn-mic:hover {
+      background: #6d4af0;
+    }
+
+    .btn-mic.recording {
+      background: #dc2626;
+      animation: micPulse 1.2s infinite ease-in-out;
+    }
+
+    @keyframes micPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.6); }
+      50% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #7c5cfa 0%, #6366f1 100%);
+      color: #ffffff;
+      border: none;
+      padding: 0 12px;
+    }
+
+    .btn-primary:hover {
+      filter: brightness(1.1);
+    }
+
+    .btn-icon-only {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+    }
+
+    .btn-undo {
+      display: none;
+      background: #261f18;
+      border-color: #5c3c1e;
+      color: #fed7aa;
+    }
+
+    .btn-undo.visible {
+      display: inline-flex;
+    }
+
+    .btn-undo:hover {
+      background: #3b2c1f;
+      border-color: #7c5129;
+    }
+
+    .spinner-icon {
+      display: none;
+      animation: spin 1s linear infinite;
+    }
+
+    .polishing .spinner-icon {
+      display: inline-block;
+    }
+    .polishing .sparkle-icon {
+      display: none;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ============================================================
+       CLIPBOARD VIEW STYLING (TIMELINE, CHIPS, SEARCH)
+       ============================================================ */
+    .clip-header {
+      padding: 10px 12px 8px;
+      background: #11111b;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .clip-search-box {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .clip-search-icon {
+      position: absolute;
+      left: 9px;
+      width: 14px;
+      height: 14px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .clip-search-input {
+      width: 100%;
+      height: 30px;
+      padding: 0 28px 0 28px;
+      background: #161624;
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 120ms ease, box-shadow 120ms ease;
+    }
+
+    .clip-search-input::placeholder {
+      color: var(--text-muted);
+      font-size: 11.5px;
+    }
+
+    .clip-search-input:focus {
+      border-color: var(--accent-indigo);
+      box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.2);
+    }
+
+    .clip-search-clear {
+      position: absolute;
+      right: 7px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: var(--text-secondary);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 10px;
+      line-height: 1;
+    }
+
+    .clip-search-clear.visible {
+      display: flex;
+    }
+
+    .clip-chips-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    .clip-chips-row::-webkit-scrollbar {
+      display: none;
+    }
+
+    .chip-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 5px;
+      background: #171725;
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 120ms ease;
+      user-select: none;
+    }
+
+    .chip-btn:hover {
+      background: #202033;
+      color: var(--text-primary);
+    }
+
+    .chip-btn.active {
+      background: rgba(129, 140, 248, 0.18);
+      border-color: rgba(129, 140, 248, 0.4);
+      color: #e0e7ff;
+      font-weight: 600;
+    }
+
+    .clip-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .clip-list::-webkit-scrollbar {
+      width: 6px;
+    }
+    .clip-list::-webkit-scrollbar-thumb {
+      background: #27273a;
+      border-radius: 3px;
+    }
+    .clip-list::-webkit-scrollbar-thumb:hover {
+      background: #3a3a52;
+    }
+
+    .clip-card {
+      background: #151524;
+      border: 1px solid #232336;
+      border-radius: 8px;
+      padding: 9px 11px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+      position: relative;
+    }
+
+    .clip-card:hover {
+      border-color: #383854;
+      background: #181829;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+
+    .clip-card.pinned-card {
+      border-color: rgba(245, 158, 11, 0.35);
+      background: #191724;
+    }
+
+    .clip-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      font-size: 11px;
+    }
+
+    .clip-card-left {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .clip-index-badge {
+      font-family: ui-monospace, monospace;
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--accent-indigo);
+      background: rgba(129, 140, 248, 0.12);
+      padding: 1px 5px;
+      border-radius: 4px;
+      border: 1px solid rgba(129, 140, 248, 0.2);
+      flex-shrink: 0;
+    }
+
+    .clip-cat-badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      flex-shrink: 0;
+    }
+
+    .cat-code { background: rgba(99, 102, 241, 0.15); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.25); }
+    .cat-url { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.25); }
+    .cat-email { background: rgba(192, 132, 252, 0.15); color: #c084fc; border: 1px solid rgba(192, 132, 252, 0.25); }
+    .cat-filepath { background: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.25); }
+    .cat-text { background: rgba(148, 163, 184, 0.12); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
+
+    .clip-source-badge {
+      font-size: 10px;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.04);
+      padding: 1px 5px;
+      border-radius: 4px;
+      max-width: 110px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .clip-card-right {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+
+    .clip-time {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .clip-pin-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 2px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 120ms ease;
+    }
+
+    .clip-pin-btn:hover {
+      color: var(--accent-amber);
+    }
+
+    .clip-pin-btn.pinned {
+      color: #fbbf24;
+    }
+
+    .clip-body {
+      background: #0e0e17;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      border-radius: 6px;
+      padding: 7px 9px;
+      font-size: 12px;
+      line-height: 1.45;
+      color: #e2e8f0;
+      user-select: text;
+      -webkit-user-select: text;
+      word-break: break-word;
+      max-height: 82px;
+      overflow: hidden;
+      position: relative;
+      white-space: pre-wrap;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    .clip-body.code-style {
+      font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+      font-size: 11px;
+      color: #cbd5e1;
+      background: #0b0b12;
+    }
+
+    .clip-body.url-style {
+      color: #38bdf8;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .clip-body.expanded {
+      max-height: none;
+    }
+
+    .clip-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      padding-top: 2px;
+    }
+
+    .clip-act-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 24px;
+      padding: 0 8px;
+      border-radius: 5px;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      background: #1c1c2b;
+      border: 1px solid #2a2a3e;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 120ms ease;
+    }
+
+    .clip-act-btn:hover {
+      background: #25253a;
+      color: var(--text-primary);
+      border-color: #3b3b55;
+    }
+
+    .clip-act-btn.primary {
+      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+      border: none;
+      color: #ffffff;
+    }
+
+    .clip-act-btn.primary:hover {
+      filter: brightness(1.1);
+    }
+
+    .clip-act-btn.danger:hover {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.35);
+      color: #f87171;
+    }
+
+    .clip-footer {
+      height: 38px;
+      background: #11111a;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      font-size: 11px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 28px 20px;
+      text-align: center;
+      color: var(--text-muted);
+      gap: 8px;
+    }
+
+    .empty-icon {
+      font-size: 32px;
+      opacity: 0.6;
+      margin-bottom: 4px;
+    }
+
+    .empty-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    .empty-desc {
+      font-size: 11.5px;
+      line-height: 1.5;
+      max-width: 290px;
+    }
+
+    .empty-desc em {
+      color: var(--accent-indigo);
+      font-style: normal;
+      font-weight: 600;
+    }
+
+    /* Toast Notification */
+    .toast {
+      position: absolute;
+      bottom: 58px;
+      right: 14px;
+      background: #1e1e2e;
+      border: 1px solid #34d399;
+      color: #34d399;
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 5px 12px;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      opacity: 0;
+      transform: translateY(6px);
+      pointer-events: none;
+      transition: all 150ms ease-out;
+      z-index: 999;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+  <script src="../shared/qwebchannel.js"></script>
+  <script src="../shared/bridge.js"></script>
+</head>
+<body>
+
+  <!-- Titlebar with Drag Region & Segmented Tabs -->
+  <div class="titlebar" data-tauri-drag-region>
+    <div class="title-left" data-tauri-drag-region>
+      <div class="title-logo" data-tauri-drag-region>
+        <svg viewBox="0 0 48 48" fill="none" style="width: 17px; height: 17px;">
+          <defs>
+            <linearGradient id="riftSpGrad" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#c084fc" />
+              <stop offset="100%" stop-color="#818cf8" />
+            </linearGradient>
+          </defs>
+          <rect x="3" y="3" width="42" height="42" rx="10" fill="#161622" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+          <path d="M14 12C14 10.8954 14.8954 10 16 10H25C29.4183 10 33 13.5817 33 18C33 21.8427 30.2872 25.0494 26.6575 25.8123L33.4 35.8C33.9523 36.5364 33.4269 37.6 32.5 37.6H28.4C27.8 37.6 27.2 37.3 26.8 36.8L21 28.5H19V36.5C19 37.0523 18.5523 37.5 18 37.5H15C14.4477 37.5 14 37.0523 14 36.5V12Z" fill="url(#riftSpGrad)" />
+        </svg>
+      </div>
+
+      <div class="segmented-tabs" data-tauri-drag-region>
+        <button id="tabNotes" class="tab-toggle active" type="button" title="Scratchpad text notes & dictation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 13px; height: 13px;">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+          </svg>
+          <span>Notes</span>
+        </button>
+        <button id="tabClipboard" class="tab-toggle" type="button" title="Smart clipboard history timeline">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 13px; height: 13px;">
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+          </svg>
+          <span>Clipboard</span>
+          <span id="clipCountBadge" class="tab-pill-badge">0</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="title-controls">
+      <button id="btnPin" class="title-btn pinned" type="button" title="Always on Top">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
+          <line x1="12" y1="17" x2="12" y2="22"></line>
+          <path d="M5 17h14v-2l-2-3V6a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v6l-2 3v2z"></path>
+        </svg>
+      </button>
+      <button id="btnMinimize" class="title-btn" type="button" title="Minimize">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+      </button>
+      <button id="btnClose" class="title-btn close-btn" type="button" title="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       PANEL 1: NOTES CANVAS
+       ============================================================ -->
+  <div id="viewNotes" class="view-panel active">
+    <div class="editor-container">
+      <textarea id="scratchArea" class="scratch-textarea" placeholder="Type or dictate thoughts freely... Click Polish to enhance, or Insert to paste into your active app." spellcheck="false" autofocus></textarea>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <div class="status-info">
+        <span id="counterStats">0 words · 0 chars</span>
+        <span id="dictationStatus" class="dictation-status">
+          <span class="pulse-dot"></span> Dictating...
+        </span>
+      </div>
+      <span id="modelTag" style="font-family: ui-monospace, monospace; font-size: 10px;">Whisper Turbo + Qwen AI</span>
+    </div>
+
+    <!-- Bottom Action Toolbar -->
+    <div class="action-toolbar">
+      <div class="toolbar-left">
+        <button id="btnMic" class="btn btn-mic" type="button" title="Dictate into note">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width: 15px; height: 15px;">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="23"></line>
+            <line x1="8" y1="23" x2="16" y2="23"></line>
+          </svg>
+        </button>
+        <button id="btnPolishNotes" class="btn btn-polish" type="button" title="Enhance and polish note">
+          <svg class="sparkle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
+            <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>
+          </svg>
+          <svg class="spinner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="width: 14px; height: 14px;">
+            <circle cx="12" cy="12" r="9" stroke="rgba(255,255,255,0.2)"></circle>
+            <path d="M12 3C16.9706 3 21 7.02944 21 12" stroke="#c084fc"></path>
+          </svg>
+          <span id="polishLabel">Polish</span>
+        </button>
+        <button id="btnUndo" class="btn btn-undo" type="button" title="Revert to previous text">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width: 13px; height: 13px;">
+            <path d="M3 7v6h6"></path>
+            <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path>
+          </svg>
+          <span>Undo</span>
+        </button>
+      </div>
+
+      <div class="toolbar-right">
+        <button id="btnClear" class="btn btn-secondary btn-icon-only" type="button" title="Clear notes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </button>
+        <button id="btnCopy" class="btn btn-secondary" type="button" title="Copy note to clipboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          <span>Copy</span>
+        </button>
+        <button id="btnInsert" class="btn btn-primary" type="button" title="Paste directly into your active window">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
+            <polyline points="9 11 12 14 22 4"></polyline>
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+          </svg>
+          <span>Insert to App</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       PANEL 2: SMART CLIPBOARD TIMELINE
+       ============================================================ -->
+  <div id="viewClipboard" class="view-panel">
+    <!-- Header: Search & Category Filter Chips -->
+    <div class="clip-header">
+      <div class="clip-search-box">
+        <svg class="clip-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input id="clipSearchInput" class="clip-search-input" type="text" placeholder="Search clipboard... (or say 'paste item 1')">
+        <button id="btnClearSearch" class="clip-search-clear" type="button" title="Clear search">✕</button>
+      </div>
+
+      <div class="clip-chips-row" id="clipCategoryChips">
+        <button class="chip-btn active" data-cat="all" type="button">All</button>
+        <button class="chip-btn" data-cat="code" type="button">💻 Code</button>
+        <button class="chip-btn" data-cat="url" type="button">🔗 URLs</button>
+        <button class="chip-btn" data-cat="email" type="button">✉️ Emails</button>
+        <button class="chip-btn" data-cat="filepath" type="button">📁 Paths</button>
+        <button class="chip-btn" data-cat="text" type="button">📝 Text</button>
+        <button class="chip-btn" data-cat="pinned" type="button">⭐ Pinned</button>
+      </div>
+    </div>
+
+    <!-- Scrollable Timeline Cards Container -->
+    <div id="clipTimelineList" class="clip-list">
+      <!-- Dynamically populated -->
+    </div>
+
+    <!-- Clipboard Footer -->
+    <div class="clip-footer">
+      <span id="clipStatusStats">0 clips · 0 pinned</span>
+      <button id="btnClearUnpinnedClips" class="clip-act-btn danger" type="button" title="Delete all unpinned clips from history">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+        <span>Clear Unpinned</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Global Toast Feedback -->
+  <div id="toast" class="toast">Copied to clipboard</div>
+
+  <script>
+    (function () {
+      // Elements: Notes
+      const scratchArea = document.getElementById('scratchArea');
+      const counterStats = document.getElementById('counterStats');
+      const dictationStatus = document.getElementById('dictationStatus');
+      const btnPin = document.getElementById('btnPin');
+      const btnMinimize = document.getElementById('btnMinimize');
+      const btnClose = document.getElementById('btnClose');
+      const btnMic = document.getElementById('btnMic');
+      const btnPolishNotes = document.getElementById('btnPolishNotes');
+      const polishLabel = document.getElementById('polishLabel');
+      const btnUndo = document.getElementById('btnUndo');
+      const btnClear = document.getElementById('btnClear');
+      const btnCopy = document.getElementById('btnCopy');
+      const btnInsert = document.getElementById('btnInsert');
+      const toast = document.getElementById('toast');
+
+      // Elements: Tabs & Views
+      const tabNotes = document.getElementById('tabNotes');
+      const tabClipboard = document.getElementById('tabClipboard');
+      const viewNotes = document.getElementById('viewNotes');
+      const viewClipboard = document.getElementById('viewClipboard');
+      const clipCountBadge = document.getElementById('clipCountBadge');
+
+      // Elements: Clipboard
+      const clipSearchInput = document.getElementById('clipSearchInput');
+      const btnClearSearch = document.getElementById('btnClearSearch');
+      const clipCategoryChips = document.getElementById('clipCategoryChips');
+      const clipTimelineList = document.getElementById('clipTimelineList');
+      const clipStatusStats = document.getElementById('clipStatusStats');
+      const btnClearUnpinnedClips = document.getElementById('btnClearUnpinnedClips');
+
+      let isPinned = true;
+      let isRecording = false;
+      let prePolishBackup = null;
+      let activeTab = 'notes';
+
+      // Clipboard state
+      let currentCategory = 'all';
+      let searchQuery = '';
+      let searchDebounce = null;
+      let allClips = [];
+
+      // 1. Tab Switching
+      function switchTab(tab) {
+        activeTab = tab;
+        if (tab === 'notes') {
+          tabNotes.classList.add('active');
+          tabClipboard.classList.remove('active');
+          viewNotes.classList.add('active');
+          viewClipboard.classList.remove('active');
+          scratchArea.focus();
+        } else {
+          tabClipboard.classList.add('active');
+          tabNotes.classList.remove('active');
+          viewClipboard.classList.add('active');
+          viewNotes.classList.remove('active');
+          loadClipboardHistory();
+        }
+      }
+
+      tabNotes.addEventListener('click', () => switchTab('notes'));
+      tabClipboard.addEventListener('click', () => switchTab('clipboard'));
+
+      // 2. Persistent Draft Auto-Save & Load (Notes)
+      const DRAFT_KEY = 'rift_scratchpad_draft';
+      const savedDraft = localStorage.getItem(DRAFT_KEY);
+      if (savedDraft) {
+        scratchArea.value = savedDraft;
+      }
+      updateCounters();
+
+      scratchArea.addEventListener('input', () => {
+        localStorage.setItem(DRAFT_KEY, scratchArea.value);
+        updateCounters();
+      });
+
+      function updateCounters() {
+        const text = scratchArea.value || '';
+        const chars = text.length;
+        const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+        counterStats.textContent = `${words} word${words === 1 ? '' : 's'} · ${chars} char${chars === 1 ? '' : 's'}`;
+      }
+
+      function showToast(msg) {
+        if (!toast) return;
+        toast.textContent = msg;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2200);
+      }
+
+      function escapeHtml(str) {
+        return (str || '').replace(/[&<>"']/g, m => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[m]));
+      }
+
+      function formatRelativeTime(timestampMs) {
+        if (!timestampMs) return '';
+        const diffSec = Math.max(0, Math.floor((Date.now() - timestampMs) / 1000));
+        if (diffSec < 45) return 'Just now';
+        const diffMin = Math.floor(diffSec / 60);
+        if (diffMin < 60) return `${diffMin}m ago`;
+        const diffHour = Math.floor(diffMin / 60);
+        if (diffHour < 24) return `${diffHour}h ago`;
+        const diffDays = Math.floor(diffHour / 24);
+        if (diffDays === 1) return 'Yesterday';
+        if (diffDays < 7) return `${diffDays}d ago`;
+        return new Date(timestampMs).toLocaleDateString([], { month: 'short', day: 'numeric' });
+      }
+
+      // 3. Titlebar Handlers & Window Dragging
+      const titlebar = document.querySelector('.titlebar');
+      if (titlebar) {
+        titlebar.addEventListener('mousedown', (e) => {
+          if (e.target.closest('.title-controls') || e.target.closest('.segmented-tabs') || e.target.closest('button')) return;
+          try {
+            window.rift.startScratchpadDragging();
+          } catch (err) {
+            console.warn('[Scratchpad] startDragging:', err);
+          }
+        });
+      }
+
+      if (btnPin) {
+        btnPin.addEventListener('click', async () => {
+          isPinned = !isPinned;
+          btnPin.classList.toggle('pinned', isPinned);
+          try {
+            await window.rift.toggleScratchpadPin(isPinned);
+          } catch (e) {
+            console.warn('[Scratchpad] Pin toggle:', e);
+          }
+        });
+      }
+
+      if (btnMinimize) {
+        btnMinimize.addEventListener('click', async () => {
+          try {
+            await window.rift.minimizeScratchpadWindow();
+          } catch (e) {
+            console.warn('[Scratchpad] minimize error:', e);
+          }
+        });
+      }
+
+      if (btnClose) {
+        btnClose.addEventListener('click', async () => {
+          if (isRecording) {
+            isRecording = false;
+            setRecordingState(false);
+            try {
+              await window.rift.stopRecording();
+            } catch (err) {}
+          }
+          try {
+            await window.rift.closeScratchpadWindow();
+          } catch (e) {
+            if (window.__TAURI__ && window.__TAURI__.window) {
+              window.__TAURI__.window.getCurrentWindow().hide();
+            }
+          }
+        });
+      }
+
+      // 4. Notes Actions (Clear, Undo, Copy, Insert, Polish)
+      if (btnClear) {
+        btnClear.addEventListener('click', () => {
+          if (!scratchArea.value.trim()) return;
+          if (confirm('Clear all notes in the Scratch Pad?')) {
+            prePolishBackup = scratchArea.value;
+            scratchArea.value = '';
+            localStorage.removeItem(DRAFT_KEY);
+            updateCounters();
+            btnUndo.classList.add('visible');
+            showToast('Notes cleared');
+          }
+        });
+      }
+
+      if (btnUndo) {
+        btnUndo.addEventListener('click', () => {
+          if (prePolishBackup !== null) {
+            scratchArea.value = prePolishBackup;
+            localStorage.setItem(DRAFT_KEY, scratchArea.value);
+            updateCounters();
+            prePolishBackup = null;
+            btnUndo.classList.remove('visible');
+            showToast('Reverted to raw notes');
+          }
+        });
+      }
+
+      if (btnCopy) {
+        btnCopy.addEventListener('click', async () => {
+          const text = scratchArea.value;
+          if (!text.trim()) {
+            showToast('Scratch Pad is empty');
+            return;
+          }
+          try {
+            await navigator.clipboard.writeText(text);
+          } catch (e) {
+            try {
+              await window.rift.copyToClipboard(text);
+            } catch (err) {}
+          }
+          showToast('Copied notes to clipboard!');
+        });
+      }
+
+      if (btnInsert) {
+        btnInsert.addEventListener('click', async () => {
+          const text = scratchArea.value;
+          if (!text.trim()) {
+            showToast('Scratch Pad is empty');
+            return;
+          }
+          try {
+            window.rift.closeScratchpadWindow();
+            setTimeout(async () => {
+              try {
+                await window.rift.insertScratchpadText(text);
+              } catch (err) {
+                console.error('[Scratchpad] Insert failed:', err);
+              }
+            }, 60);
+          } catch (err) {
+            console.error('[Scratchpad] Insert failed:', err);
+          }
+        });
+      }
+
+      if (btnPolishNotes) {
+        btnPolishNotes.addEventListener('click', async () => {
+          const text = scratchArea.value;
+          if (!text.trim()) {
+            showToast('Type or dictate notes first');
+            return;
+          }
+
+          btnPolishNotes.classList.add('polishing');
+          polishLabel.textContent = 'Polishing...';
+
+          try {
+            prePolishBackup = text;
+            const res = await window.rift.testEnhance(text, 'Clean up and structure these notes into clear, well-punctuated, professional prose. Retain all facts, bullet points, and meaning accurately. Output ONLY the polished notes.');
+            
+            let enhanced = '';
+            if (res && typeof res === 'object') {
+              enhanced = res.enhancedText || res.text || '';
+            } else if (typeof res === 'string') {
+              enhanced = res;
+            }
+
+            if (enhanced && enhanced.trim()) {
+              scratchArea.value = enhanced.trim();
+              localStorage.setItem(DRAFT_KEY, scratchArea.value);
+              updateCounters();
+              btnUndo.classList.add('visible');
+              showToast('Notes polished with AI ✨');
+            } else {
+              showToast('Enhancement returned raw text');
+            }
+          } catch (err) {
+            console.error('[Scratchpad] Polish error:', err);
+            showToast('Polish failed: check API key');
+          } finally {
+            btnPolishNotes.classList.remove('polishing');
+            polishLabel.textContent = 'Polish';
+          }
+        });
+      }
+
+      // 5. Smart Clipboard Management
+      async function refreshClipboardCounts() {
+        try {
+          const counts = await window.rift.getClipboardCounts();
+          if (counts && counts.total !== undefined) {
+            if (clipCountBadge) clipCountBadge.textContent = counts.total;
+            if (clipStatusStats) {
+              clipStatusStats.textContent = `${counts.total} clip${counts.total === 1 ? '' : 's'} · ${counts.pinned} pinned`;
+            }
+          }
+        } catch (e) {
+          console.warn('[Scratchpad] getClipboardCounts error:', e);
+        }
+      }
+
+      async function loadClipboardHistory() {
+        try {
+          const catParam = (currentCategory === 'all' || currentCategory === 'pinned') ? null : currentCategory;
+          const qParam = searchQuery.trim() ? searchQuery.trim() : null;
+          const res = await window.rift.getClipboardHistory(50, catParam, qParam);
+          allClips = Array.isArray(res) ? res : [];
+          if (currentCategory === 'pinned') {
+            allClips = allClips.filter(c => !!c.is_pinned);
+          }
+          renderClipboardList(allClips);
+          await refreshClipboardCounts();
+        } catch (err) {
+          console.error('[Scratchpad] loadClipboardHistory error:', err);
+        }
+      }
+
+      function renderClipboardList(clips) {
+        if (!clipTimelineList) return;
+        clipTimelineList.innerHTML = '';
+
+        if (!clips || clips.length === 0) {
+          clipTimelineList.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon">📋</div>
+              <div class="empty-title">${searchQuery ? 'No matching clips found' : 'Clipboard History is Empty'}</div>
+              <div class="empty-desc">
+                ${searchQuery 
+                  ? 'Try a different search keyword or category filter.' 
+                  : 'Items you copy anywhere in Windows are automatically cataloged here.<br><br>Voice recall anytime hands-free: <em>"paste item 1"</em>, <em>"paste that URL"</em>, or <em>"paste the code I copied"</em>.'}
+              </div>
+            </div>
+          `;
+          return;
+        }
+
+        clips.forEach((clip, index) => {
+          const card = document.createElement('div');
+          card.className = `clip-card ${clip.is_pinned ? 'pinned-card' : ''}`;
+          card.dataset.id = clip.id;
+
+          const cat = (clip.category || 'text').toLowerCase();
+          const relTime = formatRelativeTime(clip.timestamp);
+          const sourceApp = escapeHtml(clip.source_app || 'App');
+          const isCode = cat === 'code';
+          const isUrl = cat === 'url';
+
+          card.innerHTML = `
+            <div class="clip-card-header">
+              <div class="clip-card-left">
+                <span class="clip-index-badge" title="Say 'paste item ${index + 1}'">#${index + 1}</span>
+                <span class="clip-cat-badge cat-${cat}">${cat}</span>
+                <span class="clip-source-badge" title="Copied from ${sourceApp}">${sourceApp}</span>
+              </div>
+              <div class="clip-card-right">
+                <span class="clip-time">${relTime}</span>
+                <button type="button" class="clip-pin-btn ${clip.is_pinned ? 'pinned' : ''}" title="${clip.is_pinned ? 'Unpin clip' : 'Pin clip (keep forever)'}" data-id="${clip.id}">
+                  <svg viewBox="0 0 24 24" fill="${clip.is_pinned ? '#fbbf24' : 'none'}" stroke="currentColor" stroke-width="2" style="width: 13px; height: 13px;">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="clip-body ${isCode ? 'code-style' : (isUrl ? 'url-style' : '')}" title="Click to expand/collapse full snippet">${escapeHtml(clip.content)}</div>
+            <div class="clip-actions">
+              <button type="button" class="clip-act-btn primary btn-paste-clip" data-id="${clip.id}" title="Paste directly into your active window">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width: 12px; height: 12px;">
+                  <polyline points="9 11 12 14 22 4"></polyline>
+                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                </svg>
+                <span>Paste to App</span>
+              </button>
+              <button type="button" class="clip-act-btn btn-copy-clip" data-id="${clip.id}" title="Copy to system clipboard">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span>Copy</span>
+              </button>
+              <button type="button" class="clip-act-btn danger btn-delete-clip" data-id="${clip.id}" title="Delete clip from history">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+              </button>
+            </div>
+          `;
+
+          // Body expand/collapse
+          const bodyEl = card.querySelector('.clip-body');
+          bodyEl.addEventListener('click', () => {
+            bodyEl.classList.toggle('expanded');
+          });
+
+          // Pin toggle
+          const pinBtn = card.querySelector('.clip-pin-btn');
+          pinBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            try {
+              const newPinned = await window.rift.toggleClipPin(clip.id);
+              clip.is_pinned = newPinned;
+              pinBtn.classList.toggle('pinned', newPinned);
+              card.classList.toggle('pinned-card', newPinned);
+              const svg = pinBtn.querySelector('svg');
+              if (svg) svg.setAttribute('fill', newPinned ? '#fbbf24' : 'none');
+              showToast(newPinned ? 'Clip pinned ⭐' : 'Clip unpinned');
+              await refreshClipboardCounts();
+            } catch (err) {
+              console.error('Pin toggle failed:', err);
+            }
+          });
+
+          // Paste to Foreground App
+          const pasteBtn = card.querySelector('.btn-paste-clip');
+          pasteBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            try {
+              window.rift.closeScratchpadWindow();
+              setTimeout(async () => {
+                try {
+                  await window.rift.pasteClipById(clip.id);
+                } catch (err) {
+                  console.error('Paste clip error:', err);
+                }
+              }, 60);
+            } catch (err) {
+              console.error('Paste clip error:', err);
+            }
+          });
+
+          // Copy to clipboard
+          const copyBtn = card.querySelector('.btn-copy-clip');
+          copyBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            try {
+              await window.rift.copyClipById(clip.id);
+              showToast('Copied to clipboard!');
+            } catch (err) {
+              console.error('Copy clip error:', err);
+              try {
+                await navigator.clipboard.writeText(clip.content);
+                showToast('Copied to clipboard!');
+              } catch (e2) {}
+            }
+          });
+
+          // Delete clip
+          const delBtn = card.querySelector('.btn-delete-clip');
+          delBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            try {
+              await window.rift.deleteClip(clip.id);
+              card.style.opacity = '0';
+              card.style.transform = 'scale(0.95)';
+              setTimeout(() => {
+                card.remove();
+                refreshClipboardCounts();
+                if (clipTimelineList.children.length === 0) {
+                  renderClipboardList([]);
+                }
+              }, 120);
+              showToast('Clip deleted');
+            } catch (err) {
+              console.error('Delete clip error:', err);
+            }
+          });
+
+          clipTimelineList.appendChild(card);
+        });
+      }
+
+      // Search input handler
+      if (clipSearchInput) {
+        clipSearchInput.addEventListener('input', () => {
+          searchQuery = clipSearchInput.value;
+          if (btnClearSearch) {
+            btnClearSearch.classList.toggle('visible', searchQuery.length > 0);
+          }
+          clearTimeout(searchDebounce);
+          searchDebounce = setTimeout(() => {
+            loadClipboardHistory();
+          }, 150);
+        });
+
+        // Press / to focus search, Esc to clear
+        window.addEventListener('keydown', (e) => {
+          if (e.key === '/' && activeTab === 'clipboard' && document.activeElement !== clipSearchInput) {
+            e.preventDefault();
+            clipSearchInput.focus();
+            clipSearchInput.select();
+          } else if (e.key === 'Escape' && activeTab === 'clipboard') {
+            if (clipSearchInput.value) {
+              clipSearchInput.value = '';
+              searchQuery = '';
+              btnClearSearch.classList.remove('visible');
+              loadClipboardHistory();
+            }
+          }
+        });
+      }
+
+      if (btnClearSearch) {
+        btnClearSearch.addEventListener('click', () => {
+          clipSearchInput.value = '';
+          searchQuery = '';
+          btnClearSearch.classList.remove('visible');
+          clipSearchInput.focus();
+          loadClipboardHistory();
+        });
+      }
+
+      // Category filter chips handler
+      if (clipCategoryChips) {
+        clipCategoryChips.querySelectorAll('.chip-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            clipCategoryChips.querySelectorAll('.chip-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentCategory = btn.dataset.cat || 'all';
+            loadClipboardHistory();
+          });
+        });
+      }
+
+      // Clear Unpinned Clips Handler
+      if (btnClearUnpinnedClips) {
+        btnClearUnpinnedClips.addEventListener('click', async () => {
+          if (confirm('Clear all unpinned clips from clipboard history? Pinned clips will be kept safe.')) {
+            try {
+              const removedCount = await window.rift.clearUnpinnedClips();
+              showToast(`Cleared ${removedCount || 0} unpinned clips`);
+              await loadClipboardHistory();
+            } catch (err) {
+              console.error('Clear unpinned error:', err);
+            }
+          }
+        });
+      }
+
+      // 6. Audio Cue & Dictation Support
+      class AcousticEarcons {
+        constructor() {
+          this.ctx = null;
+          this.enabled = true;
+          this.volume = 0.6;
+        }
+
+        ensureContext() {
+          if (!this.ctx) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (AudioCtx) {
+              this.ctx = new AudioCtx();
+            }
+          }
+          if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume().catch(() => {});
+          }
+        }
+
+        playTone(freqStart, freqEnd, type, durationMs, gainMax = 0.25) {
+          if (!this.enabled || this.volume <= 0) return;
+          try {
+            this.ensureContext();
+            if (!this.ctx) return;
+            const now = this.ctx.currentTime;
+            const dur = durationMs / 1000;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            osc.type = type;
+            osc.frequency.setValueAtTime(freqStart, now);
+            osc.frequency.exponentialRampToValueAtTime(Math.max(20, freqEnd), now + dur);
+
+            const peakGain = gainMax * this.volume;
+            gain.gain.setValueAtTime(0.0001, now);
+            gain.gain.linearRampToValueAtTime(peakGain, now + dur * 0.15);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            osc.start(now);
+            osc.stop(now + dur + 0.05);
+          } catch (e) {
+            console.warn('[AcousticEarcons] Sound play failed:', e);
+          }
+        }
+
+        playRecordStart() {
+          this.playTone(440, 880, 'sine', 75, 0.26);
+        }
+
+        playRecordStop() {
+          this.playTone(740, 370, 'sine', 40, 0.20);
+        }
+
+        playSuccess() {
+          this.playTone(587.33, 880, 'sine', 60, 0.24);
+          setTimeout(() => {
+            this.playTone(880, 1174.66, 'sine', 75, 0.22);
+          }, 50);
+        }
+
+        playCancel() {
+          this.playTone(260, 130, 'triangle', 50, 0.18);
+        }
+      }
+
+      const earcons = new AcousticEarcons();
+
+      function setRecordingState(recording) {
+        isRecording = !!recording;
+        if (btnMic) {
+          if (isRecording) {
+            btnMic.classList.add('recording');
+            btnMic.title = 'Click to stop dictation and transcribe';
+          } else {
+            btnMic.classList.remove('recording');
+            btnMic.style.transform = '';
+            btnMic.style.boxShadow = '';
+            btnMic.title = 'Dictate into note';
+          }
+        }
+        if (dictationStatus) {
+          if (isRecording) {
+            dictationStatus.classList.add('active');
+          } else {
+            dictationStatus.classList.remove('active');
+          }
+        }
+      }
+
+      // 7. Initialize Bridge and Event Listeners
+      window.rift.ready(async () => {
+        try {
+          const cfg = await window.rift.getSettings();
+          if (cfg) {
+            if (cfg.recordingSounds !== undefined) earcons.enabled = !!cfg.recordingSounds;
+            if (cfg.soundVolume !== undefined) earcons.volume = Number(cfg.soundVolume);
+          }
+        } catch (e) {}
+
+        // Initial clipboard counts
+        refreshClipboardCounts();
+
+        // Listen for live background clipboard changes from Win32 listener!
+        window.rift.on('clipboardChanged', () => {
+          refreshClipboardCounts();
+          if (activeTab === 'clipboard') {
+            loadClipboardHistory();
+          }
+        });
+
+        window.rift.on('settingsChanged', (settingsRaw) => {
+          try {
+            const s = typeof settingsRaw === 'string' ? JSON.parse(settingsRaw) : (settingsRaw || {});
+            if (s.recordingSounds !== undefined) earcons.enabled = !!s.recordingSounds;
+            if (s.soundVolume !== undefined) earcons.volume = Number(s.soundVolume);
+          } catch (e) {}
+        });
+
+        window.rift.on('recordingStarted', () => {
+          earcons.playRecordStart();
+          setRecordingState(true);
+        });
+
+        window.rift.on('audioLevel', (level) => {
+          if (!isRecording || !btnMic) return;
+          const factor = Math.min(1.0, Math.max(0, (level || 0) / 65.0));
+          btnMic.style.transform = `scale(${(1.0 + factor * 0.14).toFixed(2)})`;
+          btnMic.style.boxShadow = `0 0 ${(factor * 14).toFixed(0)}px rgba(239, 68, 68, ${(0.3 + factor * 0.5).toFixed(2)})`;
+        });
+
+        window.rift.on('recordingStopped', () => {
+          earcons.playRecordStop();
+          setRecordingState(false);
+          showToast('Processing speech...');
+        });
+
+        window.rift.on('recordingCancelled', () => {
+          earcons.playCancel();
+          setRecordingState(false);
+        });
+
+        window.rift.on('recordingSaved', (data) => {
+          setRecordingState(false);
+          if (data && data.isSilent) {
+            earcons.playCancel();
+            showToast('No speech detected');
+          }
+        });
+
+        window.rift.on('transcriptionError', (payload) => {
+          setRecordingState(false);
+          const err = typeof payload === 'string' ? payload : (payload && payload.message) || 'Transcription failed';
+          showToast(`Error: ${err}`);
+        });
+
+        window.rift.on('transcriptionComplete', () => {
+          setRecordingState(false);
+        });
+
+        window.rift.on('transcriptionSuccess', (payloadStr) => {
+          earcons.playSuccess();
+          setRecordingState(false);
+          try {
+            const data = typeof payloadStr === 'string' ? JSON.parse(payloadStr) : payloadStr;
+            const text = (data && data.text) ? data.text : (typeof payloadStr === 'string' && !payloadStr.startsWith('{') ? payloadStr : '');
+            if (text && text.trim()) {
+              if (activeTab !== 'notes') {
+                switchTab('notes');
+              }
+              const start = scratchArea.selectionStart;
+              const end = scratchArea.selectionEnd;
+              const val = scratchArea.value;
+              const separator = (val && !val.endsWith(' ') && !val.endsWith('\n')) ? ' ' : '';
+              
+              if (start !== undefined && end !== undefined && start === end && start < val.length) {
+                scratchArea.value = val.substring(0, start) + separator + text.trim() + val.substring(end);
+                scratchArea.selectionStart = scratchArea.selectionEnd = start + separator.length + text.trim().length;
+              } else {
+                scratchArea.value = (val ? val + separator : '') + text.trim();
+                scratchArea.selectionStart = scratchArea.selectionEnd = scratchArea.value.length;
+              }
+              localStorage.setItem(DRAFT_KEY, scratchArea.value);
+              updateCounters();
+              showToast('Voice note transcribed 🎙️');
+            }
+          } catch (e) {
+            console.error('[Scratchpad] transcriptionSuccess error:', e);
+          }
+        });
+
+        if (btnMic) {
+          btnMic.addEventListener('click', async () => {
+            try {
+              const res = await window.rift.toggleRecording();
+              if (res && res.isRecording !== undefined) {
+                setRecordingState(res.isRecording);
+                if (res.isRecording) {
+                  showToast('Listening... Speak now 🎙️');
+                } else {
+                  showToast('Transcribing speech...');
+                }
+              } else {
+                if (isRecording) {
+                  await window.rift.stopRecording();
+                  setRecordingState(false);
+                  showToast('Transcribing speech...');
+                } else {
+                  await window.rift.startRecording();
+                  setRecordingState(true);
+                  showToast('Listening... Speak now 🎙️');
+                }
+              }
+            } catch (err) {
+              console.warn('[Scratchpad] Mic button click error:', err);
+              if (isRecording) {
+                try { await window.rift.stopRecording(); } catch (e) {}
+                setRecordingState(false);
+              } else {
+                try { await window.rift.startRecording(); } catch (e) {}
+                setRecordingState(true);
+              }
+            }
+          });
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

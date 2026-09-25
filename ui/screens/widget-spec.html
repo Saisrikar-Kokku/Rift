@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0"
+        rel="stylesheet">
+    <link href="https://fonts.googleapis.com" rel="preconnect">
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;family=Manrope:wght@600;700&amp;display=swap"
+        rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet">
+    <style>
+        @layer base {
+
+            html,
+            body {
+                margin: 0;
+                padding: 0;
+            }
+
+            body {
+                overscroll-behavior: none;
+            }
+
+            main>:first-child {
+                margin-top: 0 !important;
+            }
+
+            main>:last-child {
+                margin-bottom: 0 !important;
+            }
+        }
+
+        ::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script
+        id="tailwind-config">tailwind.config = { "darkMode": "class", "theme": { "extend": { "colors": { "on-tertiary-fixed-variant": "#00513a", "surface-container-high": "#2a2930", "on-secondary-fixed": "#00174c", "outline": "#938ea1", "surface-container-low": "#1b1b21", "secondary-container": "#004bce", "secondary-fixed-dim": "#b4c5ff", "on-error": "#690005", "on-primary": "#320099", "on-secondary-container": "#beccff", "on-surface": "#e4e1ea", "surface-container-lowest": "#0e0e14", "surface": "#131319", "surface-container": "#1f1f25", "on-surface-variant": "#cac4d7", "on-error-container": "#ffdad6", "on-tertiary": "#003827", "secondary": "#b4c5ff", "error-container": "#93000a", "primary-fixed-dim": "#cabeff", "background": "#131319", "primary": "#cabeff", "primary-fixed": "#e6deff", "on-secondary": "#002979", "surface-container-highest": "#35343b", "on-tertiary-fixed": "#002115", "inverse-on-surface": "#303037", "secondary-fixed": "#dbe1ff", "outline-variant": "#484555", "surface-bright": "#393840", "error": "#ffb4ab", "primary-container": "#957dff", "on-secondary-fixed-variant": "#003daa", "on-primary-container": "#2b0087", "tertiary-fixed-dim": "#45dfa9", "inverse-surface": "#e4e1ea", "on-tertiary-container": "#003121", "surface-tint": "#cabeff", "on-background": "#e4e1ea", "tertiary-fixed": "#68fcc4", "surface-dim": "#131319", "surface-variant": "#35343b", "tertiary": "#45dfa9", "on-primary-fixed-variant": "#491ac6", "on-primary-fixed": "#1d0061", "inverse-primary": "#613ede", "tertiary-container": "#00a578" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-12": "0.75rem", "space-2": "0.125rem", "space-10": "0.625rem", "space-6": "0.375rem", "space-8": "0.5rem", "space-32": "2rem", "space-24": "1.5rem", "space-4": "0.25rem", "space-48": "3rem", "space-20": "1.25rem", "space-16": "1rem" }, "fontFamily": { "headline-sm": ["manrope"], "body-sm": ["inter"], "mono-code": ["jetbrainsMono"], "display": ["manrope"], "body-lg": ["inter"], "headline-md": ["manrope"], "body-md": ["inter"], "kbd-shortcut": ["jetbrainsMono"], "caption": ["inter"], "headline-lg": ["manrope"] }, "fontSize": { "headline-sm": ["15px", { "lineHeight": "22px", "letterSpacing": "-0.005em", "fontWeight": "600" }], "body-sm": ["12px", { "lineHeight": "18px", "letterSpacing": "0.005em", "fontWeight": "400" }], "mono-code": ["12px", { "lineHeight": "18px", "letterSpacing": "-0.01em", "fontWeight": "400" }], "display": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600" }], "body-lg": ["15px", { "lineHeight": "24px", "letterSpacing": "-0.005em", "fontWeight": "400" }], "headline-md": ["18px", { "lineHeight": "26px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "body-md": ["13px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" }], "kbd-shortcut": ["11px", { "lineHeight": "14px", "letterSpacing": "0.02em", "fontWeight": "500" }], "caption": ["11px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" }], "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.015em", "fontWeight": "600" }] } } } }</script>
+</head>
+
+<body
+    class="bg-surface-container-lowest text-on-surface antialiased min-h-screen selection:bg-primary-container selection:text-on-primary-container">
+    <header
+        class="fixed top-0 left-0 w-full z-50 bg-surface-container-low/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.2)]">
+        <div class="h-14 w-full px-space-16 flex items-center justify-between">
+            <div class="flex items-center gap-space-12"><img alt="Brand logo. - Primary color: #7c5cfa
+- Font: manrope
+- Mode: dark
+- Roundness: rounded-md
+" class="h-8 w-auto object-contain"
+                    src="https://lh3.googleusercontent.com/aida/AEtjO1WV6MXb2Iw2E8oJj636JAMTc1kiIJwI2QviVnf7RFw7qn-FECpOB4BRrNUozOeo5KJ48FkprP93-oYyca7AfLycfzYvmlU6-m_23-xFO9woDyHdaWnZtnxJrspFWNZak9s90OTSM69SSllZXyIV8_wuZiRM7TWA0XKc_R9ijAkUqBB_BhDFHIg47PBrS7_aKN7N5s6dHzeENXLUrRHDuhIsv4KCDLCcjwuLfznpZcRvoUw7PHK-Ts-7OOM"><span
+                    class="font-headline-sm text-headline-sm text-on-surface tracking-tight">Rift</span>
+                <div class="h-4 w-[1px] bg-outline-variant/40 mx-space-2 hidden sm:block"></div>
+                <nav class="hidden sm:flex items-center gap-space-4"
+                    data-active-classes="bg-surface-container text-on-surface rounded-lg"><a aria-current="page"
+                        class="px-space-8 py-space-4 font-body-sm transition-colors bg-surface-container text-on-surface rounded-lg"
+                        data-path="overview" href="#">Overview</a><a
+                        class="px-space-8 py-space-4 font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors"
+                        data-path="components" href="#">Components</a><a
+                        class="px-space-8 py-space-4 font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors"
+                        data-path="system-states" href="#">States</a></nav>
+            </div>
+            <div class="flex items-center gap-space-8">
+                <div
+                    class="hidden md:flex items-center px-space-8 py-space-4 rounded-full bg-surface-container-lowest text-on-surface-variant font-mono-code text-mono-code border border-outline-variant/30">
+                    <span class="">Whisper-Large-v3 • 42ms</span></div>
+                <div
+                    class="flex items-center gap-space-6 px-space-6 py-space-2 rounded bg-surface-container-lowest border border-outline-variant/30">
+                    <kbd class="font-kbd-shortcut text-kbd-shortcut text-on-surface-variant tracking-wider">⌥
+                        Space</kbd></div>
+                <div
+                    class="flex items-center gap-space-6 px-space-8 py-space-4 rounded-full bg-surface-container text-on-surface">
+                    <span class="w-1.5 h-1.5 rounded-full bg-tertiary-container animate-pulse"></span><span
+                        class="font-caption text-caption text-tertiary">Online</span></div>
+                <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span
+                        class="material-symbols-outlined text-on-primary text-[18px]">person</span></div>
+            </div>
+        </div>
+    </header>
+    <main class="w-full pt-14 bg-surface-container-lowest">
+        <div class="flex flex-col w-full">
+            <div class="w-full px-space-16 md:px-space-32 py-space-24 flex flex-col gap-space-32">
+                <div class="flex flex-col gap-space-12 max-w-4xl">
+                    <div class="flex flex-wrap items-center gap-space-8">
+                        <span
+                            class="px-space-8 py-space-2 rounded bg-surface-container-high text-primary font-mono-code text-mono-code uppercase tracking-wider">
+                            SPEC-HUD-09 // OVERLAY HUD
+                        </span>
+                        <span
+                            class="px-space-8 py-space-2 rounded-full bg-surface-container-low text-on-surface-variant font-mono-code text-mono-code">
+                            DISPLAY_MODE: WS_EX_TOPMOST
+                        </span>
+                    </div>
+                    <div class="flex flex-col gap-space-4">
+                        <h1 class="font-display text-display text-on-surface tracking-tight">
+                            Floating Widget States
+                        </h1>
+                        <p class="font-body-lg text-body-lg text-on-surface-variant max-w-3xl leading-relaxed">
+                            The persistent, ultra-compact desktop HUD floating over IDEs, terminals, and active windows
+                            during sub-second dictation cycles. Engineered to preserve focus without obscuring working
+                            buffers.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap gap-space-8 pt-space-4">
+                        <div
+                            class="flex items-center gap-space-6 px-space-10 py-space-4 rounded-full bg-surface-container text-on-surface font-mono-code text-caption">
+                            <span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+                            <span class="">Size: 220 × 52px</span>
+                        </div>
+                        <div
+                            class="flex items-center gap-space-6 px-space-10 py-space-4 rounded-full bg-surface-container text-on-surface font-mono-code text-caption">
+                            <span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+                            <span class="">Radius: 999px (Pill)</span>
+                        </div>
+                        <div
+                            class="flex items-center gap-space-6 px-space-10 py-space-4 rounded-full bg-surface-container text-on-surface font-mono-code text-caption">
+                            <span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+                            <span class="">Backdrop: Blur 16px</span>
+                        </div>
+                        <div
+                            class="flex items-center gap-space-6 px-space-10 py-space-4 rounded-full bg-surface-container text-on-surface font-mono-code text-caption">
+                            <span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                            <span class="">Hotkey: Right Alt</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-space-16">
+                    <div
+                        class="flex flex-col p-space-24 rounded-xl bg-surface-container-low shadow-sm justify-between gap-space-24">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-space-8">
+                                <span class="font-mono-code text-mono-code text-primary font-medium">01</span>
+                                <span class="font-headline-sm text-headline-sm text-on-surface">RECORDING</span>
+                            </div>
+                            <span
+                                class="font-mono-code text-caption px-space-6 py-space-2 rounded bg-surface-container-lowest text-primary">PCM_16K_STREAM</span>
+                        </div>
+                        <div
+                            class="py-space-20 flex items-center justify-center bg-surface-container-lowest/60 rounded-lg">
+                            <div
+                                class="w-[224px] h-[52px] rounded-full bg-surface-container-high px-space-12 flex items-center justify-between shadow-[0_0_24px_rgba(124,92,250,0.28)]">
+                                <div
+                                    class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center shadow-[0_0_12px_rgba(124,92,250,0.5)] animate-pulse">
+                                    <span class="material-symbols-outlined text-on-primary text-[18px]">mic</span>
+                                </div>
+                                <div class="flex items-end gap-1 h-6 px-space-4">
+                                    <span class="w-1 bg-primary rounded-full h-2 animate-bounce"
+                                        style="animation-duration: 480ms;"></span>
+                                    <span class="w-1 bg-secondary rounded-full h-5 animate-bounce"
+                                        style="animation-duration: 320ms; animation-delay: 80ms;"></span>
+                                    <span class="w-1 bg-primary rounded-full h-6 animate-bounce"
+                                        style="animation-duration: 410ms; animation-delay: 140ms;"></span>
+                                    <span class="w-1 bg-secondary rounded-full h-3.5 animate-bounce"
+                                        style="animation-duration: 520ms; animation-delay: 200ms;"></span>
+                                    <span class="w-1 bg-primary rounded-full h-5 animate-bounce"
+                                        style="animation-duration: 380ms; animation-delay: 110ms;"></span>
+                                    <span class="w-1 bg-secondary rounded-full h-2 animate-bounce"
+                                        style="animation-duration: 600ms; animation-delay: 180ms;"></span>
+                                </div>
+                                <div class="flex items-center gap-1.5 pl-space-4">
+                                    <span class="w-2 h-2 rounded-full bg-primary-container animate-ping"></span>
+                                    <span class="font-mono-code text-caption text-on-surface tracking-wider">0.8s</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex flex-col gap-space-4 bg-surface-container-lowest p-space-12 rounded">
+                            <div
+                                class="flex items-center justify-between text-caption font-mono-code text-on-surface-variant">
+                                <span class="">TRIGGER</span>
+                                <span class="text-on-surface">Keydown [Right Alt]</span>
+                            </div>
+                            <p class="font-body-sm text-body-sm text-on-surface-variant">
+                                Real-time RingBuffer captures 16kHz PCM audio stream with instantaneous low-cut noise
+                                gate active.
+                            </p>
+                        </div>
+                    </div>
+                    <div
+                        class="flex flex-col p-space-24 rounded-xl bg-surface-container-low shadow-sm justify-between gap-space-24">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-space-8">
+                                <span class="font-mono-code text-mono-code text-secondary font-medium">02</span>
+                                <span class="font-headline-sm text-headline-sm text-on-surface">PROCESSING</span>
+                            </div>
+                            <span
+                                class="font-mono-code text-caption px-space-6 py-space-2 rounded bg-surface-container-lowest text-secondary">INFERENCE_RUN</span>
+                        </div>
+                        <div
+                            class="py-space-20 flex items-center justify-center bg-surface-container-lowest/60 rounded-lg">
+                            <div
+                                class="w-[224px] h-[52px] rounded-full bg-surface-container-high px-space-16 flex items-center justify-between shadow-[0_0_20px_rgba(76,124,255,0.22)]">
+                                <div
+                                    class="w-7 h-7 rounded-full bg-secondary-container flex items-center justify-center">
+                                    <span
+                                        class="material-symbols-outlined text-on-secondary text-[16px] animate-spin">progress_activity</span>
+                                </div>
+                                <div class="flex flex-col items-start leading-none gap-0.5">
+                                    <span
+                                        class="font-headline-sm text-body-md text-on-surface tracking-tight">Transcribing</span>
+                                    <span class="font-mono-code text-caption text-secondary">Whisper-Turbo</span>
+                                </div>
+                                <div
+                                    class="px-space-6 py-space-2 rounded bg-surface-container text-on-surface-variant font-mono-code text-caption">
+                                    42ms
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex flex-col gap-space-4 bg-surface-container-lowest p-space-12 rounded">
+                            <div
+                                class="flex items-center justify-between text-caption font-mono-code text-on-surface-variant">
+                                <span class="">TRIGGER</span>
+                                <span class="text-on-surface">Keyup [Right Alt Release]</span>
+                            </div>
+                            <p class="font-body-sm text-body-sm text-on-surface-variant">
+                                Single-packet dispatch directly to edge accelerated inference runtime. Speculative
+                                decoding active.
+                            </p>
+                        </div>
+                    </div>
+                    <div
+                        class="flex flex-col p-space-24 rounded-xl bg-surface-container-low shadow-sm justify-between gap-space-24">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-space-8">
+                                <span class="font-mono-code text-mono-code text-tertiary font-medium">03</span>
+                                <span class="font-headline-sm text-headline-sm text-on-surface">SUCCESS</span>
+                            </div>
+                            <span
+                                class="font-mono-code text-caption px-space-6 py-space-2 rounded bg-surface-container-lowest text-tertiary">INJECT_COMPLETE</span>
+                        </div>
+                        <div
+                            class="py-space-20 flex items-center justify-center bg-surface-container-lowest/60 rounded-lg">
+                            <div
+                                class="w-[224px] h-[52px] rounded-full bg-surface-container-high px-space-16 flex items-center justify-between shadow-[0_0_22px_rgba(61,217,164,0.22)]">
+                                <div
+                                    class="w-7 h-7 rounded-full bg-tertiary-container flex items-center justify-center">
+                                    <span class="material-symbols-outlined text-on-tertiary text-[18px]">check</span>
+                                </div>
+                                <div class="flex flex-col items-start leading-none gap-0.5">
+                                    <span
+                                        class="font-headline-sm text-body-md text-on-surface tracking-tight">Inserted</span>
+                                    <span class="font-mono-code text-caption text-tertiary">AST Synthesized</span>
+                                </div>
+                                <div
+                                    class="px-space-6 py-space-2 rounded bg-surface-container text-on-surface-variant font-mono-code text-caption">
+                                    18w • 0.3s
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex flex-col gap-space-4 bg-surface-container-lowest p-space-12 rounded">
+                            <div
+                                class="flex items-center justify-between text-caption font-mono-code text-on-surface-variant">
+                                <span class="">TRIGGER</span>
+                                <span class="text-on-surface">OS Event: SendInput</span>
+                            </div>
+                            <p class="font-body-sm text-body-sm text-on-surface-variant">
+                                Normalized markdown/code token stream written directly to the target focused window via
+                                synthetic keystrokes.
+                            </p>
+                        </div>
+                    </div>
+                    <div
+                        class="flex flex-col p-space-24 rounded-xl bg-surface-container-low shadow-sm justify-between gap-space-24">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-space-8">
+                                <span class="font-mono-code text-mono-code text-error font-medium">04</span>
+                                <span class="font-headline-sm text-headline-sm text-on-surface">EXCEPTION</span>
+                            </div>
+                            <span
+                                class="font-mono-code text-caption px-space-6 py-space-2 rounded bg-surface-container-lowest text-error">FALLBACK_STORE</span>
+                        </div>
+                        <div
+                            class="py-space-20 flex items-center justify-center bg-surface-container-lowest/60 rounded-lg">
+                            <div
+                                class="w-[224px] h-[52px] rounded-full bg-surface-container-high px-space-16 flex items-center justify-between shadow-[0_0_22px_rgba(242,107,90,0.22)]">
+                                <div class="w-7 h-7 rounded-full bg-error-container flex items-center justify-center">
+                                    <span
+                                        class="material-symbols-outlined text-on-error-container text-[18px]">warning</span>
+                                </div>
+                                <div class="flex flex-col items-start leading-none gap-0.5">
+                                    <span class="font-headline-sm text-body-md text-error tracking-tight">API
+                                        Timeout</span>
+                                    <span class="font-mono-code text-caption text-on-surface-variant">Fallback
+                                        saved</span>
+                                </div>
+                                <button
+                                    class="px-space-8 py-space-2 rounded bg-surface-container-highest hover:bg-surface-bright text-on-surface font-mono-code text-caption transition-colors">
+                                    Retry
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex flex-col gap-space-4 bg-surface-container-lowest p-space-12 rounded">
+                            <div
+                                class="flex items-center justify-between text-caption font-mono-code text-on-surface-variant">
+                                <span class="">TRIGGER</span>
+                                <span class="text-on-surface">HTTP 408 / RateLimit</span>
+                            </div>
+                            <p class="font-body-sm text-body-sm text-on-surface-variant">
+                                Unsent audio payload safely cached into local OS clipboard. Hotkey fallback enables
+                                instant re-dispatch.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div
+                    class="flex flex-col gap-space-12 rounded-xl bg-surface-container-low p-space-24 shadow-sm overflow-hidden">
+                    <div class="flex flex-wrap items-center justify-between gap-space-12">
+                        <div class="flex items-center gap-space-10">
+                            <div class="flex items-center gap-space-6">
+                                <span class="w-3 h-3 rounded-full bg-error/70"></span>
+                                <span class="w-3 h-3 rounded-full bg-secondary/50"></span>
+                                <span class="w-3 h-3 rounded-full bg-tertiary/70"></span>
+                            </div>
+                            <span class="font-mono-code text-caption text-on-surface-variant">IDE Integration Context •
+                                main.rs (active cursor focus)</span>
+                        </div>
+                        <div
+                            class="flex items-center gap-space-6 bg-surface-container px-space-10 py-space-4 rounded-full text-on-surface-variant font-mono-code text-caption">
+                            <span class="">Viewport: 1440 × 900</span>
+                            <span class="">•</span>
+                            <span class="text-tertiary">Pill Z-Index: 99999</span>
+                        </div>
+                    </div>
+                    <div
+                        class="relative w-full rounded-lg bg-surface-container-lowest p-space-20 overflow-hidden font-mono-code text-mono-code leading-loose select-none">
+                        <div class="flex flex-col text-on-surface-variant/40 space-y-1">
+                            <div class="flex gap-space-16">
+                                <span class="w-6 text-right select-none opacity-40">102</span>
+                                <span class=""><span class="text-primary-container">async fn</span> <span
+                                        class="text-secondary">handle_dictation_stream</span>(ctx: &amp;mut Context)
+                                    -&gt; Result&lt;()&gt; {</span>
+                            </div>
+                            <div class="flex gap-space-16">
+                                <span class="w-6 text-right select-none opacity-40">103</span>
+                                <span class="pl-4"><span class="text-on-surface-variant">let</span> device =
+                                    audio_engine::<span class="text-secondary">default_input_stream</span>()?;</span>
+                            </div>
+                            <div
+                                class="flex gap-space-16 bg-surface-container/40 -mx-space-20 px-space-20 py-0.5 text-on-surface">
+                                <span class="w-6 text-right select-none text-primary">104</span>
+                                <span class="pl-4"><span class="text-primary-container">let</span> mut buffer =
+                                    RingBuffer::<span class="text-secondary">new</span>(AUDIO_BUFFER_SZ);</span>
+                            </div>
+                            <div class="flex gap-space-16">
+                                <span class="w-6 text-right select-none opacity-40">105</span>
+                                <span class="pl-4">info!(target: <span class="text-tertiary">"audio"</span>, <span
+                                        class="text-tertiary">"Capturing 16-bit 16000Hz mono frame
+                                        payload..."</span>);</span>
+                            </div>
+                            <div class="flex gap-space-16">
+                                <span class="w-6 text-right select-none opacity-40">106</span>
+                                <span class="pl-4"><span class="text-primary-container">while let</span> Some(packet) =
+                                    rx.<span class="text-secondary">recv</span>().<span
+                                        class="text-primary-container">await</span> {</span>
+                            </div>
+                            <div class="flex gap-space-16">
+                                <span class="w-6 text-right select-none opacity-40">107</span>
+                                <span class="pl-8">normalizer::<span
+                                        class="text-secondary">push_tokens</span>(&amp;packet).<span
+                                        class="text-primary-container">await</span>?;</span>
+                            </div>
+                            <div class="flex gap-space-16">
+                                <span class="w-6 text-right select-none opacity-40">108</span>
+                                <span class="pl-4">}</span>
+                            </div>
+                            <div class="flex gap-space-16">
+                                <span class="w-6 text-right select-none opacity-40">109</span>
+                                <span class="">}</span>
+                            </div>
+                        </div>
+                        <div class="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center justify-center">
+                            <div
+                                class="w-[230px] h-[52px] rounded-full bg-surface-container-high/90 backdrop-blur-xl px-space-12 flex items-center justify-between shadow-[0_12px_32px_rgba(0,0,0,0.7),0_0_24px_rgba(124,92,250,0.3)]">
+                                <div class="flex items-center gap-space-8">
+                                    <div
+                                        class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center shadow-[0_0_12px_rgba(124,92,250,0.6)]">
+                                        <span class="material-symbols-outlined text-on-primary text-[18px]">mic</span>
+                                    </div>
+                                    <div class="flex flex-col leading-none">
+                                        <span
+                                            class="font-headline-sm text-body-sm text-on-surface font-semibold tracking-tight">Active
+                                            Speech</span>
+                                        <span class="font-mono-code text-[10px] text-tertiary tracking-tight">VAD
+                                            Verified</span>
+                                    </div>
+                                </div>
+                                <div class="flex items-end gap-1 h-5 px-space-6">
+                                    <span class="w-1 bg-primary rounded-full h-2.5"></span>
+                                    <span class="w-1 bg-secondary rounded-full h-4"></span>
+                                    <span class="w-1 bg-primary rounded-full h-5"></span>
+                                    <span class="w-1 bg-secondary rounded-full h-3"></span>
+                                </div>
+                                <span class="font-mono-code text-caption text-on-surface-variant pr-space-4">0.6s</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-space-16">
+                    <div class="flex flex-col gap-space-8 p-space-16 rounded-xl bg-surface-container-low shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <span class="font-headline-sm text-headline-sm text-on-surface">Anchor Modes</span>
+                            <span class="material-symbols-outlined text-primary text-[20px]">location_searching</span>
+                        </div>
+                        <p class="font-body-sm text-body-sm text-on-surface-variant">
+                            Configurable docking behaviors: Static bottom-center screen anchor or adaptive proximity
+                            float directly following the primary caret/text cursor location.
+                        </p>
+                        <div
+                            class="mt-space-8 pt-space-8 flex items-center justify-between text-caption font-mono-code text-on-surface-variant">
+                            <span class="">DEFAULT</span>
+                            <span class="text-on-surface">Screen Bottom (Y: -64px)</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-space-8 p-space-16 rounded-xl bg-surface-container-low shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <span class="font-headline-sm text-headline-sm text-on-surface">Topmost Priority</span>
+                            <span class="material-symbols-outlined text-secondary text-[20px]">layers</span>
+                        </div>
+                        <p class="font-body-sm text-body-sm text-on-surface-variant">Operates strictly on <span
+                                class="text-on-surface font-mono-code">WS_EX_TOPMOST</span> on Windows to avoid stealing
+                            keyboard or window focus during dictation.</p>
+                        <div
+                            class="mt-space-8 pt-space-8 flex items-center justify-between text-caption font-mono-code text-on-surface-variant">
+                            <span class="">FOCUS STEAL</span>
+                            <span class="text-tertiary">Zero (Passive Overlay)</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-space-8 p-space-16 rounded-xl bg-surface-container-low shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <span class="font-headline-sm text-headline-sm text-on-surface">Footprint &amp;
+                                Runtime</span>
+                            <span class="material-symbols-outlined text-tertiary text-[20px]">memory</span>
+                        </div>
+                        <p class="font-body-sm text-body-sm text-on-surface-variant">
+                            Written in native C++ with direct GPU composition. Idle consumption remains strictly beneath
+                            12MB RAM with sub-0.2% continuous CPU utilization.
+                        </p>
+                        <div
+                            class="mt-space-8 pt-space-8 flex items-center justify-between text-caption font-mono-code text-on-surface-variant">
+                            <span class="">RENDER LATENCY</span>
+                            <span class="text-on-surface">&lt; 1.2ms (Vulkan / Metal)</span>
+                        </div>
+                    </div>
+                </div>
+                <div
+                    class="flex flex-col md:flex-row items-center justify-between p-space-16 rounded-xl bg-surface-container gap-space-12">
+                    <div class="flex items-center gap-space-12">
+                        <div
+                            class="w-9 h-9 rounded-lg bg-surface-container-high flex items-center justify-center text-primary">
+                            <span class="material-symbols-outlined text-[20px]">keyboard</span>
+                        </div>
+                        <div class="flex flex-col">
+                            <span class="font-headline-sm text-body-md text-on-surface">Global Invocation Toggle</span>
+                            <span class="font-body-sm text-caption text-on-surface-variant">Press and hold hotkey while
+                                speaking in any application</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-space-8">
+                        <div
+                            class="px-space-8 py-space-4 rounded bg-surface-container-lowest font-kbd-shortcut text-kbd-shortcut text-on-surface shadow-sm">
+                            Right Alt
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <footer class="w-full bg-surface-container-lowest/80 py-space-12 mt-space-24">
+        <div
+            class="w-full px-space-16 flex items-center justify-between text-on-surface-variant font-caption text-caption">
+            <span class="">Rift UI Component System • Native Desktop Canvas</span><span
+                class="font-mono-code text-mono-code">v0.9.4-dev</span></div>
+    </footer>
+
+</body>
+
+</html>

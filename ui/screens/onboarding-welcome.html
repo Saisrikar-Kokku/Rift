@@ -1,0 +1,122 @@
+﻿<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Welcome to Rift</title>
+    <link href="../shared/fonts.css" rel="stylesheet">
+    <link href="../shared/tailwind.css" rel="stylesheet">
+</head>
+<body class="bg-surface-container-lowest font-body-md text-body-md text-on-surface antialiased select-none overflow-hidden">
+    <main class="w-full min-h-screen flex flex-col items-center justify-center px-space-16 py-space-32 relative">
+        <!-- Ambient Precision Glow -->
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] h-[520px] bg-primary-container/10 rounded-full blur-[140px] pointer-events-none -z-10"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[260px] h-[260px] bg-tertiary-container/5 rounded-full blur-[90px] pointer-events-none -z-10"></div>
+        
+        <!-- Technical Frame Elements -->
+        <div class="absolute top-space-16 left-space-16 flex items-center gap-space-8 text-outline pointer-events-none opacity-40">
+            <span class="font-mono-code text-caption tracking-widest uppercase">LOC // 00.1A</span>
+            <span class="w-2 h-2 border-t border-l border-white/20"></span>
+        </div>
+        <div class="absolute top-space-16 right-space-16 flex items-center gap-space-8 text-outline pointer-events-none opacity-40">
+            <span class="w-2 h-2 border-t border-r border-white/20"></span>
+            <span class="font-mono-code text-caption tracking-widest uppercase">SYSTEM.BOOT // OK</span>
+        </div>
+        <div class="absolute bottom-space-16 left-space-16 flex items-center gap-space-8 text-outline pointer-events-none opacity-40">
+            <span class="w-2 h-2 border-b border-l border-white/20"></span>
+            <span class="font-mono-code text-caption tracking-widest uppercase">AUDIO_BUFFER: ZERO_LOCAL</span>
+        </div>
+        <div class="absolute bottom-space-16 right-space-16 flex items-center gap-space-8 text-outline pointer-events-none opacity-40">
+            <span class="font-mono-code text-caption tracking-widest uppercase">BUILD 2026.FINAL</span>
+            <span class="w-2 h-2 border-b border-r border-white/20"></span>
+        </div>
+
+        <!-- Central Hero Unit -->
+        <div class="relative z-10 max-w-[620px] w-full flex flex-col items-center text-center">
+            <!-- Logo Container -->
+            <div class="relative mb-space-20 group">
+                <div class="absolute inset-0 rounded-2xl bg-primary/20 blur-xl transition-all duration-700 group-hover:blur-2xl group-hover:bg-primary/30"></div>
+                <div class="relative w-16 h-16 rounded-2xl bg-surface-container flex items-center justify-center p-space-10 shadow-2xl transition-transform duration-300 group-hover:scale-[1.03]">
+                    <img alt="Rift Logo" class="w-full h-full object-contain filter drop-shadow-[0_0_12px_rgba(124,92,250,0.45)]" src="../assets/logo.svg">
+                </div>
+            </div>
+
+            <!-- Tagline -->
+            <p class="font-body-md text-body-md italic text-on-surface-variant mb-space-8 tracking-normal">
+                “Speak. It lands where you’re typing.”
+            </p>
+
+            <!-- Main Heading -->
+            <h1 class="font-display text-display text-on-surface font-semibold tracking-tight mb-space-12">
+                Welcome to Rift
+            </h1>
+
+            <!-- Description Paragraph -->
+            <p class="font-body-lg text-body-lg text-on-surface-variant max-w-[540px] leading-relaxed mb-space-32">
+                Hold a key, speak your thought or code, and Rift transcribes it straight into whatever window you’re typing in — powered by your own Groq API key with local Whisper fallback.
+            </p>
+
+            <!-- Primary Action Button -->
+            <div class="flex flex-col items-center gap-space-16 w-full">
+                <button id="get-started-btn"
+                    class="relative group overflow-hidden px-space-32 py-space-12 rounded-full bg-gradient-to-r from-inverse-primary via-primary-container to-secondary-container text-on-primary font-headline-sm text-headline-sm font-semibold flex items-center justify-center gap-space-10 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-[0_0_24px_rgba(124,92,250,0.35)] hover:shadow-[0_0_36px_rgba(124,92,250,0.55)] cursor-pointer">
+                    <span class="tracking-tight text-white">Get Started</span>
+                    <span class="material-symbols-outlined text-headline-sm transition-transform duration-300 group-hover:translate-x-1 text-white">arrow_forward</span>
+                    <div class="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none"></div>
+                </button>
+                <!-- Privacy Note -->
+                <div class="flex items-center gap-space-6 text-outline font-caption text-caption mt-space-4">
+                    <span class="material-symbols-outlined text-[15px] opacity-70">lock</span>
+                    <span>No account needed. Zero telemetry. Stored locally on your PC.</span>
+                </div>
+            </div>
+
+            <!-- Hardware Verification Badge -->
+            <div class="mt-space-48 pt-space-20 w-full max-w-[420px] flex items-center justify-between px-space-16 py-space-8 rounded-lg bg-surface-container-low/70 border border-white/[0.06]">
+                <div class="flex items-center gap-space-8">
+                    <span class="relative flex h-2 w-2">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-tertiary"></span>
+                    </span>
+                    <span class="font-mono-code text-caption text-on-surface-variant">Default Microphone: WASAPI In</span>
+                </div>
+                <div class="flex items-center gap-space-4">
+                    <span id="welcomeHotkeyBadge" class="font-kbd-shortcut text-kbd-shortcut bg-surface-container-lowest px-space-6 py-space-2 rounded text-outline border border-white/[0.08]">Right Alt</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="../shared/qwebchannel.js"></script>
+    <script src="../shared/bridge.js"></script>
+    <script>
+        (function () {
+            const getStartedBtn = document.getElementById('get-started-btn');
+            if (getStartedBtn) {
+                getStartedBtn.addEventListener('click', function () {
+                    this.innerHTML = `
+                        <span class="material-symbols-outlined animate-spin text-headline-sm text-white">progress_activity</span>
+                        <span class="tracking-tight text-white">Initializing Engine...</span>
+                    `;
+                    setTimeout(() => {
+                        window.location.href = 'onboarding-api-key.html';
+                    }, 350);
+                });
+            }
+
+            // Populate hotkey badge dynamically once bridge is ready
+            window.rift.ready(async () => {
+                try {
+                    const hotkeys = await window.rift.getHotkeys();
+                    const badge = document.getElementById('welcomeHotkeyBadge');
+                    if (badge && hotkeys && hotkeys.pushToTalk) {
+                        badge.textContent = hotkeys.pushToTalk;
+                    }
+                } catch (e) {
+                    // Default Right Alt is already shown
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

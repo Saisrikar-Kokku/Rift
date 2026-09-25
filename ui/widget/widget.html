@@ -1,0 +1,1853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rift Floating Status Widget</title>
+  <link rel="stylesheet" href="../shared/fonts.css">
+  <style>
+    /* ============================================================
+       CRITICAL TRANSPARENCY & ZERO-SHADE STYLES:
+       Fixed canvas size containing both idle badge and active pill.
+       pointer-events: none ensures mouse clicks pass straight through
+       any transparent canvas padding around the centered widget.
+       STRICTLY NO CSS box-shadow or blur filters outside the pill,
+       preventing any alpha-blending artifacts or rectangular shades.
+       ============================================================ */
+    html, body {
+      background: transparent !important;
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding-top: 10px;
+      font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+    }
+
+    /* ============================================================
+       BASE WIDGET CONTAINER (#statusPill)
+       Renders centered within the fixed native canvas.
+       Morphs between compact Idle Badge and compact Active Pill.
+       ============================================================ */
+    .pill {
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+      pointer-events: auto;
+      cursor: grab;
+      touch-action: none;
+      background: #15151F; /* 100% solid opaque surface */
+      border: 1px solid #27272a;
+      box-shadow: none !important; /* No outer shadow -> 0% shade artifact */
+      opacity: 1;
+      transform: translateY(0) scale(1);
+
+      /* Core Morphing Transition: snappy with back-out overshoot curve */
+      transition: 
+        width 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
+        height 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
+        border-radius 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
+        border-color 180ms ease,
+        background 180ms ease,
+        opacity 180ms ease,
+        transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .pill:active,
+    .pill.dragging {
+      cursor: grabbing !important;
+    }
+
+    .pill.position-locked {
+      cursor: default !important;
+    }
+
+    .pill.visible {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    /* ============================================================
+       STATE 1: IDLE BADGE
+       Compact rounded rectangle: 132x34px, radius 8px.
+       ============================================================ */
+    .pill.state-idle {
+      width: 132px;
+      height: 34px;
+      border-radius: 8px;
+      padding: 0 10px;
+      background: #15151F;
+      border: 1px solid #2a2a38;
+      box-shadow: none !important;
+    }
+
+    /* ============================================================
+       STATE 2-5: ACTIVE PILL
+       Compact sleek pill: 172x38px, radius 999px.
+       Expands moderately ("somewhat small") rather than huge.
+       ============================================================ */
+    .pill.state-active {
+      width: 172px;
+      height: 38px;
+      border-radius: 999px;
+      padding: 0 10px;
+      box-shadow: none !important;
+    }
+
+    /* Active Recording State */
+    .pill.recording-active {
+      border-color: #8b5cf6;
+      box-shadow: none !important;
+    }
+
+    /* Processing State: solid animated gradient shimmer (no rgba alpha bleed) */
+    .pill.state-processing-active {
+      border-color: #6366f1;
+      box-shadow: none !important;
+      background: linear-gradient(
+        90deg,
+        #15151F 0%,
+        #15151F 30%,
+        #242438 50%,
+        #15151F 70%,
+        #15151F 100%
+      );
+      background-size: 200% 100%;
+      animation: shimmerSweep 1.8s ease-in-out infinite;
+    }
+
+    /* Enhancing State: vivid neural AI pulse and purple/cyan gradient sweep */
+    .pill.state-enhancing-active {
+      border-color: #a855f7 !important;
+      box-shadow: none !important;
+      background: linear-gradient(
+        90deg,
+        #15151F 0%,
+        #22143d 25%,
+        #3d1668 50%,
+        #22143d 75%,
+        #15151F 100%
+      ) !important;
+      background-size: 200% 100% !important;
+      animation: neuralSweep 1.3s ease-in-out infinite !important;
+    }
+
+    @keyframes shimmerSweep {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    @keyframes neuralSweep {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* Success Pill */
+    .pill.state-success-active {
+      border-color: #34d399;
+      box-shadow: none !important;
+    }
+
+    /* Warning Pill */
+    .pill.state-warning-active {
+      border-color: #fbbf24;
+      box-shadow: none !important;
+    }
+
+    /* Error Pill */
+    .pill.state-error-active {
+      border-color: #ef4444;
+      box-shadow: none !important;
+    }
+
+    /* Retry Audio Recovery State: Ultra-sleek minimal obsidian amber */
+    .pill.state-retry-active {
+      width: 228px;
+      border-color: rgba(245, 158, 11, 0.45) !important;
+      box-shadow: none !important;
+      background: linear-gradient(
+        90deg,
+        #14141E 0%,
+        #1e160a 45%,
+        #14141E 100%
+      ) !important;
+      animation: amberBreathe 2.8s ease-in-out infinite alternate !important;
+      cursor: pointer !important;
+    }
+
+    .pill.state-retry-active:hover {
+      border-color: rgba(245, 158, 11, 0.75) !important;
+      background: linear-gradient(
+        90deg,
+        #181824 0%,
+        #281d0c 45%,
+        #181824 100%
+      ) !important;
+      transform: translateY(-1px) scale(1.02);
+    }
+
+    .pill.state-retry-active:active {
+      transform: translateY(0) scale(0.98);
+    }
+
+    @keyframes amberBreathe {
+      0% {
+        border-color: rgba(245, 158, 11, 0.35);
+      }
+      100% {
+        border-color: rgba(245, 158, 11, 0.7);
+      }
+    }
+
+    /* ============================================================
+       CONTENT LAYERS & CROSS-FADE
+       Idle Content vs Active Views cross-fade seamlessly during shape morph.
+       ============================================================ */
+    .badge-content {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 10px;
+      box-sizing: border-box;
+      opacity: 1;
+      transform: scale(1);
+      transition: opacity 140ms ease-out, transform 160ms ease-out;
+      pointer-events: auto;
+    }
+
+    .active-content {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 10px;
+      box-sizing: border-box;
+      opacity: 0;
+      transform: scale(0.92);
+      transition: opacity 160ms ease-out, transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+      pointer-events: none;
+    }
+
+    .pill.state-idle .badge-content {
+      opacity: 1;
+      transform: scale(1);
+      pointer-events: auto;
+    }
+    .pill.state-idle .active-content {
+      opacity: 0;
+      transform: scale(0.92);
+      pointer-events: none;
+    }
+
+    .pill.state-active .badge-content {
+      opacity: 0;
+      transform: scale(0.88);
+      pointer-events: none;
+    }
+    .pill.state-active .active-content {
+      opacity: 1;
+      transform: scale(1);
+      pointer-events: auto;
+    }
+
+    /* ============================================================
+       IDLE BADGE DETAILS
+       Logo Chip with Internal Subtle Breathing Pulse + "Rift" Wordmark
+       ============================================================ */
+    .idle-logo-chip {
+      position: relative;
+      width: 20px;
+      height: 20px;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      animation: logoBreathing 3s ease-in-out infinite alternate;
+    }
+
+    @keyframes logoBreathing {
+      0% {
+        transform: scale(0.92);
+        opacity: 0.85;
+      }
+      100% {
+        transform: scale(1.04);
+        opacity: 1;
+      }
+    }
+
+    .idle-logo-svg {
+      width: 20px;
+      height: 20px;
+      display: block;
+    }
+
+    .idle-wordmark {
+      font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #F2F2F7;
+      letter-spacing: -0.01em;
+      margin-left: 7px;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    /* Wrapper containing both the floating pill and the external floating dropdown */
+    .widget-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      position: relative;
+      width: 100%;
+      pointer-events: none;
+    }
+
+    /* Dropdown Trigger Arrow Button */
+    .dropdown-trigger-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: 1px solid transparent;
+      outline: none;
+      padding: 0;
+      width: 0;
+      height: 18px;
+      margin-left: 0;
+      opacity: 0;
+      cursor: pointer;
+      color: #94a3b8;
+      border-radius: 5px;
+      overflow: hidden;
+      pointer-events: none;
+      flex-shrink: 0;
+      transition: width 160ms cubic-bezier(0.4, 0, 0.2, 1),
+                  opacity 160ms ease,
+                  margin-left 160ms ease,
+                  background 120ms ease,
+                  border-color 120ms ease,
+                  color 120ms ease,
+                  transform 120ms ease;
+    }
+
+    /* Hovering over idle pill or wrapper reveals the crisp chevron button */
+    .pill.state-idle:hover .dropdown-trigger-btn,
+    .pill.state-idle.dropdown-open .dropdown-trigger-btn,
+    .widget-wrapper:hover .dropdown-trigger-btn {
+      width: 18px;
+      height: 18px;
+      margin-left: 7px;
+      opacity: 0.85;
+      background: #20202e;
+      border-color: #313144;
+      color: #a5b4fc;
+      pointer-events: auto;
+    }
+
+    .dropdown-trigger-btn:hover {
+      opacity: 1 !important;
+      color: #c084fc !important;
+      background: #2e1d48 !important;
+      border-color: #7c5cfa !important;
+      transform: scale(1.08);
+    }
+
+    .dropdown-chevron-svg {
+      width: 11px;
+      height: 11px;
+      display: block;
+      transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .pill.dropdown-open .dropdown-chevron-svg {
+      transform: rotate(180deg);
+      color: #c084fc;
+    }
+
+    /* External Dropdown Menu Container: 100% Solid Obsidian, FLOATING OUTSIDE & BELOW PILL */
+    .widget-dropdown-menu {
+      box-sizing: border-box;
+      width: 154px;
+      margin-top: 7px;
+      background: #141420; /* 100% solid surface */
+      border: 1px solid #28283c;
+      border-radius: 10px;
+      padding: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      box-shadow: none !important;
+      opacity: 0;
+      transform: translateY(-6px) scale(0.96);
+      pointer-events: none;
+      transition: opacity 150ms ease-out, transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 1000;
+    }
+
+    .widget-dropdown-menu.open {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      pointer-events: auto;
+    }
+
+    .menu-action-item {
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      height: 30px;
+      padding: 0 8px;
+      background: transparent;
+      border: none;
+      border-radius: 7px;
+      color: #e2e8f0;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 120ms ease, color 120ms ease, transform 90ms ease;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .menu-action-item:active {
+      transform: scale(0.97);
+    }
+
+    .menu-action-item.retry-item:hover {
+      background: rgba(245, 158, 11, 0.16) !important;
+      color: #fef3c7 !important;
+    }
+
+    .menu-action-item.retry-item:hover .menu-item-hint {
+      color: #fbbf24 !important;
+    }
+
+    .menu-item-left {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .menu-item-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    .menu-item-icon svg {
+      width: 13px;
+      height: 13px;
+    }
+
+    .menu-item-label {
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .menu-item-hint {
+      font-size: 9.5px;
+      color: #64748b;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+    }
+
+    .polish-item:hover {
+      background: #241738;
+      color: #f3e8ff;
+    }
+    .polish-item:hover .menu-item-icon svg {
+      color: #c084fc;
+    }
+    .polish-item:hover .menu-item-hint {
+      color: #d8b4fe;
+    }
+
+    .scratch-item:hover {
+      background: #191c34;
+      color: #e0e7ff;
+    }
+    .scratch-item:hover .menu-item-icon svg {
+      color: #818cf8;
+    }
+    .scratch-item:hover .menu-item-hint {
+      color: #a5b4fc;
+    }
+
+    .spotlight-item:hover {
+      background: #251739;
+      color: #f3e8ff;
+    }
+    .spotlight-item:hover .menu-item-icon svg {
+      color: #c084fc;
+    }
+    .spotlight-item:hover .menu-item-hint {
+      color: #e9d5ff;
+    }
+
+
+    /* ============================================================
+       ACTIVE STATE VIEWS (Centered in 172x38px Pill)
+       ============================================================ */
+    .state-view {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      height: 100%;
+      color: #F2F2F7;
+      box-sizing: border-box;
+    }
+
+    .state-view.active {
+      display: flex;
+    }
+
+    /* ============================================================
+       RECORDING STATE (Compact & Sleek)
+       ============================================================ */
+    .mic-chip {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #7c5cfa;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: transform 90ms ease-out;
+    }
+
+    .mic-icon-svg {
+      width: 13px;
+      height: 13px;
+      color: #ffffff;
+    }
+
+    .waveform-bars {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      height: 24px;
+      flex: 1;
+      margin: 0 6px;
+    }
+
+    .wave-bar {
+      width: 2.8px;
+      height: 4px;
+      min-height: 3px;
+      max-height: 18px;
+      background: linear-gradient(to top, #ffffff, #c4b5fd);
+      border-radius: 2px;
+      transition: height 90ms ease-out;
+      transform-origin: bottom center;
+    }
+
+    .rec-indicator {
+      display: flex;
+      align-items: center;
+      gap: 3.5px;
+      flex-shrink: 0;
+    }
+
+    .rec-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #ef4444;
+      animation: recPulse 1.2s ease-in-out infinite;
+    }
+
+    @keyframes recPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(0.8); }
+    }
+
+    .rec-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: #ef4444;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    /* ============================================================
+       PROCESSING STATE (Compact & Calm)
+       ============================================================ */
+    .processing-chip {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #23253a;
+      border: 1px solid #4f46e5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .processing-spinner {
+      width: 13px;
+      height: 13px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .processing-text-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      margin-left: 8px;
+      flex: 1;
+    }
+
+    .processing-text {
+      color: #F2F2F7;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      line-height: 1.1;
+    }
+
+    .processing-subtext {
+      color: #a5b4fc;
+      font-size: 9px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .pill.state-enhancing-active .processing-chip {
+      background: #2b1747;
+      border-color: #a855f7;
+    }
+
+    .enhancing-sparkle {
+      width: 14px;
+      height: 14px;
+      display: none;
+      animation: sparklePulse 1.0s ease-in-out infinite;
+    }
+
+    .pill.state-enhancing-active .enhancing-sparkle {
+      display: block;
+    }
+
+    .pill.state-enhancing-active .processing-spinner {
+      display: none;
+    }
+
+    .pill.state-enhancing-active .processing-text {
+      color: #faf5ff;
+    }
+
+    .pill.state-enhancing-active .processing-subtext {
+      color: #d8b4fe;
+    }
+
+    @keyframes sparklePulse {
+      0%, 100% {
+        transform: scale(0.92) rotate(0deg);
+        filter: drop-shadow(0 0 3px #a855f7);
+      }
+      50% {
+        transform: scale(1.16) rotate(18deg);
+        filter: drop-shadow(0 0 7px #c084fc);
+      }
+    }
+
+    /* ============================================================
+       SUCCESS, WARNING & ERROR STATES (Compact)
+       ============================================================ */
+    .state-chip {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .state-chip.success {
+      background: #064e3b;
+      border: 1px solid #059669;
+      color: #34d399;
+    }
+
+    .state-chip.warning {
+      background: #451a03;
+      border: 1px solid #d97706;
+      color: #fbbf24;
+    }
+
+    .state-chip.error {
+      background: #450a0a;
+      border: 1px solid #dc2626;
+      color: #ef4444;
+    }
+
+    .state-view.active .flourish-icon {
+      animation: iconFlourish 220ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+
+    @keyframes iconFlourish {
+      0% {
+        opacity: 0;
+        transform: scale(0.6);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .state-text-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      margin-left: 8px;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .state-title {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 120px;
+      line-height: 1.1;
+    }
+
+    .state-title.success { color: #34d399; }
+    .state-title.warning { color: #fbbf24; }
+    .state-title.error   { color: #f87171; }
+
+    .state-chip.retry {
+      width: 24px;
+      height: 24px;
+      background: #241604;
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      color: #fbbf24;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .retry-text-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      margin-left: 10px;
+      flex: 1;
+      overflow: hidden;
+      justify-content: center;
+    }
+
+    .state-title.retry {
+      color: #fef3c7;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      line-height: 1.2;
+    }
+
+    .state-subtitle.retry-subtitle {
+      color: #f59e0b;
+      font-size: 9.5px;
+      font-weight: 500;
+      opacity: 0.9;
+      letter-spacing: 0.01em;
+      font-family: inherit;
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .retry-action-tag {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(245, 158, 11, 0.16);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #fef3c7;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      margin-left: 8px;
+      flex-shrink: 0;
+      transition: all 140ms ease;
+      white-space: nowrap;
+    }
+
+    .pill.state-retry-active:hover .retry-action-tag {
+      background: rgba(245, 158, 11, 0.32);
+      border-color: rgba(245, 158, 11, 0.75);
+      color: #ffffff;
+      transform: scale(1.04);
+    }
+
+    .state-subtitle {
+      font-size: 9px;
+      color: #94a3b8;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    /* Key Dock badge adaptation */
+    .key-dock-badge {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: #232534;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 9px;
+      font-weight: 700;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      flex-shrink: 0;
+    }
+    .pill.style-key_dock .key-dock-badge {
+      display: inline-flex;
+    }
+    .pill.style-key_dock.recording-active .key-dock-badge {
+      color: #fee2e2;
+      background: #991b1b;
+      border-color: #ef4444;
+    }
+
+    /* Style variants: pill_text vs icon_color vs icon_mono */
+    .pill.state-idle.style-icon_color,
+    .pill.state-idle.style-icon_mono {
+      width: 38px;
+      height: 38px;
+      border-radius: 999px;
+      padding: 0;
+      justify-content: center;
+    }
+    .pill.state-idle.style-icon_color .idle-wordmark,
+    .pill.state-idle.style-icon_mono .idle-wordmark {
+      display: none;
+    }
+    .pill.style-icon_mono .idle-logo-chip svg {
+      filter: grayscale(100%) opacity(0.85);
+    }
+  </style>
+
+  <script src="../shared/qwebchannel.js"></script>
+  <script src="../shared/bridge.js"></script>
+</head>
+<body>
+  <div class="widget-wrapper" id="widgetWrapper">
+    <div id="statusPill" class="pill state-idle">
+
+      <!-- ============================================================
+           1. IDLE BADGE CONTENT (Logo Chip + Breathing Pulse + Wordmark)
+           ============================================================ -->
+      <div id="idleBadgeContent" class="badge-content">
+        <div class="idle-logo-chip">
+          <svg viewBox="0 0 48 48" class="idle-logo-svg" fill="none">
+            <defs>
+              <linearGradient id="riftGradIdle" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#c084fc" />
+                <stop offset="50%" stop-color="#818cf8" />
+                <stop offset="100%" stop-color="#38bdf8" />
+              </linearGradient>
+            </defs>
+            <rect x="3" y="3" width="42" height="42" rx="11" fill="#161622" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" />
+            <path d="M14 12C14 10.8954 14.8954 10 16 10H25C29.4183 10 33 13.5817 33 18C33 21.8427 30.2872 25.0494 26.6575 25.8123L33.4 35.8C33.9523 36.5364 33.4269 37.6 32.5 37.6H28.4C27.8 37.6 27.2 37.3 26.8 36.8L21 28.5H19V36.5C19 37.0523 18.5523 37.5 18 37.5H15C14.4477 37.5 14 37.0523 14 36.5V12Z" fill="url(#riftGradIdle)" />
+            <path d="M19 15.5H24.5C26.1569 15.5 27.5 16.8431 27.5 18.5C27.5 20.1569 26.1569 21.5 24.5 21.5H19V15.5Z" fill="#161622" />
+            <circle cx="36" cy="14" r="2.5" fill="#45dfa9" />
+          </svg>
+        </div>
+        <span class="idle-wordmark">Rift</span>
+        <button id="widgetDropdownTrigger" class="dropdown-trigger-btn" type="button" title="Quick Actions" aria-label="Quick Actions">
+          <svg class="dropdown-chevron-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+      </div>
+
+      <!-- ============================================================
+           2. ACTIVE PILL CONTENT (Compact: 172x38px)
+           ============================================================ -->
+      <div id="activeContent" class="active-content">
+
+        <!-- View: Recording -->
+        <div id="stateRecording" class="state-view">
+          <div class="mic-chip" id="micChip">
+            <svg class="mic-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              <line x1="12" y1="19" x2="12" y2="23"></line>
+              <line x1="8" y1="23" x2="16" y2="23"></line>
+            </svg>
+          </div>
+          <div class="waveform-bars">
+            <div class="wave-bar" id="wb0"></div>
+            <div class="wave-bar" id="wb1"></div>
+            <div class="wave-bar" id="wb2"></div>
+            <div class="wave-bar" id="wb3"></div>
+            <div class="wave-bar" id="wb4"></div>
+          </div>
+          <div class="key-dock-badge" id="keyDockBadge">ALT</div>
+          <div class="rec-indicator">
+            <div class="rec-dot"></div>
+            <span class="rec-label">REC</span>
+          </div>
+        </div>
+
+        <!-- View: Processing / Enhancing -->
+        <div id="stateProcessing" class="state-view">
+          <div class="processing-chip flourish-icon" id="processingChip">
+            <svg class="processing-spinner" id="processingSpinner" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="9" stroke="rgba(255,255,255,0.15)" stroke-width="2.5"></circle>
+              <path d="M12 3C16.9706 3 21 7.02944 21 12" stroke="#818cf8" stroke-width="2.5" stroke-linecap="round"></path>
+            </svg>
+            <svg class="enhancing-sparkle" id="enhancingSparkle" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>
+            </svg>
+          </div>
+          <div class="processing-text-wrapper">
+            <span class="processing-text" id="processingTitle">Transcribing...</span>
+            <span class="processing-subtext" id="processingModelLabel">Whisper Turbo</span>
+          </div>
+        </div>
+
+        <!-- View: Success -->
+        <div id="stateSuccess" class="state-view">
+          <div class="state-chip success flourish-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="width: 13px; height: 13px;">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </div>
+          <div class="state-text-wrapper">
+            <span class="state-title success" id="successLabel">Inserted</span>
+            <span class="state-subtitle">Complete</span>
+          </div>
+        </div>
+
+        <!-- View: Warning -->
+        <div id="stateWarning" class="state-view">
+          <div class="state-chip warning flourish-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width: 13px; height: 13px;">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+          </div>
+          <div class="state-text-wrapper">
+            <span class="state-title warning" id="warningLabel">No audio</span>
+            <span class="state-subtitle">Try again</span>
+          </div>
+        </div>
+
+        <!-- View: Error -->
+        <div id="stateError" class="state-view">
+          <div class="state-chip error flourish-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width: 13px; height: 13px;">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="15" y1="9" x2="9" y2="15"></line>
+              <line x1="9" y1="9" x2="15" y2="15"></line>
+            </svg>
+          </div>
+          <div class="state-text-wrapper">
+            <span class="state-title error" id="errorLabel">Mic error</span>
+            <span class="state-subtitle">Permissions</span>
+          </div>
+        </div>
+
+        <!-- View: Retry Audio Recovery (Ultra-sleek minimal obsidian amber) -->
+        <div id="stateRetry" class="state-view">
+          <div class="state-chip retry flourish-icon" id="retryChip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="width: 12px; height: 12px;">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+          </div>
+          <div class="state-text-wrapper retry-text-wrapper" id="retryActionArea">
+            <span class="state-title retry" id="retryLabel">Audio Saved</span>
+            <span class="state-subtitle retry-subtitle" id="retrySubtext">Click to re-transcribe</span>
+          </div>
+          <div class="retry-action-tag" id="retryActionTag" title="Click to transcribe saved audio">
+            <span>Retry ↻</span>
+          </div>
+        </div>
+      </div> <!-- Closes activeContent -->
+
+    </div> <!-- Closes statusPill -->
+
+    <!-- ============================================================
+         3. COMPACT OBSIDIAN ACTIONS DROPDOWN MENU
+         Strictly outside and floating below the status pill
+         ============================================================ -->
+    <div id="widgetDropdownMenu" class="widget-dropdown-menu">
+      <button id="btnPolish" class="menu-action-item polish-item" type="button" title="Enhance selected text in current application">
+        <div class="menu-item-left">
+          <div class="menu-item-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>
+            </svg>
+          </div>
+          <span class="menu-item-label">Polish</span>
+        </div>
+        <span class="menu-item-hint">Selection</span>
+      </button>
+      <button id="btnScratchPad" class="menu-action-item scratch-item" type="button" title="Open floating dictation scratch pad">
+        <div class="menu-item-left">
+          <div class="menu-item-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+            </svg>
+          </div>
+          <span class="menu-item-label">Scratch Pad</span>
+        </div>
+        <span class="menu-item-hint">Notes</span>
+      </button>
+      <button id="btnSpotlight" class="menu-action-item spotlight-item" type="button" title="Open Ask Rift Spotlight AI (Groq)">
+        <div class="menu-item-left">
+          <div class="menu-item-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M12 8v8"></path>
+              <path d="M8 12h8"></path>
+            </svg>
+          </div>
+          <span class="menu-item-label">Ask Rift</span>
+        </div>
+        <span class="menu-item-hint">Groq AI</span>
+      </button>
+      <button id="btnRetryAudio" class="menu-action-item retry-item" type="button" title="Re-transcribe last saved audio clip">
+        <div class="menu-item-left">
+          <div class="menu-item-icon" style="color: #fbbf24;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+          </div>
+          <span class="menu-item-label">Retry Recording</span>
+        </div>
+        <span class="menu-item-hint">Saved Audio</span>
+      </button>
+    </div>
+
+
+  </div> <!-- Closes widgetWrapper -->
+
+  <script>
+    (function () {
+      const statusPill = document.getElementById('statusPill');
+      const views = {
+        recording: document.getElementById('stateRecording'),
+        processing: document.getElementById('stateProcessing'),
+        success: document.getElementById('stateSuccess'),
+        warning: document.getElementById('stateWarning'),
+        error: document.getElementById('stateError'),
+        retry: document.getElementById('stateRetry')
+      };
+      const retryActionTag = document.getElementById('retryActionTag');
+      const retryLabel = document.getElementById('retryLabel');
+      const retrySubtext = document.getElementById('retrySubtext');
+      const btnRetryAudio = document.getElementById('btnRetryAudio');
+      const warningLabel = document.getElementById('warningLabel');
+      const errorLabel = document.getElementById('errorLabel');
+      const successLabel = document.getElementById('successLabel');
+      const micChip = document.getElementById('micChip');
+      const waveBars = [
+        document.getElementById('wb0'),
+        document.getElementById('wb1'),
+        document.getElementById('wb2'),
+        document.getElementById('wb3'),
+        document.getElementById('wb4')
+      ];
+
+      // 5-bar symmetric multipliers
+      const barMultipliers = [0.45, 0.8, 1.0, 0.8, 0.45];
+
+      const keyDockBadge = document.getElementById('keyDockBadge');
+      const processingTitle = document.getElementById('processingTitle');
+      const processingModelLabel = document.getElementById('processingModelLabel');
+
+      const widgetWrapper = document.getElementById('widgetWrapper');
+      const widgetDropdownTrigger = document.getElementById('widgetDropdownTrigger');
+      const widgetDropdownMenu = document.getElementById('widgetDropdownMenu');
+      const btnPolish = document.getElementById('btnPolish');
+      const btnScratchPad = document.getElementById('btnScratchPad');
+      const btnSpotlight = document.getElementById('btnSpotlight');
+
+      let isDropdownOpen = false;
+      let dropdownHoverTimer = null;
+      let dropdownDismissTimer = null;
+
+      function clearDropdownTimers() {
+        if (dropdownHoverTimer) {
+          clearTimeout(dropdownHoverTimer);
+          dropdownHoverTimer = null;
+        }
+        if (dropdownDismissTimer) {
+          clearTimeout(dropdownDismissTimer);
+          dropdownDismissTimer = null;
+        }
+      }
+
+      function closeDropdownMenu() {
+        clearDropdownTimers();
+        if (!isDropdownOpen) return;
+        isDropdownOpen = false;
+        statusPill.classList.remove('dropdown-open');
+        if (widgetDropdownMenu) widgetDropdownMenu.classList.remove('open');
+        try {
+          if (window.rift && typeof window.rift.setWidgetDropdownOpen === 'function') {
+            window.rift.setWidgetDropdownOpen(false);
+          }
+        } catch (e) {}
+      }
+
+      function openDropdownMenu() {
+        clearDropdownTimers();
+        if (currentState !== 'idle') return;
+        isDropdownOpen = true;
+        statusPill.classList.add('dropdown-open');
+        if (widgetDropdownMenu) widgetDropdownMenu.classList.add('open');
+        try {
+          if (window.rift && typeof window.rift.setWidgetDropdownOpen === 'function') {
+            window.rift.setWidgetDropdownOpen(true);
+          }
+        } catch (e) {}
+      }
+
+      function toggleDropdownMenu(e) {
+        if (e) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+        if (isDropdownOpen) {
+          closeDropdownMenu();
+        } else {
+          openDropdownMenu();
+        }
+      }
+
+      class AcousticEarcons {
+        constructor() {
+          this.ctx = null;
+          this.enabled = true;
+          this.volume = 0.6;
+        }
+
+        ensureContext() {
+          if (!this.ctx) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (AudioCtx) {
+              this.ctx = new AudioCtx();
+            }
+          }
+          if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume().catch(() => {});
+          }
+        }
+
+        playTone(freqStart, freqEnd, type, durationMs, gainMax = 0.25) {
+          // Native Win32 PlaySoundW handles audio cues directly from Rust low-level subsystem with zero latency
+          return;
+        }
+
+
+        playRecordStart() {
+          // Warm ascending chime: 440Hz -> 880Hz
+          this.playTone(440, 880, 'sine', 75, 0.26);
+        }
+
+        playRecordStop() {
+          // Crisp downward micro-click: 740Hz -> 370Hz
+          this.playTone(740, 370, 'sine', 40, 0.20);
+        }
+
+        playSuccess() {
+          // Harmonious double-pop
+          this.playTone(587.33, 880, 'sine', 60, 0.24);
+          setTimeout(() => {
+            this.playTone(880, 1174.66, 'sine', 75, 0.22);
+          }, 50);
+        }
+
+        playCancel() {
+          // Muted blip: 260Hz -> 130Hz
+          this.playTone(260, 130, 'triangle', 50, 0.18);
+        }
+      }
+
+      const earcons = new AcousticEarcons();
+
+      function getFriendlyModelName(modelId, provider) {
+        if (!modelId && !provider) return 'Whisper Turbo';
+        const m = (modelId || '').toLowerCase();
+        const p = (provider || '').toLowerCase();
+
+        // Specific high-priority model identities
+        if (m.includes('mai-transcribe-2') || m.includes('mai-transcribe')) return 'MAI-Transcribe 2';
+        if (m.includes('gemini-2.5-flash') || m.includes('gemini')) return 'Gemini 2.5 Flash';
+        if (m.includes('whisper-large-v3-turbo') || m.includes('turbo')) {
+          return (p === 'groq' || m.startsWith('groq/')) ? 'Groq Turbo' : 'Whisper Turbo';
+        }
+        if (m.includes('whisper-large-v3')) {
+          return (p === 'groq' || m.startsWith('groq/')) ? 'Groq Whisper' : 'Whisper Large';
+        }
+        if (p === 'groq' || m.startsWith('groq/')) return 'Groq Turbo';
+        if (m.startsWith('local') || m.startsWith('offline') || p === 'local') return 'Local Whisper';
+        if (modelId && modelId.includes('/')) {
+          const parts = modelId.split('/');
+          const last = parts[parts.length - 1];
+          if (last.length > 20) return last.substring(0, 18) + '...';
+          return last;
+        }
+        return modelId || 'Whisper Turbo';
+      }
+
+      function updateProcessingModel(modelStr, providerStr) {
+        if (processingModelLabel) {
+          processingModelLabel.textContent = getFriendlyModelName(modelStr, providerStr);
+        }
+      }
+
+      function showEnhancingState(title, submodel) {
+        if (processingTitle) processingTitle.textContent = title || 'Enhancing...';
+        if (processingModelLabel) processingModelLabel.textContent = submodel || 'AI Polish';
+        showState('enhancing');
+      }
+
+      function showTranscribingState(modelStr, providerStr) {
+        if (processingTitle) processingTitle.textContent = 'Transcribing...';
+        updateProcessingModel(modelStr, providerStr);
+        showState('processing');
+      }
+
+      function showTransliteratingState(modelStr, providerStr) {
+        if (processingTitle) processingTitle.textContent = 'Tenglish AI...';
+        updateProcessingModel(modelStr, providerStr);
+        showState('processing');
+      }
+
+      let widgetVisibility = 'always'; // 'always' | 'recording' | 'hidden'
+      let currentWidgetStyle = 'active_waveform'; // 'active_waveform' | 'minimal_dot' | 'key_dock'
+      let lockWidgetPosition = false;
+      let currentState = 'idle';
+      let autoDismissTimer = null;
+      let safetyTimeoutTimer = null;
+
+      function clearTimers() {
+        if (autoDismissTimer) {
+          clearTimeout(autoDismissTimer);
+          autoDismissTimer = null;
+        }
+        if (safetyTimeoutTimer) {
+          clearTimeout(safetyTimeoutTimer);
+          safetyTimeoutTimer = null;
+        }
+      }
+
+      function applyWidgetStyle(styleName) {
+        if (!styleName) return;
+        const normalized = styleName.toLowerCase().trim();
+        if (['pill_text', 'icon_color', 'icon_mono', 'active_waveform', 'minimal_dot', 'key_dock'].includes(normalized)) {
+          currentWidgetStyle = normalized;
+        } else {
+          currentWidgetStyle = 'pill_text';
+        }
+
+        statusPill.classList.remove('style-pill_text', 'style-icon_color', 'style-icon_mono', 'style-active_waveform', 'style-minimal_dot', 'style-key_dock');
+        statusPill.classList.add(`style-${currentWidgetStyle}`);
+      }
+
+      function updateKeyDockLabel(cfg) {
+        if (!cfg) return;
+        let keyLabel = 'ALT';
+        if (cfg.pushToTalkMode === 'combo') {
+          keyLabel = (cfg.pushToTalkCombo || 'ctrl+win').toUpperCase();
+        } else {
+          let keyName = (cfg.pushToTalkKey || 'right alt').toUpperCase();
+          keyLabel = keyName.replace('RIGHT ', '').replace('LEFT ', '');
+        }
+        if (keyDockBadge) keyDockBadge.textContent = keyLabel;
+      }
+
+      function isTransientActive() {
+        return currentState && ['recording', 'processing', 'enhancing', 'success', 'warning', 'error', 'retry'].includes(currentState);
+      }
+
+      function showState(stateName) {
+        clearTimers();
+        if (stateName !== 'idle') {
+          closeDropdownMenu();
+        }
+        currentState = stateName;
+
+        if (widgetVisibility === 'hidden') {
+          hidePillCompletely();
+          return;
+        }
+
+        if (widgetVisibility === 'recording' && stateName === 'idle') {
+          hidePillCompletely();
+          return;
+        }
+
+        // Clean state classes
+        statusPill.classList.remove(
+          'recording-active',
+          'state-processing-active',
+          'state-enhancing-active',
+          'state-success-active',
+          'state-warning-active',
+          'state-error-active',
+          'state-retry-active'
+        );
+
+        if (stateName === 'idle') {
+          // Morph to Idle Badge (132x34px, radius 8px)
+          statusPill.classList.remove('state-active');
+          statusPill.classList.add('state-idle');
+          resetWaveBars();
+          if (micChip) micChip.style.transform = 'scale(1)';
+
+          for (const viewEl of Object.values(views)) {
+            if (viewEl) viewEl.classList.remove('active');
+          }
+        } else {
+          // Morph to Active Pill (172x38px, radius 999px)
+          statusPill.classList.remove('state-idle');
+          statusPill.classList.add('state-active');
+
+          if (stateName === 'recording') {
+            statusPill.classList.add('recording-active');
+          } else if (stateName === 'processing') {
+            statusPill.classList.add('state-processing-active');
+          } else if (stateName === 'enhancing') {
+            statusPill.classList.add('state-enhancing-active');
+          } else if (stateName === 'success') {
+            statusPill.classList.add('state-success-active');
+          } else if (stateName === 'warning') {
+            statusPill.classList.add('state-warning-active');
+          } else if (stateName === 'error') {
+            statusPill.classList.add('state-error-active');
+          } else if (stateName === 'retry') {
+            statusPill.classList.add('state-retry-active');
+          }
+
+          // Activate matching view (enhancing reuses processing view with dedicated neural animation)
+          const activeKey = stateName === 'enhancing' ? 'processing' : stateName;
+          for (const [key, viewEl] of Object.entries(views)) {
+            if (viewEl) {
+              if (key === activeKey) {
+                viewEl.classList.add('active');
+              } else {
+                viewEl.classList.remove('active');
+              }
+            }
+          }
+        }
+
+        // Ensure visible on screen
+        statusPill.classList.add('visible');
+
+        // State dismissal and safety timeouts
+        if (stateName === 'processing' || stateName === 'enhancing') {
+          safetyTimeoutTimer = setTimeout(() => {
+            transitionToIdleOrHide();
+          }, 8000);
+        } else if (stateName === 'success') {
+          const dismissDelay = (successLabel && successLabel.textContent.includes('Ctrl+V')) ? 2400 : 1500;
+          autoDismissTimer = setTimeout(() => {
+            transitionToIdleOrHide();
+          }, dismissDelay);
+        } else if (stateName === 'warning' || stateName === 'error') {
+          autoDismissTimer = setTimeout(() => {
+            transitionToIdleOrHide();
+          }, 3000);
+        } else if (stateName === 'retry') {
+          autoDismissTimer = setTimeout(() => {
+            transitionToIdleOrHide();
+          }, 12000);
+        }
+      }
+
+      function showRetryState(msg) {
+        if (retryLabel) retryLabel.textContent = 'Audio Saved';
+        if (retrySubtext) {
+          retrySubtext.textContent = 'Click to re-transcribe';
+        }
+        showState('retry');
+      }
+
+      function transitionToIdleOrHide() {
+        clearTimers();
+        closeDropdownMenu();
+        resetWaveBars();
+        if (micChip) micChip.style.transform = 'scale(1)';
+
+        if (widgetVisibility === 'always') {
+          showState('idle');
+        } else {
+          hidePillCompletely();
+        }
+      }
+
+      function hidePillCompletely() {
+        clearTimers();
+        closeDropdownMenu();
+        currentState = null;
+        resetWaveBars();
+        if (micChip) micChip.style.transform = 'scale(1)';
+        statusPill.classList.remove('visible');
+        statusPill.classList.remove(
+          'recording-active',
+          'state-processing-active',
+          'state-enhancing-active',
+          'state-success-active',
+          'state-warning-active',
+          'state-error-active',
+          'state-active'
+        );
+        for (const viewEl of Object.values(views)) {
+          if (viewEl) viewEl.classList.remove('active');
+        }
+      }
+
+      function resetWaveBars() {
+        waveBars.forEach(bar => {
+          if (bar) bar.style.height = '4px';
+        });
+      }
+
+      function updateAudioLevel(level) {
+        if (!statusPill.classList.contains('visible') || currentState !== 'recording') {
+          return;
+        }
+
+        if (level <= 1) {
+          resetWaveBars();
+          if (micChip) micChip.style.transform = 'scale(1)';
+          return;
+        }
+
+        const factor = Math.min(1.0, Math.max(0, level / 65.0));
+
+        // Subtly scale mic chip
+        if (micChip) {
+          micChip.style.transform = `scale(${(1.0 + factor * 0.1).toFixed(2)})`;
+        }
+
+        // Waveform bars with smooth 90ms ease-out transitions
+        waveBars.forEach((bar, idx) => {
+          if (!bar) return;
+          const mult = barMultipliers[idx] || 0.5;
+          const jitter = 0.85 + Math.random() * 0.3;
+          const dynamicHeight = Math.round(4 + (14 * factor * mult * jitter));
+          const height = Math.max(3, Math.min(18, dynamicHeight));
+          bar.style.height = `${height}px`;
+        });
+      }
+
+      // Immediately display idle badge so widget is never blank or waiting
+      showState('idle');
+
+      window.rift.ready(async () => {
+        try {
+          const cfgJson = await window.rift.getWidgetConfig();
+          const cfg = typeof cfgJson === 'string' ? JSON.parse(cfgJson) : (cfgJson || {});
+          widgetVisibility = (cfg.widgetVisibility || cfg.widget_visibility || 'always').toLowerCase();
+          lockWidgetPosition = !!(cfg.lockWidgetPosition !== undefined ? cfg.lockWidgetPosition : cfg.lock_widget_position);
+          statusPill.classList.toggle('position-locked', lockWidgetPosition);
+          applyWidgetStyle(cfg.widgetStyle || cfg.widget_style || cfg.style || 'active_waveform');
+          updateKeyDockLabel(cfg);
+
+          if (cfg.inferenceModel || cfg.cloudModel || cfg.sttProvider) {
+            updateProcessingModel(cfg.inferenceModel || cfg.cloudModel, cfg.sttProvider);
+          }
+
+          if (cfg.recordingSounds !== undefined) earcons.enabled = !!cfg.recordingSounds;
+          if (cfg.recording_sounds !== undefined) earcons.enabled = !!cfg.recording_sounds;
+          if (cfg.soundVolume !== undefined) earcons.volume = Number(cfg.soundVolume);
+          if (cfg.sound_volume !== undefined) earcons.volume = Number(cfg.sound_volume);
+
+          if (widgetVisibility === 'always') {
+            showState('idle');
+          } else {
+            hidePillCompletely();
+          }
+        } catch (err) {
+          console.warn('[Widget] Failed to load initial config:', err);
+          showState('idle');
+        }
+
+        window.rift.on('widgetConfigChanged', (cfgJson) => {
+          try {
+            const cfg = typeof cfgJson === 'string' ? JSON.parse(cfgJson) : (cfgJson || {});
+            widgetVisibility = (cfg.widgetVisibility || cfg.widget_visibility || 'always').toLowerCase();
+            statusPill.classList.remove('dragging');
+            if (cfg.lockWidgetPosition !== undefined || cfg.lock_widget_position !== undefined) {
+              lockWidgetPosition = !!(cfg.lockWidgetPosition !== undefined ? cfg.lockWidgetPosition : cfg.lock_widget_position);
+              statusPill.classList.toggle('position-locked', lockWidgetPosition);
+            }
+            const oldStyle = currentWidgetStyle;
+            const newStyle = cfg.widgetStyle || cfg.widget_style || cfg.style;
+            if (newStyle) {
+              applyWidgetStyle(newStyle);
+            }
+            updateKeyDockLabel(cfg);
+            if (cfg.inferenceModel || cfg.cloudModel || cfg.sttProvider) {
+              updateProcessingModel(cfg.inferenceModel || cfg.cloudModel, cfg.sttProvider);
+            }
+            if (cfg.recordingSounds !== undefined) earcons.enabled = !!cfg.recordingSounds;
+            if (cfg.recording_sounds !== undefined) earcons.enabled = !!cfg.recording_sounds;
+            if (cfg.soundVolume !== undefined) earcons.volume = Number(cfg.soundVolume);
+            if (cfg.sound_volume !== undefined) earcons.volume = Number(cfg.sound_volume);
+
+            if (widgetVisibility === 'hidden') {
+              hidePillCompletely();
+            } else if (widgetVisibility === 'always') {
+              if (!isTransientActive()) {
+                showState('idle');
+              }
+            } else if (widgetVisibility === 'recording') {
+              if (!isTransientActive()) {
+                hidePillCompletely();
+              }
+            }
+
+            if (oldStyle !== currentWidgetStyle && widgetVisibility !== 'hidden') {
+              showState('recording');
+              setTimeout(() => {
+                transitionToIdleOrHide();
+              }, 1800);
+            }
+          } catch (e) {
+            console.error('[Widget] Failed to parse config change:', e);
+          }
+        });
+
+        window.rift.on('settingsChanged', (settingsRaw) => {
+          try {
+            const s = typeof settingsRaw === 'string' ? JSON.parse(settingsRaw) : (settingsRaw || {});
+            if (s && (s.inferenceModel || s.cloudModel || s.sttProvider)) {
+              updateProcessingModel(s.inferenceModel || s.cloudModel, s.sttProvider);
+            }
+            if (s.recordingSounds !== undefined) earcons.enabled = !!s.recordingSounds;
+            if (s.recording_sounds !== undefined) earcons.enabled = !!s.recording_sounds;
+            if (s.soundVolume !== undefined) earcons.volume = Number(s.soundVolume);
+            if (s.sound_volume !== undefined) earcons.volume = Number(s.sound_volume);
+          } catch (e) {}
+        });
+
+        window.rift.on('widgetBroughtToFront', () => {
+          showState('idle');
+          statusPill.classList.add('visible');
+          statusPill.style.transform = 'translateY(-2px) scale(1.04)';
+          setTimeout(() => {
+            statusPill.style.transform = '';
+          }, 350);
+        });
+
+        window.rift.on('recordingStarted', () => {
+          earcons.playRecordStart();
+          resetWaveBars();
+          showState('recording');
+        });
+
+        window.rift.on('audioLevel', (level) => {
+          updateAudioLevel(level);
+        });
+
+        window.rift.on('recordingStopped', (payloadStr) => {
+          earcons.playRecordStop();
+          try {
+            const p = typeof payloadStr === 'string' ? JSON.parse(payloadStr) : payloadStr;
+            if (p && (p.model || p.provider)) {
+              showTranscribingState(p.model, p.provider);
+              return;
+            }
+          } catch (e) {}
+          showTranscribingState();
+        });
+
+        window.rift.on('recordingCancelled', () => {
+          earcons.playCancel();
+          transitionToIdleOrHide();
+        });
+
+        window.rift.on('transcriptionProcessing', (payloadStr) => {
+          try {
+            const p = typeof payloadStr === 'string' ? JSON.parse(payloadStr) : payloadStr;
+            if (p) {
+              if (p.stage === 'enhancing') {
+                showEnhancingState(p.model || 'Formatting...', p.submodel || 'AI Polish');
+                return;
+              }
+              if (p.stage === 'transliterating') {
+                showTransliteratingState(p.model, p.provider);
+                return;
+              }
+              showTranscribingState(p.model, p.provider);
+              return;
+            }
+          } catch (e) {}
+          showTranscribingState();
+        });
+
+        window.rift.on('recordingSaved', (payloadStr) => {
+          try {
+            const payload = typeof payloadStr === 'string' ? JSON.parse(payloadStr) : payloadStr;
+            if (payload && payload.isSilent) {
+              earcons.playCancel();
+              warningLabel.textContent = 'No audio';
+              showState('warning');
+            }
+          } catch (err) {
+            console.error('[Widget] Error handling recordingSaved:', err);
+          }
+        });
+
+        window.rift.on('transcriptionSuccess', () => {
+          earcons.playSuccess();
+        });
+
+        window.rift.on('transcriptionComplete', (payloadStr) => {
+          console.log('[Widget] Received transcriptionComplete:', payloadStr);
+        });
+
+        window.rift.on('textInjected', (payloadStr) => {
+          earcons.playSuccess();
+          console.log('[Widget] Received textInjected:', payloadStr);
+          try {
+            const data = typeof payloadStr === 'string' ? JSON.parse(payloadStr) : payloadStr;
+            if (data && data.method === 'pasted') {
+              successLabel.textContent = 'Inserted';
+            } else {
+              successLabel.textContent = 'Copied';
+            }
+          } catch (err) {
+            successLabel.textContent = 'Inserted';
+          }
+          showState('success');
+        });
+
+        window.rift.on('transcriptionError', (errorStr) => {
+          try {
+            const payload = typeof errorStr === 'string' ? JSON.parse(errorStr) : errorStr;
+            const msg = (payload && payload.message) ? payload.message : 'Transcription error';
+            if (payload && payload.canRetry) {
+              showRetryState(msg);
+              return;
+            }
+            errorLabel.textContent = msg;
+            errorLabel.title = msg;
+            showState('error');
+          } catch (err) {
+            errorLabel.textContent = 'Error';
+            showState('error');
+          }
+        });
+
+        window.rift.on('micError', (errorStr) => {
+          try {
+            const payload = typeof errorStr === 'string' ? JSON.parse(errorStr) : errorStr;
+            const msg = (payload && payload.message) ? payload.message : 'Microphone error';
+            errorLabel.textContent = msg;
+            errorLabel.title = msg;
+            showState('error');
+          } catch (err) {
+            errorLabel.textContent = 'Mic error';
+            showState('error');
+          }
+        });
+
+        // 1:1 Hardware-Sampled Win32 Window Dragging
+        statusPill.addEventListener('mousedown', (e) => {
+          if (e.target.closest('#widgetDropdownTrigger') || e.target.closest('#widgetDropdownMenu')) {
+            return;
+          }
+          if (e.button === 0) {
+            closeDropdownMenu();
+            if (lockWidgetPosition) return;
+            statusPill.classList.add('dragging');
+            if (window.rift && typeof window.rift.startWidgetDrag === 'function') {
+              window.rift.startWidgetDrag();
+            }
+          }
+        });
+
+        window.addEventListener('mouseup', () => {
+          statusPill.classList.remove('dragging');
+        });
+
+        if (widgetDropdownTrigger) {
+          widgetDropdownTrigger.addEventListener('click', toggleDropdownMenu);
+          widgetDropdownTrigger.addEventListener('mousedown', (e) => e.stopPropagation());
+
+          // Smooth hover intent: hovering dropdown trigger automatically opens menu
+          widgetDropdownTrigger.addEventListener('mouseenter', () => {
+            clearDropdownTimers();
+            if (!isDropdownOpen && currentState === 'idle') {
+              dropdownHoverTimer = setTimeout(() => {
+                openDropdownMenu();
+              }, 180);
+            }
+          });
+          widgetDropdownTrigger.addEventListener('mouseleave', () => {
+            if (dropdownHoverTimer) {
+              clearTimeout(dropdownHoverTimer);
+              dropdownHoverTimer = null;
+            }
+          });
+        }
+
+        // If cursor leaves widget area, gracefully dismiss dropdown after grace period
+        if (widgetWrapper) {
+          widgetWrapper.addEventListener('mouseenter', () => {
+            if (dropdownDismissTimer) {
+              clearTimeout(dropdownDismissTimer);
+              dropdownDismissTimer = null;
+            }
+          });
+          widgetWrapper.addEventListener('mouseleave', () => {
+            if (isDropdownOpen) {
+              clearDropdownTimers();
+              dropdownDismissTimer = setTimeout(() => {
+                closeDropdownMenu();
+              }, 260);
+            }
+          });
+        }
+
+        if (btnPolish) {
+          btnPolish.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeDropdownMenu();
+            try {
+              window.rift.polishSelectedText();
+            } catch (err) {
+              console.error('[Widget] Failed to invoke polishSelectedText:', err);
+            }
+          });
+          btnPolish.addEventListener('mousedown', (e) => e.stopPropagation());
+        }
+
+        if (btnScratchPad) {
+          btnScratchPad.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeDropdownMenu();
+            try {
+              window.rift.openScratchpadWindow();
+            } catch (err) {
+              console.error('[Widget] Failed to invoke openScratchpadWindow:', err);
+            }
+          });
+          btnScratchPad.addEventListener('mousedown', (e) => e.stopPropagation());
+        }
+
+        if (btnSpotlight) {
+          btnSpotlight.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeDropdownMenu();
+            try {
+              if (window.__TAURI__ && window.__TAURI__.core) {
+                window.__TAURI__.core.invoke('openSpotlightWindow');
+              }
+            } catch (err) {
+              console.error('[Widget] Failed to invoke openSpotlightWindow:', err);
+            }
+          });
+          btnSpotlight.addEventListener('mousedown', (e) => e.stopPropagation());
+        }
+
+        function triggerRetry() {
+          closeDropdownMenu();
+          showTranscribingState('Saved Audio', 'groq');
+          try {
+            if (window.rift && typeof window.rift.retryLastTranscription === 'function') {
+              window.rift.retryLastTranscription();
+            }
+          } catch (e) {
+            console.error('[Widget] Failed to invoke retryLastTranscription:', e);
+          }
+        }
+
+        if (retryActionTag) {
+          retryActionTag.addEventListener('click', (e) => {
+            e.stopPropagation();
+            triggerRetry();
+          });
+          retryActionTag.addEventListener('mousedown', (e) => e.stopPropagation());
+        }
+
+        statusPill.addEventListener('click', (e) => {
+          if (currentState === 'retry') {
+            if (!e.target.closest('#widgetDropdownTrigger') && !e.target.closest('#widgetDropdownMenu')) {
+              e.stopPropagation();
+              triggerRetry();
+            }
+          }
+        });
+
+        if (btnRetryAudio) {
+          btnRetryAudio.addEventListener('click', (e) => {
+            e.stopPropagation();
+            triggerRetry();
+          });
+          btnRetryAudio.addEventListener('mousedown', (e) => e.stopPropagation());
+        }
+
+
+        // Auto-close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+          if (isDropdownOpen) {
+            const inWrapper = widgetWrapper && widgetWrapper.contains(e.target);
+            if (!inWrapper) {
+              closeDropdownMenu();
+            }
+          }
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

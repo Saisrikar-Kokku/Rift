@@ -1,0 +1,2853 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Settings - Rift</title>
+    <link href="../shared/fonts.css" rel="stylesheet">
+    <link href="../shared/tailwind.css" rel="stylesheet">
+    <link href="../shared/modal.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #0c0c12;
+            --bg-sidebar: #0f0f16;
+            --bg-card: #13131c;
+            --bg-card-hover: #171722;
+            --bg-container: #161622;
+            --bg-input: #101018;
+            --border-subtle: rgba(255, 255, 255, 0.07);
+            --border-hover: rgba(202, 190, 255, 0.22);
+            --text-primary: #f0eff4;
+            --text-secondary: #9c97aa;
+            --text-muted: #6e6a7d;
+            --accent-purple: #c4b5fd;
+            --accent-purple-dim: rgba(196, 181, 253, 0.12);
+            --accent-green: #34d399;
+            --accent-green-dim: rgba(52, 211, 153, 0.12);
+            --accent-blue: #93c5fd;
+            --accent-error: #f87171;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            background-color: var(--bg-base) !important;
+            color: var(--text-primary) !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            min-height: 100vh !important;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+            user-select: none;
+            -webkit-user-select: none;
+            overflow-x: hidden;
+        }
+
+        /* Subtle scrollbar */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Fixed Compact Sidebar */
+        .rift-sidebar {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            bottom: 0 !important;
+            width: 200px !important;
+            background-color: var(--bg-sidebar) !important;
+            border-right: 1px solid var(--border-subtle) !important;
+            z-index: 50 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            padding: 16px 10px !important;
+            box-sizing: border-box !important;
+        }
+
+        /* Compact Top Header Bar */
+        .rift-header {
+            position: fixed !important;
+            top: 0 !important;
+            left: 200px !important;
+            right: 0 !important;
+            height: 46px !important;
+            background-color: rgba(12, 12, 18, 0.88) !important;
+            backdrop-filter: blur(16px) !important;
+            -webkit-backdrop-filter: blur(16px) !important;
+            border-bottom: 1px solid var(--border-subtle) !important;
+            z-index: 40 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            padding: 0 28px !important;
+        }
+
+        .header-title {
+            font-family: 'Manrope', 'Inter', sans-serif;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: -0.01em;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .save-indicator-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10.5px;
+            color: var(--accent-green);
+            background: var(--accent-green-dim);
+            border: 1px solid rgba(52, 211, 153, 0.25);
+            padding: 2px 8px;
+            border-radius: 9999px;
+            opacity: 0;
+            transform: translateY(-2px);
+            transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            pointer-events: none;
+        }
+        .save-indicator-badge.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Main Area Layout */
+        .rift-main-area {
+            margin-left: 200px;
+            padding-top: 60px;
+            padding-bottom: 36px;
+            padding-left: 28px;
+            padding-right: 28px;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+        }
+
+        .settings-wrapper {
+            width: 100%;
+            max-width: 880px;
+            display: flex;
+            gap: 24px;
+            align-items: flex-start;
+        }
+
+        /* Vertical Tabs Navigation */
+        .settings-nav-pane {
+            width: 170px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 60px;
+        }
+
+        .settings-tabs {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            background: transparent;
+        }
+
+        .tab-btn {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 7px 11px;
+            border-radius: 8px;
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            text-align: left;
+            width: 100%;
+            transition: all 0.14s ease;
+            position: relative;
+        }
+        .tab-btn:hover {
+            background-color: rgba(255, 255, 255, 0.04);
+            color: var(--text-primary);
+        }
+        .tab-btn.active {
+            background-color: var(--accent-purple-dim);
+            color: var(--accent-purple);
+            font-weight: 600;
+            border-color: rgba(196, 181, 253, 0.22);
+        }
+        .tab-btn.active::before {
+            content: '';
+            position: absolute;
+            left: -1px;
+            top: 6px;
+            bottom: 6px;
+            width: 2.5px;
+            border-radius: 4px;
+            background-color: var(--accent-purple);
+        }
+        .tab-btn .tab-icon {
+            font-size: 17px;
+            color: inherit;
+        }
+
+        /* Settings Content Pane */
+        .settings-content-pane {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        /* Panel Switch & Animation */
+        .settings-panel {
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .settings-panel.active {
+            display: flex;
+            animation: panelFadeSlide 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @keyframes panelFadeSlide {
+            from {
+                opacity: 0;
+                transform: translateY(4px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Panel Header */
+        .panel-header {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding-bottom: 0px;
+        }
+        .panel-title {
+            font-family: 'Manrope', 'Inter', sans-serif;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: -0.01em;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+        .panel-desc {
+            font-size: 11.5px;
+            color: var(--text-muted);
+            margin: 0;
+            line-height: 1.35;
+        }
+
+        /* Space-Efficient Settings Card */
+        .settings-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 9px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+            transition: border-color 0.15s ease;
+        }
+
+        /* Setting Row Layout */
+        .setting-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 9px 15px;
+            min-height: 42px;
+            transition: background-color 0.12s ease;
+        }
+        .setting-row:not(:last-child) {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+        .setting-row:hover {
+            background-color: rgba(255, 255, 255, 0.015);
+        }
+
+        .setting-info {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5px;
+            flex: 1;
+            min-width: 0;
+        }
+        .setting-title {
+            font-size: 12.5px;
+            font-weight: 500;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 0;
+        }
+        .setting-desc {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin: 0;
+            line-height: 1.35;
+        }
+
+        /* Form Controls */
+        .setting-select {
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            border-radius: 6px;
+            padding: 4px 9px;
+            font-size: 12px;
+            height: 29px;
+            font-family: inherit;
+            outline: none;
+            cursor: pointer;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            max-width: 320px;
+        }
+        .setting-select:hover {
+            border-color: rgba(255, 255, 255, 0.16);
+            background-color: #151520;
+        }
+        .setting-select:focus {
+            border-color: var(--accent-purple);
+            box-shadow: 0 0 0 2px rgba(196, 181, 253, 0.18);
+        }
+
+        .setting-input {
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            border-radius: 6px;
+            padding: 4px 9px;
+            font-size: 12px;
+            height: 29px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .setting-input:focus {
+            border-color: var(--accent-purple);
+            box-shadow: 0 0 0 2px rgba(196, 181, 253, 0.18);
+        }
+
+        .setting-textarea {
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            border-radius: 6px;
+            padding: 7px 10px;
+            font-size: 11.5px;
+            font-family: inherit;
+            outline: none;
+            resize: none;
+            line-height: 1.45;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .setting-textarea:focus {
+            border-color: var(--accent-purple);
+            box-shadow: 0 0 0 2px rgba(196, 181, 253, 0.18);
+        }
+
+        /* Compact iOS/Linear Toggle Switch */
+        .setting-toggle {
+            position: relative;
+            display: inline-block;
+            width: 34px;
+            height: 19px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .setting-toggle input {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-track {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #21212d;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 9999px;
+            transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s ease;
+        }
+        .toggle-track::before {
+            content: "";
+            position: absolute;
+            height: 15px;
+            width: 15px;
+            left: 1.5px;
+            bottom: 1px;
+            background-color: #ffffff;
+            border-radius: 50%;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+            transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .setting-toggle input:checked + .toggle-track {
+            background: linear-gradient(135deg, #c4b5fd 0%, #a78bfa 100%);
+            border-color: rgba(196, 181, 253, 0.4);
+        }
+        .setting-toggle input:checked + .toggle-track::before {
+            transform: translateX(15px);
+            background-color: #0c0c12;
+        }
+
+        /* Compact Buttons */
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            height: 29px;
+            padding: 0 11px;
+            border-radius: 6px;
+            background: linear-gradient(135deg, #c4b5fd 0%, #a78bfa 100%);
+            color: #0d0d14;
+            font-size: 11.5px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 1px 4px rgba(196, 181, 253, 0.2);
+            transition: opacity 0.12s, transform 0.12s;
+            white-space: nowrap;
+        }
+        .btn-primary:hover {
+            opacity: 0.95;
+            filter: brightness(1.04);
+        }
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            height: 29px;
+            padding: 0 10px;
+            border-radius: 6px;
+            background: var(--bg-input);
+            color: var(--text-primary);
+            font-size: 11.5px;
+            font-weight: 500;
+            border: 1px solid var(--border-subtle);
+            cursor: pointer;
+            transition: all 0.12s ease;
+            white-space: nowrap;
+        }
+        .btn-secondary:hover {
+            background-color: #1a1a26;
+            border-color: rgba(255, 255, 255, 0.16);
+            color: #ffffff;
+        }
+        .btn-secondary:active {
+            transform: scale(0.98);
+        }
+        .btn-secondary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Model Cards Inside Local Models Grid */
+        .model-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 9px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            transition: border-color 0.15s, background-color 0.15s;
+        }
+        .model-card:hover {
+            border-color: rgba(255, 255, 255, 0.14);
+            background-color: rgba(255, 255, 255, 0.035);
+        }
+        .model-card.is-active {
+            border-color: rgba(196, 181, 253, 0.35);
+            background: rgba(196, 181, 253, 0.04);
+        }
+
+        /* Theme Cards */
+        .theme-card {
+            background: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.15s ease;
+            cursor: pointer;
+        }
+        .theme-card.active {
+            border: 1.5px solid var(--accent-purple);
+            background: rgba(196, 181, 253, 0.04);
+        }
+        .theme-card.disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        /* Mic Boost Segmented Control */
+        .mic-boost-btn {
+            color: var(--text-muted);
+            background: transparent;
+            border: 1px solid transparent;
+            transition: all 0.14s ease;
+            user-select: none;
+        }
+        .mic-boost-btn:hover {
+            color: #ffffff;
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .mic-boost-btn.active {
+            color: #ffffff !important;
+            background: rgba(255, 255, 255, 0.14) !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+            font-weight: 600 !important;
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Custom Instruction Preset Chips */
+        .preset-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 9px;
+            border-radius: 5px;
+            font-size: 11px;
+            font-weight: 500;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.12s ease;
+            white-space: nowrap;
+        }
+        .preset-chip:hover {
+            background: rgba(255, 255, 255, 0.09);
+            border-color: rgba(255, 255, 255, 0.18);
+            color: var(--text-primary);
+        }
+
+        /* Widget Visibility Segmented Control */
+        .widget-visibility-group {
+            display: inline-flex;
+            padding: 2px;
+            border-radius: 7px;
+            background: #12121a;
+            border: 1px solid var(--border-subtle);
+            gap: 2px;
+            flex-shrink: 0;
+        }
+        .widget-visibility-btn {
+            padding: 3px 10px;
+            font-size: 11px;
+            font-weight: 500;
+            border-radius: 5px;
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.12s ease;
+            user-select: none;
+        }
+        .widget-visibility-btn:hover {
+            color: var(--text-primary);
+        }
+        .widget-visibility-btn.active {
+            background: rgba(255, 255, 255, 0.14);
+            color: #ffffff;
+            font-weight: 600;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Widget Style Compact Cards */
+        .widget-style-card {
+            background: var(--bg-input);
+            border: 1.5px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 8px 10px;
+            height: 52px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.14s ease;
+            user-select: none;
+        }
+        .widget-style-card:hover {
+            border-color: rgba(255, 255, 255, 0.18);
+            background: #161622;
+        }
+        .widget-style-card.active {
+            border-color: var(--accent-purple) !important;
+            background: rgba(196, 181, 253, 0.05) !important;
+        }
+        .style-card-badge {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: var(--accent-purple);
+            color: #0c0c12;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transform: scale(0.6);
+            transition: all 0.14s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .widget-style-card.active .style-card-badge {
+            opacity: 1;
+            transform: scale(1);
+        }
+        .preview-pill-text {
+            background: #101017;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 9999px;
+            padding: 3px 9px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .preview-wordmark {
+            font-size: 11.5px;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: -0.01em;
+            line-height: 1;
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <!-- Fixed Sidebar -->
+    <aside class="rift-sidebar">
+        <div style="display: flex; flex-direction: column; gap: 18px;">
+            <div style="display: flex; align-items: center; gap: 10px; padding: 2px 6px;">
+                <img alt="Rift Logo" style="height: 26px; width: auto; object-fit: contain;" src="../assets/logo.svg">
+                <span style="font-size: 16px; font-weight: 700; color: #e4e1ea; letter-spacing: -0.02em;">Rift</span>
+            </div>
+            <nav style="display: flex; flex-direction: column; gap: 3px;">
+                <a href="home.html"
+                    style="display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-radius: 8px; color: #8a8597; font-size: 13px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#161622'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#8a8597';">
+                    <span class="material-symbols-outlined text-[17px]">home</span>
+                    <span>Home</span>
+                </a>
+                <a href="history.html"
+                    style="display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-radius: 8px; color: #8a8597; font-size: 13px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#161622'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#8a8597';">
+                    <span class="material-symbols-outlined text-[17px]">schedule</span>
+                    <span>History</span>
+                </a>
+                <a href="dictionary.html"
+                    style="display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-radius: 8px; color: #8a8597; font-size: 13px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#161622'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#8a8597';">
+                    <span class="material-symbols-outlined text-[17px]">book_2</span>
+                    <span>Dictionary</span>
+                </a>
+                <a href="shortcuts.html"
+                    style="display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-radius: 8px; color: #8a8597; font-size: 13px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#161622'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#8a8597';">
+                    <span class="material-symbols-outlined text-[17px]">keyboard</span>
+                    <span>Shortcuts</span>
+                </a>
+                <a href="settings.html" aria-current="page"
+                    style="display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-radius: 8px; background-color: #1a1a26; color: #e4e1ea; font-size: 13px; font-weight: 600; text-decoration: none;">
+                    <span class="material-symbols-outlined text-[17px]" style="color: #c4b5fd;">settings</span>
+                    <span>Settings</span>
+                </a>
+            </nav>
+        </div>
+        <div style="padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.06); padding-left: 6px; padding-right: 6px; display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #726e82;">v1.0.0</span>
+            <div style="display: flex; align-items: center; gap: 5px;" title="Engine Ready">
+                <span style="height: 6px; width: 6px; border-radius: 50%; background-color: #34d399; box-shadow: 0 0 6px rgba(52,211,153,0.8);"></span>
+                <span style="font-size: 10px; color: #726e82; font-family: 'JetBrains Mono', monospace;">Ready</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Top App Bar Header -->
+    <header class="rift-header">
+        <div class="flex items-center gap-2.5">
+            <h1 class="header-title">Settings</h1>
+            <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-white/[0.04] text-outline border border-white/[0.07] font-medium" style="color: var(--text-muted);">Auto-saved</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <div id="saveStatusIndicator" class="save-indicator-badge">
+                <span class="material-symbols-outlined text-[13px]">check_circle</span>
+                <span>All changes saved</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Layout -->
+    <div class="rift-main-area">
+        <div class="settings-wrapper">
+            <!-- Left Vertical Tabs Navigation -->
+            <aside class="settings-nav-pane">
+                <nav class="settings-tabs" role="tablist">
+                    <button type="button" class="tab-btn active" data-tab="engine" role="tab" aria-selected="true">
+                        <span class="material-symbols-outlined tab-icon">smart_toy</span>
+                        <span>Engine</span>
+                    </button>
+                    <button type="button" class="tab-btn" data-tab="audio" role="tab" aria-selected="false">
+                        <span class="material-symbols-outlined tab-icon">mic</span>
+                        <span>Audio</span>
+                    </button>
+                    <button type="button" class="tab-btn" data-tab="general" role="tab" aria-selected="false">
+                        <span class="material-symbols-outlined tab-icon">tune</span>
+                        <span>General</span>
+                    </button>
+                    <button type="button" class="tab-btn" data-tab="widget" role="tab" aria-selected="false">
+                        <span class="material-symbols-outlined tab-icon">ad_units</span>
+                        <span>Widget</span>
+                    </button>
+                    <button type="button" class="tab-btn" data-tab="snippets" role="tab" aria-selected="false">
+                        <span class="material-symbols-outlined tab-icon">bolt</span>
+                        <span>Snippets</span>
+                    </button>
+                    <button type="button" class="tab-btn" data-tab="ai" role="tab" aria-selected="false">
+
+                        <span class="material-symbols-outlined tab-icon">auto_fix_high</span>
+                        <span>AI Formatting</span>
+                    </button>
+                    <button type="button" class="tab-btn" data-tab="appearance" role="tab" aria-selected="false">
+                        <span class="material-symbols-outlined tab-icon">palette</span>
+                        <span>Appearance</span>
+                    </button>
+                </nav>
+            </aside>
+
+            <!-- Right Content Panels -->
+            <main class="settings-content-pane">
+                
+                <!-- ================= PANEL 1: ENGINE ================= -->
+                <section id="panel-engine" class="settings-panel active">
+                    <div class="panel-header">
+                        <h2 class="panel-title">
+                            <span class="material-symbols-outlined text-[18px]" style="color: var(--accent-purple);">smart_toy</span>
+                            Speech Recognition Engine
+                        </h2>
+                        <p class="panel-desc">Configure cloud models, Groq LPU acceleration, and local offline models.</p>
+                    </div>
+
+                    <!-- Pipeline & Models Configuration Card -->
+                    <div class="settings-card">
+                        <!-- Transcription Mode -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <label class="setting-title" for="transcriptionMode">Transcription Pipeline</label>
+                                <p class="setting-desc">Primary speech-to-text processing architecture</p>
+                            </div>
+                            <select id="transcriptionMode" class="setting-select">
+                                <option value="auto">Auto (Cloud with Local Fallback)</option>
+                                <option value="cloud">Cloud Only (Ultra Fast)</option>
+                                <option value="local">Offline Only (100% Local Whisper)</option>
+                            </select>
+                        </div>
+                        <div id="transcriptionModeAcknowledgement" class="hidden text-xs rounded-md mx-4 mb-2.5 p-2.5 border font-medium flex items-center gap-2 transition-all"></div>
+
+                        <!-- Cloud Inference Model -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <label class="setting-title" for="inferenceModel">Cloud Speech Model</label>
+                                <p class="setting-desc">Default STT model (Microsoft AI MAI-Transcribe 2 or Whisper Turbo)</p>
+                            </div>
+                            <select id="inferenceModel" class="setting-select">
+                                <optgroup label="⚡ Free Groq Cloud (Zero Credits / Unlimited Free Tier)">
+                                    <option value="groq/whisper-large-v3-turbo">Groq: Whisper Large v3 Turbo (Free · Ultra Fast ⚡)</option>
+                                    <option value="groq/whisper-large-v3">Groq: Whisper Large v3 (Free · Standard Accuracy)</option>
+                                </optgroup>
+                                <optgroup label="🏆 OpenRouter Cloud (Studio Grade / Paid Credits)">
+                                    <option value="microsoft/mai-transcribe-2">Microsoft AI: MAI-Transcribe 2 (OpenRouter · Studio 🏆)</option>
+                                    <option value="openai/whisper-large-v3-turbo">OpenAI: Whisper Large v3 Turbo (OpenRouter · Fast ~1.8s)</option>
+                                    <option value="openai/whisper-large-v3">OpenAI: Whisper Large v3 (OpenRouter · Standard)</option>
+                                </optgroup>
+                            </select>
+                        </div>
+
+                        <!-- Active Local Offline Model -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <label class="setting-title" for="inferenceProfile">Active Local Offline Model</label>
+                                <p class="setting-desc">Offline model used for local transcription and fallback</p>
+                            </div>
+                            <select id="inferenceProfile" class="setting-select">
+                                <option value="balanced">Whisper Small (Default / Balanced - 465 MB)</option>
+                                <option value="accurate">Whisper Large-v3 Turbo (High Precision - 547 MB)</option>
+                                <option value="fast">Whisper Base (Fast - 141 MB)</option>
+                                <option value="tiny">Whisper Tiny (Ultra Fast - 74 MB)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Tenglish Mode Card (Telugu to Romanized English Voice Dictation) -->
+                    <div class="settings-card" style="border-color: rgba(245, 158, 11, 0.3); background: linear-gradient(180deg, rgba(245, 158, 11, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%);">
+                        <div style="padding: 12px 14px; display: flex; flex-direction: column; gap: 10px;">
+                            <div class="flex items-center justify-between">
+                                <div class="setting-info">
+                                    <div class="flex items-center gap-2">
+                                        <div class="setting-title" style="display: flex; align-items: center; gap: 6px;">
+                                            <span class="material-symbols-outlined text-[18px]" style="color: #f59e0b;">translate</span>
+                                            Tenglish Mode (తెలుగు → English)
+                                        </div>
+                                        <span id="tenglishStatusBadge" class="inline-flex items-center gap-1 text-[10px] font-mono-code font-semibold px-2 py-0.5 rounded-full bg-white/[0.05] text-on-surface-variant border border-white/[0.06]">
+                                            OFF
+                                        </span>
+                                    </div>
+                                    <p class="setting-desc" style="margin-top: 2px;">
+                                        Speak Telugu and get natural Romanized chat English (e.g. <em>"em chesthunnav?"</em>) for WhatsApp, Telegram, and chat apps.
+                                    </p>
+                                </div>
+                                <label class="setting-toggle">
+                                    <input id="tenglishModeEnabled" type="checkbox">
+                                    <span class="toggle-track"></span>
+                                </label>
+                            </div>
+
+                            <!-- Verified Studio Pipeline Card when Tenglish mode is enabled -->
+                            <div id="tenglishConfigContainer" style="display: none; border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: 10px; flex-direction: column; gap: 8px;">
+                                <div style="background: rgba(245, 158, 11, 0.06); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                                        <span style="font-size: 11px; font-weight: 600; color: #f59e0b; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 5px;">
+                                            <span class="material-symbols-outlined text-[14px]">verified</span>
+                                            Verified Studio Pipeline
+                                        </span>
+                                        <span style="font-size: 10px; font-family: monospace; color: rgba(255, 255, 255, 0.5);">
+                                            100% Accuracy Tested
+                                        </span>
+                                    </div>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px;">
+                                        <div style="background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 6px; padding: 8px 10px;">
+                                            <div style="font-size: 10px; color: rgba(255, 255, 255, 0.5); margin-bottom: 2px;">1. Speech Recognition</div>
+                                            <div style="font-size: 12px; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 4px;">
+                                                <span>MAI-Transcribe 2</span>
+                                                <span style="font-size: 9px; padding: 1px 4px; background: rgba(99, 102, 241, 0.2); color: #818cf8; border-radius: 3px;">AA #1</span>
+                                            </div>
+                                        </div>
+                                        <div style="background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 6px; padding: 8px 10px;">
+                                            <div style="font-size: 10px; color: rgba(255, 255, 255, 0.5); margin-bottom: 2px;">2. Transliteration</div>
+                                            <div style="font-size: 12px; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 4px;">
+                                                <span>Gemini 2.5 Flash</span>
+                                                <span style="font-size: 9px; padding: 1px 4px; background: rgba(245, 158, 11, 0.2); color: #f59e0b; border-radius: 3px;">WhatsApp</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div style="font-size: 10.5px; color: rgba(255, 255, 255, 0.65); line-height: 1.4; margin-top: 2px;">
+                                        ⚡ <strong>Production Locked:</strong> Seamless code-switching for tech/chat words (<em>office, bug, meeting, deployment, trip</em>) with colloquial WhatsApp Romanization.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- OpenRouter Cloud API Key Card (Primary STT Engine) -->
+                    <div class="settings-card" style="border-color: rgba(99, 102, 241, 0.25);">
+                        <div style="padding: 10px 14px; display: flex; flex-direction: column; gap: 8px;">
+                            <div class="flex items-center justify-between">
+                                <div class="setting-info">
+                                    <label class="setting-title" for="openrouterApiKeyInput">
+                                        <span class="material-symbols-outlined text-[16px]" style="color: #818cf8;">neurology</span>
+                                        OpenRouter API Key (Primary Engine)
+                                        <span class="inline-flex items-center gap-1 text-[10px] font-mono-code font-semibold px-1.5 py-0.2 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                                            🏆 MAI-Transcribe 2
+                                        </span>
+                                    </label>
+                                </div>
+                                <div id="openrouterKeyStatusBadge" class="inline-flex items-center gap-1.5 text-[11px] font-mono-code px-2 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.07]">
+                                    <span id="openrouterKeyStatusDot" class="h-1.5 w-1.5 rounded-full bg-outline"></span>
+                                    <span id="openrouterKeyStatusText" class="text-outline">Checking...</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input id="openrouterApiKeyInput" type="password" placeholder="Enter or update sk-or-v1-... key"
+                                    class="setting-input flex-1 font-mono-code text-xs">
+                                <button id="btnTestOpenRouterKey" type="button" class="btn-secondary">
+                                    <span class="material-symbols-outlined text-[14px]" style="color: #818cf8;">account_balance_wallet</span>
+                                    <span>Check Balance</span>
+                                </button>
+                                <button id="btnSaveOpenRouterKey" type="button" class="btn-primary" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">
+                                    <span class="material-symbols-outlined text-[14px]">save</span>
+                                    <span>Save Key</span>
+                                </button>
+                                <button id="btnDeleteOpenRouterKey" type="button" class="btn-secondary text-error hover:bg-error/10 hidden px-2" title="Remove Key">
+                                    <span class="material-symbols-outlined text-[14px]">delete</span>
+                                </button>
+                            </div>
+                            <div id="openrouterKeyFeedback" class="text-xs font-mono-code hidden"></div>
+                        </div>
+                    </div>
+
+                    <!-- Groq Cloud API Key Card (Secondary Backup) -->
+                    <div class="settings-card">
+                        <div style="padding: 10px 14px; display: flex; flex-direction: column; gap: 8px;">
+                            <div class="flex items-center justify-between">
+                                <div class="setting-info">
+                                    <label class="setting-title" for="groqApiKeyInput">
+                                        <span class="material-symbols-outlined text-[16px]" style="color: var(--accent-purple);">key</span>
+                                        Groq Cloud API Key (Instant Backup)
+                                        <span class="inline-flex items-center gap-1 text-[10px] font-mono-code px-1.5 py-0.2 rounded-full bg-white/[0.05] text-on-surface-variant border border-white/[0.06]">
+                                            Fallback Engine
+                                        </span>
+                                    </label>
+                                </div>
+                                <div id="groqKeyStatusBadge" class="inline-flex items-center gap-1.5 text-[11px] font-mono-code px-2 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.07]">
+                                    <span id="groqKeyStatusDot" class="h-1.5 w-1.5 rounded-full bg-outline"></span>
+                                    <span id="groqKeyStatusText" class="text-outline">Checking...</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input id="groqApiKeyInput" type="password" placeholder="Enter or update gsk_... key"
+                                    class="setting-input flex-1 font-mono-code text-xs">
+                                <button id="btnTestGroqKey" type="button" class="btn-secondary">
+                                    <span class="material-symbols-outlined text-[14px]" style="color: var(--accent-purple);">speed</span>
+                                    <span>Test Key</span>
+                                </button>
+                                <button id="btnSaveGroqKey" type="button" class="btn-primary">
+                                    <span class="material-symbols-outlined text-[14px]">save</span>
+                                    <span>Save Key</span>
+                                </button>
+                            </div>
+                            <div id="groqKeyFeedback" class="text-xs font-mono-code hidden"></div>
+                        </div>
+                    </div>
+
+                    <!-- Offline Speech Models Manager Card -->
+                    <div class="settings-card">
+                        <div style="padding: 10px 14px; display: flex; flex-direction: column; gap: 8px;">
+                            <div class="flex items-center justify-between">
+                                <div class="setting-info">
+                                    <label class="setting-title">
+                                        <span class="material-symbols-outlined text-[16px]" style="color: var(--accent-green);">download_for_offline</span>
+                                        Offline Speech Models Manager
+                                    </label>
+                                    <p class="setting-desc">Whisper models for local offline dictation</p>
+                                </div>
+                                <button id="refreshModelsBtn" type="button" class="btn-secondary text-xs h-7 px-2.5">
+                                    <span id="refreshModelsIcon" class="material-symbols-outlined text-[13px]">refresh</span>
+                                    <span>Check Status</span>
+                                </button>
+                            </div>
+
+                            <!-- 4 Local Profiles Grid -->
+                            <div id="localModelsList" class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ================= PANEL 2: AUDIO ================= -->
+                <section id="panel-audio" class="settings-panel">
+                    <div class="panel-header">
+                        <h2 class="panel-title">
+                            <span class="material-symbols-outlined text-[18px]" style="color: var(--accent-purple);">mic</span>
+                            Audio & Microphone
+                        </h2>
+                        <p class="panel-desc">Select input hardware and configure audio capture behavior.</p>
+                    </div>
+
+                    <div class="settings-card">
+                        <!-- Microphone Selection -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <label class="setting-title" for="microphoneDeviceId">Audio Input Device</label>
+                                <p class="setting-desc">Microphone captured via Windows WASAPI</p>
+                            </div>
+                            <select id="microphoneDeviceId" class="setting-select">
+                                <option value="">Default System Device</option>
+                            </select>
+                        </div>
+
+                        <!-- Mic Boost Selector -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <label class="setting-title">Mic boost</label>
+                                <p class="setting-desc">Turn up if your voice isn't being picked up.</p>
+                            </div>
+                            <div id="micBoostGroup" class="inline-flex p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.07] gap-0.5 shrink-0" role="group" aria-label="Mic boost level">
+                                <button type="button" class="mic-boost-btn px-2.5 py-0.5 text-xs font-medium rounded transition-all cursor-pointer" data-boost="off">Off</button>
+                                <button type="button" class="mic-boost-btn px-2.5 py-0.5 text-xs font-medium rounded transition-all cursor-pointer" data-boost="2x">2x</button>
+                                <button type="button" class="mic-boost-btn px-2.5 py-0.5 text-xs font-medium rounded transition-all cursor-pointer" data-boost="4x">4x</button>
+                                <button type="button" class="mic-boost-btn px-2.5 py-0.5 text-xs font-medium rounded transition-all cursor-pointer" data-boost="6x">6x</button>
+                                <button type="button" class="mic-boost-btn px-2.5 py-0.5 text-xs font-medium rounded transition-all cursor-pointer" data-boost="8x">8x</button>
+                            </div>
+                        </div>
+
+                        <!-- Advanced Audio Processing -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <div class="flex items-center gap-2">
+                                    <label class="setting-title">Advanced Audio Processing</label>
+                                    <span class="text-[9px] px-1.5 py-0.2 rounded bg-white/[0.04] text-outline border border-white/[0.06]">Coming in v2</span>
+                                </div>
+                                <p class="setting-desc">Voice Activity Detection, Noise Suppression, Echo Cancellation</p>
+                            </div>
+                            <span class="material-symbols-outlined text-outline text-[16px]">tune</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ================= PANEL 3: GENERAL ================= -->
+                <section id="panel-general" class="settings-panel">
+                    <div class="panel-header">
+                        <h2 class="panel-title">
+                            <span class="material-symbols-outlined text-[18px]" style="color: var(--accent-purple);">tune</span>
+                            General & System Behavior
+                        </h2>
+                        <p class="panel-desc">Windows system integration, audio feedback, and input routing.</p>
+                    </div>
+
+                    <div class="settings-card">
+                        <!-- Launch at Login -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <label class="setting-title" for="launchAtLogin">Launch at Windows Startup</label>
+                                <p class="setting-desc">Start Rift minimized in system tray when Windows boots</p>
+                            </div>
+                            <label class="setting-toggle">
+                                <input id="launchAtLogin" type="checkbox">
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+
+                        <!-- Sound Feedback -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <label class="setting-title" for="recordingSounds">Recording Audio Cues</label>
+                                <p class="setting-desc">Play subtle acoustic earcons when dictation starts, stops, and transcribes</p>
+                            </div>
+                            <label class="setting-toggle">
+                                <input id="recordingSounds" type="checkbox">
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+
+                        <!-- Sound Volume & Preview -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <label class="setting-title" for="soundVolume">Audio Cue Volume</label>
+                                <p class="setting-desc">Control loudness of acoustic earcon chimes and clicks</p>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <input id="soundVolume" type="range" min="0" max="100" value="60" style="width: 100px; accent-color: var(--primary);">
+                                <span id="soundVolumeLabel" class="font-mono-code text-[11px] text-outline" style="min-width: 34px;">60%</span>
+                                <button id="btnTestSound" class="btn-subtle" type="button" style="padding: 3px 8px; font-size: 11px;">Preview</button>
+                            </div>
+                        </div>
+
+                        <!-- Ducking / Pause Background Audio -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <label class="setting-title" for="pauseOtherAudioWhileTalking">Ducking / Pause Media During Dictation</label>
+                                <p class="setting-desc">Temporarily lower background media volume while speaking</p>
+                            </div>
+                            <label class="setting-toggle">
+                                <input id="pauseOtherAudioWhileTalking" type="checkbox">
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+
+                        <!-- Copy Instead of Type -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <label class="setting-title" for="copyInsteadOfType">Copy to Clipboard Only</label>
+                                <p class="setting-desc">Copy transcribed text directly to clipboard without typing</p>
+                            </div>
+                            <label class="setting-toggle">
+                                <input id="copyInsteadOfType" type="checkbox">
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+
+                        <!-- Inline Voice Commands -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <label class="setting-title" for="voiceCommandsEnabled">Voice Editing Commands</label>
+                                <p class="setting-desc">Say "scratch that" to undo last typing, "new paragraph" for breaks, or "make that a bullet list"</p>
+                            </div>
+                            <label class="setting-toggle">
+                                <input id="voiceCommandsEnabled" type="checkbox" checked>
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+
+                        <!-- Voice-Powered Quick Actions -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <div class="flex items-center gap-2">
+                                    <label class="setting-title" for="quickActionsEnabled">Voice Quick Actions</label>
+                                    <span class="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-mono">NEW</span>
+                                </div>
+                                <p class="setting-desc">Say "open Chrome", "lock my PC", "take screenshot", "mute" — Rift executes system actions hands-free</p>
+                            </div>
+                            <label class="setting-toggle">
+                                <input id="quickActionsEnabled" type="checkbox" checked>
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+
+                        <!-- Smart Clipboard History with Voice Recall -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <div class="flex items-center gap-2">
+                                    <label class="setting-title" for="clipboardHistoryEnabled">Smart Clipboard History & Voice Recall</label>
+                                    <span class="text-[9px] px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-mono">NEW</span>
+                                </div>
+                                <p class="setting-desc">Preserves recent clipboard entries with instant voice recall: "paste item 3", "paste that URL", or "paste the code I copied"</p>
+                            </div>
+                            <label class="setting-toggle">
+                                <input id="clipboardHistoryEnabled" type="checkbox" checked>
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+
+                        <!-- Spotlight Voice AI Assistant -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <div class="flex items-center gap-2">
+                                    <label class="setting-title">Spotlight Voice AI ("Ask Rift")</label>
+                                    <span class="text-[9px] px-1.5 py-0.2 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 font-mono">Groq Llama 3.3</span>
+                                </div>
+                                <p class="setting-desc">Floating AI assistant window with screen context awareness (zero credit usage)</p>
+                            </div>
+                            <button type="button" id="btnLaunchSpotlight" class="btn-secondary text-xs">
+                                <span class="material-symbols-outlined text-[14px]" style="color: var(--accent-purple);">open_in_new</span>
+                                <span>Open Spotlight</span>
+                            </button>
+                        </div>
+
+                        <!-- Onboarding / Setup Wizard -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <label class="setting-title">Rift Setup & Onboarding Wizard</label>
+                                <p class="setting-desc">Re-run the initial 3-step setup walkthrough</p>
+                            </div>
+                            <button type="button" id="runOnboardingWizardBtn" class="btn-secondary text-xs">
+                                <span class="material-symbols-outlined text-[14px]" style="color: var(--accent-purple);">play_circle</span>
+                                <span>Launch Setup Wizard</span>
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+
+                <!-- ================= PANEL 4: WIDGET ================= -->
+                <section id="panel-widget" class="settings-panel">
+                    <div class="panel-header">
+                        <h2 class="panel-title">
+                            <span class="material-symbols-outlined text-[18px]" style="color: var(--accent-purple);">ad_units</span>
+                            Widget
+                        </h2>
+                        <p class="panel-desc">Floating pill that shows dictation status.</p>
+                    </div>
+
+                    <!-- Hidden inputs to maintain compatibility with controls object -->
+                    <input type="hidden" id="widgetVisibility" value="always">
+                    <input type="hidden" id="widgetStyle" value="pill_text">
+
+                    <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1 px-1">Placement</div>
+                    <div class="settings-card">
+                        <!-- Show widget (Always | Recording | Hidden) -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <label class="setting-title">Show widget</label>
+                                <p class="setting-desc">Display visibility mode</p>
+                            </div>
+                            <div class="widget-visibility-group" id="widgetVisibilityGroup" role="group" aria-label="Widget Visibility">
+                                <button type="button" class="widget-visibility-btn active" data-visibility="always">Always</button>
+                                <button type="button" class="widget-visibility-btn" data-visibility="recording">Recording</button>
+                                <button type="button" class="widget-visibility-btn" data-visibility="hidden">Hidden</button>
+                            </div>
+                        </div>
+
+                        <!-- Follow cursor across monitors -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <label class="setting-title" for="followCursorAcrossMonitors">Follow cursor across monitors</label>
+                                <p class="setting-desc">Jumps to active monitor your cursor is on</p>
+                            </div>
+                            <label class="setting-toggle">
+                                <input id="followCursorAcrossMonitors" type="checkbox">
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+
+                        <!-- Lock position -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <label class="setting-title" for="lockWidgetPosition">Lock position</label>
+                                <p class="setting-desc">Pin pill position and prevent dragging</p>
+                            </div>
+                            <label class="setting-toggle">
+                                <input id="lockWidgetPosition" type="checkbox">
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Style Section -->
+                    <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1 mt-2 px-1">Style</div>
+                    <div class="grid grid-cols-3 gap-2.5" id="widgetStyleCardsGroup">
+                        <!-- Card 1: Pill with Text (Rift Logo + "Rift") -->
+                        <div class="widget-style-card active" data-style="pill_text" tabindex="0" role="button" aria-pressed="true" title="Pill with Rift name">
+                            <div class="style-card-badge">
+                                <span class="material-symbols-outlined text-[11px] leading-none">check</span>
+                            </div>
+                            <div class="preview-pill-text">
+                                <svg style="width: 15px; height: 15px; display: block;" viewBox="0 0 48 48" fill="none">
+                                    <defs>
+                                        <linearGradient id="riftCardGrad1" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+                                            <stop offset="0%" stop-color="#c084fc" />
+                                            <stop offset="50%" stop-color="#818cf8" />
+                                            <stop offset="100%" stop-color="#38bdf8" />
+                                        </linearGradient>
+                                    </defs>
+                                    <rect x="3" y="3" width="42" height="42" rx="11" fill="#161622" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" />
+                                    <path d="M14 12C14 10.8954 14.8954 10 16 10H25C29.4183 10 33 13.5817 33 18C33 21.8427 30.2872 25.0494 26.6575 25.8123L33.4 35.8C33.9523 36.5364 33.4269 37.6 32.5 37.6H28.4C27.8 37.6 27.2 37.3 26.8 36.8L21 28.5H19V36.5C19 37.0523 18.5523 37.5 18 37.5H15C14.4477 37.5 14 37.0523 14 36.5V12Z" fill="url(#riftCardGrad1)" />
+                                    <path d="M19 15.5H24.5C26.1569 15.5 27.5 16.8431 27.5 18.5C27.5 20.1569 26.1569 21.5 24.5 21.5H19V15.5Z" fill="#161622" />
+                                    <circle cx="36" cy="14" r="2.5" fill="#45dfa9" />
+                                </svg>
+                                <span class="preview-wordmark">Rift</span>
+                            </div>
+                        </div>
+
+                        <!-- Card 2: Compact Color Icon -->
+                        <div class="widget-style-card" data-style="icon_color" tabindex="0" role="button" aria-pressed="false" title="Compact Color Icon">
+                            <div class="style-card-badge">
+                                <span class="material-symbols-outlined text-[11px] leading-none">check</span>
+                            </div>
+                            <div class="preview-icon-color flex items-center justify-center">
+                                <svg style="width: 24px; height: 24px; display: block;" viewBox="0 0 48 48" fill="none">
+                                    <defs>
+                                        <linearGradient id="riftCardGrad2" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+                                            <stop offset="0%" stop-color="#c084fc" />
+                                            <stop offset="50%" stop-color="#818cf8" />
+                                            <stop offset="100%" stop-color="#38bdf8" />
+                                        </linearGradient>
+                                    </defs>
+                                    <rect x="3" y="3" width="42" height="42" rx="11" fill="#161622" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" />
+                                    <path d="M14 12C14 10.8954 14.8954 10 16 10H25C29.4183 10 33 13.5817 33 18C33 21.8427 30.2872 25.0494 26.6575 25.8123L33.4 35.8C33.9523 36.5364 33.4269 37.6 32.5 37.6H28.4C27.8 37.6 27.2 37.3 26.8 36.8L21 28.5H19V36.5C19 37.0523 18.5523 37.5 18 37.5H15C14.4477 37.5 14 37.0523 14 36.5V12Z" fill="url(#riftCardGrad2)" />
+                                    <path d="M19 15.5H24.5C26.1569 15.5 27.5 16.8431 27.5 18.5C27.5 20.1569 26.1569 21.5 24.5 21.5H19V15.5Z" fill="#161622" />
+                                    <circle cx="36" cy="14" r="2.5" fill="#45dfa9" />
+                                </svg>
+                            </div>
+                        </div>
+
+                        <!-- Card 3: Compact Monochrome Icon -->
+                        <div class="widget-style-card" data-style="icon_mono" tabindex="0" role="button" aria-pressed="false" title="Compact Monochrome Icon">
+                            <div class="style-card-badge">
+                                <span class="material-symbols-outlined text-[11px] leading-none">check</span>
+                            </div>
+                            <div class="preview-icon-mono flex items-center justify-center">
+                                <svg style="width: 24px; height: 24px; display: block; filter: grayscale(100%) opacity(0.85);" viewBox="0 0 48 48" fill="none">
+                                    <defs>
+                                        <linearGradient id="riftCardGrad3" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+                                            <stop offset="0%" stop-color="#9ca3af" />
+                                            <stop offset="50%" stop-color="#6b7280" />
+                                            <stop offset="100%" stop-color="#4b5563" />
+                                        </linearGradient>
+                                    </defs>
+                                    <rect x="3" y="3" width="42" height="42" rx="11" fill="#181822" stroke="rgba(255,255,255,0.1)" stroke-width="1.5" />
+                                    <path d="M14 12C14 10.8954 14.8954 10 16 10H25C29.4183 10 33 13.5817 33 18C33 21.8427 30.2872 25.0494 26.6575 25.8123L33.4 35.8C33.9523 36.5364 33.4269 37.6 32.5 37.6H28.4C27.8 37.6 27.2 37.3 26.8 36.8L21 28.5H19V36.5C19 37.0523 18.5523 37.5 18 37.5H15C14.4477 37.5 14 37.0523 14 36.5V12Z" fill="url(#riftCardGrad3)" />
+                                    <path d="M19 15.5H24.5C26.1569 15.5 27.5 16.8431 27.5 18.5C27.5 20.1569 26.1569 21.5 24.5 21.5H19V15.5Z" fill="#181822" />
+                                    <circle cx="36" cy="14" r="2.5" fill="#9ca3af" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ================= PANEL: VOICE SNIPPETS ================= -->
+                <section id="panel-snippets" class="settings-panel">
+                    <div class="panel-header">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <div>
+                                <h2 class="panel-title">
+                                    <span class="material-symbols-outlined text-[18px]" style="color: var(--accent-purple);">bolt</span>
+                                    Voice Snippets & Triggers
+                                </h2>
+                                <p class="panel-desc">Speak custom trigger keywords to instantly expand into multi-line templates.</p>
+                            </div>
+                            <button id="btnAddSnippet" type="button" class="btn-primary text-xs" style="padding: 6px 14px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                <span class="material-symbols-outlined text-[15px]">add</span>
+                                <span>New Snippet</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="settings-card">
+                        <!-- Enable Voice Snippets Toggle -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <label class="setting-title" for="voiceSnippetsEnabled">Voice Snippet Expansions</label>
+                                <p class="setting-desc">Automatically expand phrases like "insert standup" or "my calendar"</p>
+                            </div>
+                            <label class="setting-toggle">
+                                <input id="voiceSnippetsEnabled" type="checkbox" checked>
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Snippets Cards Container -->
+                    <div id="snippetsContainer" style="display: flex; flex-direction: column; gap: 8px;">
+                        <!-- Rendered dynamically -->
+                    </div>
+                </section>
+
+                <!-- ================= PANEL 5: AI FORMATTING ================= -->
+                <section id="panel-ai" class="settings-panel">
+
+                    <div class="panel-header">
+                        <h2 class="panel-title">
+                            <span class="material-symbols-outlined text-[18px]" style="color: var(--accent-purple);">auto_fix_high</span>
+                            AI Formatting & Instructions
+                        </h2>
+                        <p class="panel-desc">Post-process dictation to remove filler words, punctuate, and customize tone.</p>
+                    </div>
+
+                    <!-- Auto Enhance & Custom Instructions Card -->
+                    <div class="settings-card">
+                        <!-- Auto Enhance Toggle -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <label class="setting-title" for="autoEnhancePrompt">Enable Auto Enhance (LLM Cleanup)</label>
+                                <p class="setting-desc">Automatically removes "um", "uh", corrects grammar and applies punctuation</p>
+                            </div>
+                            <label class="setting-toggle">
+                                <input id="autoEnhancePrompt" type="checkbox">
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+
+                        <!-- Context-Aware Smart Dictation Toggle -->
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <label class="setting-title" for="contextAwareFormatting">Ambient Context-Aware Smart Dictation</label>
+                                <p class="setting-desc">Adapts formatting to active app: preserves code syntax in IDEs, CLI flags in Terminal, and casual prose in Slack</p>
+                            </div>
+                            <label class="setting-toggle">
+                                <input id="contextAwareFormatting" type="checkbox">
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+
+                        <!-- Custom Instructions Textarea -->
+                        <div style="padding: 10px 14px; display: flex; flex-direction: column; gap: 6px;">
+                            <div class="flex items-center justify-between">
+                                <label class="setting-title" for="formattingInstructions">Custom Formatting Instructions</label>
+                                <span id="charCounter" class="font-mono-code text-[11px] text-outline">0 / 1500</span>
+                            </div>
+
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="text-[11px] text-outline font-medium mr-0.5">Presets:</span>
+                                <button type="button" class="preset-chip" id="presetDev" title="Optimized for coding, tech terms, and APIs">💻 Developer</button>
+                                <button type="button" class="preset-chip" id="presetPro" title="Crisp grammar for professional emails and docs">👔 Professional</button>
+                                <button type="button" class="preset-chip" id="presetCasual" title="Conversational tone with fillers removed">💬 Natural Chat</button>
+                                <button type="button" class="preset-chip" id="presetMinimal" title="Removes um/uh only, keeps words verbatim">🧹 Minimal</button>
+                            </div>
+
+                            <textarea id="formattingInstructions" maxlength="1500" rows="3"
+                                placeholder="e.g. Clean speech, remove filler words, format technical terms (Python, Rust, JSON, API), convert numbers to digits..."
+                                class="setting-textarea w-full text-xs font-mono-code leading-relaxed"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Interactive Test Tool Card -->
+                    <div class="settings-card">
+                        <div style="padding: 10px 14px; display: flex; flex-direction: column; gap: 8px;">
+                            <div class="setting-info">
+                                <label class="setting-title">
+                                    <span class="material-symbols-outlined text-[16px]" style="color: var(--accent-purple);">science</span>
+                                    Test & Convert Dictation with Instructions
+                                </label>
+                                <p class="setting-desc">Test how custom formatting instructions convert raw dictation into polished text</p>
+                            </div>
+
+                            <div class="flex flex-col gap-2 bg-white/[0.02] border border-white/[0.06] rounded-lg p-3">
+                                <div>
+                                    <span class="text-[11px] text-outline font-medium block mb-1">Sample raw text:</span>
+                                    <textarea id="testEnhanceInput" rows="2"
+                                        placeholder="Type or paste text to enhance..."
+                                        class="setting-textarea w-full text-xs">um so basically we need to update the python function to return json ya know</textarea>
+                                </div>
+
+                                <div class="flex items-center justify-between pt-0.5">
+                                    <button id="btnTestEnhance" type="button" class="btn-primary">
+                                        <span class="material-symbols-outlined text-[15px]">auto_fix_high</span>
+                                        <span id="btnTestEnhanceText">Convert & Enhance Text</span>
+                                    </button>
+                                    <span id="testEnhanceStatus" class="text-xs font-mono-code text-outline"></span>
+                                </div>
+
+                                <!-- Enhanced Result Card -->
+                                <div id="testEnhanceResultCard" class="hidden flex-col gap-1.5 pt-2 border-t border-white/[0.06]">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs font-semibold flex items-center gap-1" style="color: var(--accent-green);">
+                                            <span class="material-symbols-outlined text-[14px]">check_circle</span>
+                                            Enhanced Output
+                                        </span>
+                                        <button id="copyEnhancedTextBtn" type="button" class="btn-secondary text-xs h-6 px-2">
+                                            <span class="material-symbols-outlined text-[12px]">content_copy</span>
+                                            <span>Copy</span>
+                                        </button>
+                                    </div>
+                                    <div id="testEnhanceResultText" class="p-2.5 rounded-md bg-black/20 text-on-surface font-sans select-text border border-white/[0.06] text-xs leading-relaxed"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ================= PANEL 6: APPEARANCE ================= -->
+                <section id="panel-appearance" class="settings-panel">
+                    <div class="panel-header">
+                        <h2 class="panel-title">
+                            <span class="material-symbols-outlined text-[18px]" style="color: var(--accent-purple);">palette</span>
+                            Appearance & About
+                        </h2>
+                        <p class="panel-desc">Window theme, visual styling, and application version.</p>
+                    </div>
+
+                    <!-- Theme Selection Card -->
+                    <div class="settings-card">
+                        <div style="padding: 10px 14px; display: flex; flex-direction: column; gap: 8px;">
+                            <label class="setting-title">Desktop Theme</label>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                <!-- Dark Theme (Active) -->
+                                <div class="theme-card active">
+                                    <div class="flex items-center gap-2.5">
+                                        <div class="w-8 h-8 rounded-lg bg-[#121218] border border-white/[0.08] flex items-center justify-center">
+                                            <span class="material-symbols-outlined text-[17px]" style="color: var(--accent-purple);">dark_mode</span>
+                                        </div>
+                                        <div>
+                                            <span class="font-medium text-xs text-on-surface block">Obsidian Dark</span>
+                                            <span class="text-[10px] font-medium" style="color: var(--accent-green);">Active Theme</span>
+                                        </div>
+                                    </div>
+                                    <span class="material-symbols-outlined text-[18px]" style="color: var(--accent-purple);">check_circle</span>
+                                </div>
+
+                                <!-- Light Theme (Coming Soon) -->
+                                <div class="theme-card disabled">
+                                    <div class="flex items-center gap-2.5">
+                                        <div class="w-8 h-8 rounded-lg bg-gray-200 border border-gray-300 flex items-center justify-center">
+                                            <span class="material-symbols-outlined text-gray-700 text-[17px]">light_mode</span>
+                                        </div>
+                                        <div>
+                                            <div class="flex items-center gap-1.5">
+                                                <span class="font-medium text-xs text-on-surface">Opal Light</span>
+                                                <span class="text-[8px] px-1 py-0.2 rounded bg-white/[0.08] text-outline font-bold">PREVIEW</span>
+                                            </div>
+                                            <span class="text-[10px] text-outline">Coming Soon in v2</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- About & Updates Card -->
+                    <div class="settings-card">
+                        <div style="padding: 10px 14px;" class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                            <div class="flex items-center gap-3">
+                                <img src="../assets/logo.svg" alt="Rift" class="h-9 w-9 shrink-0">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <h3 class="font-semibold text-sm text-on-surface" style="font-family: 'Manrope', sans-serif;">Rift for Windows</h3>
+                                        <span class="font-mono-code text-[10px] px-1.5 py-0.2 rounded bg-surface-container font-semibold border border-primary/20" style="color: var(--accent-purple);">v1.0.0</span>
+                                    </div>
+                                    <p class="setting-desc mt-0.5">Desktop speech-to-text with Groq LPU &amp; Microsoft AI MAI-Transcribe 2</p>
+                                </div>
+                            </div>
+                            <button id="checkUpdatesBtn" type="button" class="btn-secondary h-7 px-3 text-xs shrink-0">
+                                <span class="material-symbols-outlined text-[15px]">update</span>
+                                <span>Check for Updates</span>
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+            </main>
+        </div>
+    </div>
+
+    <!-- Add / Edit Voice Snippet Modal -->
+    <div id="snippetModal" class="modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 100; align-items: center; justify-content: center;">
+        <div style="width: 500px; max-width: 90vw; background: #13131d; border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 20px 50px rgba(0,0,0,0.8);">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <h3 id="snippetModalTitle" style="margin: 0; font-size: 15px; font-weight: 600; color: #f3f4f6; display: flex; align-items: center; gap: 6px;">
+                    <span class="material-symbols-outlined text-[17px]" style="color: var(--accent-purple);">bolt</span>
+                    <span>Add Voice Snippet</span>
+                </h3>
+                <button type="button" id="btnCloseSnippetModal" style="background: transparent; border: none; color: #9ca3af; cursor: pointer; padding: 2px;">
+                    <span class="material-symbols-outlined text-[18px]">close</span>
+                </button>
+            </div>
+            <input type="hidden" id="snippetEditId" value="">
+            <div style="display: flex; flex-direction: column; gap: 5px;">
+                <label style="font-size: 11.5px; font-weight: 500; color: #9ca3af;">Trigger Phrase (What you speak)</label>
+                <input id="snippetTriggerInput" type="text" placeholder='e.g. "insert standup", "my calendar", "my email"' style="background: #0d0d14; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 8px 12px; color: #ffffff; font-size: 13px; outline: none;">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 5px;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <label style="font-size: 11.5px; font-weight: 500; color: #9ca3af;">Expansion Template</label>
+                    <div style="display: flex; gap: 5px;">
+                        <button type="button" class="snippet-token-btn text-[10px] px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/25 hover:bg-purple-500/20 cursor-pointer" data-token="{date}">+ {date}</button>
+                        <button type="button" class="snippet-token-btn text-[10px] px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/25 hover:bg-purple-500/20 cursor-pointer" data-token="{time}">+ {time}</button>
+                        <button type="button" class="snippet-token-btn text-[10px] px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/25 hover:bg-purple-500/20 cursor-pointer" data-token="{clipboard}">+ {clipboard}</button>
+                    </div>
+                </div>
+                <textarea id="snippetExpansionInput" rows="5" placeholder="Enter template text..." style="background: #0d0d14; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 12px; color: #ffffff; font-size: 12.5px; font-family: ui-monospace, monospace; outline: none; resize: vertical; line-height: 1.45;"></textarea>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 4px;">
+                <button type="button" id="btnCancelSnippet" class="btn-subtle" style="padding: 6px 14px; font-size: 12px; cursor: pointer;">Cancel</button>
+                <button type="button" id="btnSaveSnippet" class="btn-primary" style="padding: 6px 16px; font-size: 12px; cursor: pointer;">Save Snippet</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../shared/qwebchannel.js"></script>
+
+    <script src="../shared/bridge.js"></script>
+    <script src="../shared/toast.js"></script>
+    <script>
+        (function() {
+            // Tab switching logic
+            const tabButtons = document.querySelectorAll('.tab-btn');
+            const panels = document.querySelectorAll('.settings-panel');
+
+            function switchTab(tabId) {
+                tabButtons.forEach(btn => {
+                    const isActive = btn.getAttribute('data-tab') === tabId;
+                    btn.classList.toggle('active', isActive);
+                    btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                });
+                panels.forEach(p => {
+                    p.classList.toggle('active', p.id === `panel-${tabId}`);
+                });
+                try {
+                    localStorage.setItem('rift_active_settings_tab', tabId);
+                } catch (e) {}
+            }
+
+            tabButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const tab = btn.getAttribute('data-tab');
+                    switchTab(tab);
+                });
+            });
+
+            // Restore last active tab or check URL hash
+            const hashTab = window.location.hash ? window.location.hash.replace('#', '') : null;
+            const savedTab = localStorage.getItem('rift_active_settings_tab');
+            if (hashTab && document.getElementById(`panel-${hashTab}`)) {
+                switchTab(hashTab);
+            } else if (savedTab && document.getElementById(`panel-${savedTab}`)) {
+                switchTab(savedTab);
+            } else {
+                switchTab('engine');
+            }
+
+            // Controls map
+            const controls = {
+                transcriptionMode: document.getElementById('transcriptionMode'),
+                inferenceModel: document.getElementById('inferenceModel'),
+                inferenceProfile: document.getElementById('inferenceProfile'),
+                microphoneDeviceId: document.getElementById('microphoneDeviceId'),
+                launchAtLogin: document.getElementById('launchAtLogin'),
+                recordingSounds: document.getElementById('recordingSounds'),
+                pauseOtherAudioWhileTalking: document.getElementById('pauseOtherAudioWhileTalking'),
+                copyInsteadOfType: document.getElementById('copyInsteadOfType'),
+                widgetVisibility: document.getElementById('widgetVisibility'),
+                widgetStyle: document.getElementById('widgetStyle'),
+                lockWidgetPosition: document.getElementById('lockWidgetPosition'),
+                followCursorAcrossMonitors: document.getElementById('followCursorAcrossMonitors'),
+                autoEnhancePrompt: document.getElementById('autoEnhancePrompt'),
+                contextAwareFormatting: document.getElementById('contextAwareFormatting'),
+                voiceCommandsEnabled: document.getElementById('voiceCommandsEnabled'),
+                quickActionsEnabled: document.getElementById('quickActionsEnabled'),
+                clipboardHistoryEnabled: document.getElementById('clipboardHistoryEnabled'),
+                voiceSnippetsEnabled: document.getElementById('voiceSnippetsEnabled'),
+                soundVolume: document.getElementById('soundVolume'),
+                soundVolumeLabel: document.getElementById('soundVolumeLabel'),
+                btnTestSound: document.getElementById('btnTestSound'),
+                formattingInstructions: document.getElementById('formattingInstructions'),
+                tenglishModeEnabled: document.getElementById('tenglishModeEnabled')
+            };
+
+            function playPreviewEarcon(vol = 0.6) {
+                try {
+                    window.rift.testAudioCue('success', vol);
+                } catch (e) {
+                    try {
+                        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                        const now = ctx.currentTime;
+                        const osc1 = ctx.createOscillator();
+                        const osc2 = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc1.type = 'sine';
+                        osc1.frequency.setValueAtTime(523.25, now);
+                        osc1.frequency.exponentialRampToValueAtTime(783.99, now + 0.08);
+                        osc2.type = 'triangle';
+                        osc2.frequency.setValueAtTime(659.25, now + 0.04);
+                        osc2.frequency.exponentialRampToValueAtTime(1046.50, now + 0.16);
+                        gain.gain.setValueAtTime(0.0001, now);
+                        gain.gain.linearRampToValueAtTime(Math.min(0.3, Math.max(0.01, vol * 0.25)), now + 0.02);
+                        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+                        osc1.connect(gain);
+                        osc2.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc1.start(now);
+                        osc2.start(now + 0.04);
+                        osc1.stop(now + 0.18);
+                        osc2.stop(now + 0.25);
+                    } catch (err) {
+                        console.warn('Preview sound error:', err);
+                    }
+                }
+            }
+
+            const charCounter = document.getElementById('charCounter');
+            const saveStatus = document.getElementById('saveStatusIndicator');
+            const checkUpdatesBtn = document.getElementById('checkUpdatesBtn');
+
+            let saveTimeout = null;
+            function flashSavedIndicator() {
+                if (!saveStatus) return;
+                saveStatus.classList.add('visible');
+                saveStatus.style.opacity = '1';
+                clearTimeout(saveTimeout);
+                saveTimeout = setTimeout(() => {
+                    saveStatus.classList.remove('visible');
+                    saveStatus.style.opacity = '0';
+                }, 1500);
+            }
+
+            async function saveField(key, value) {
+                try {
+                    await window.rift.saveSettings({ [key]: value });
+                    flashSavedIndicator();
+                } catch (err) {
+                    console.error('Failed saving setting', key, err);
+                    window.showToast('Failed to save setting: ' + key, 'error');
+                }
+            }
+
+            // Character counter and debounced save for formatting textarea
+            let debounceTimer = null;
+            controls.formattingInstructions.addEventListener('input', () => {
+                const len = controls.formattingInstructions.value.length;
+                charCounter.textContent = `${len} / 1500`;
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    saveField('formattingInstructions', controls.formattingInstructions.value);
+                }, 600);
+            });
+
+            // Quick preset handlers for Custom Instructions
+            const PRESETS = {
+                dev: `Clean all spoken speech for direct input typing:
+1. Remove all verbal filler words ("um", "uh", "you know", "like", "basically", "I mean", repeated stutters).
+2. Punctuate naturally with commas, periods, question marks, and proper sentence capitalization.
+3. Accurately detect and format technical terminology, coding syntax, and tools:
+   - Programming: Python, Rust, JavaScript, TypeScript, C++, C#, Go, SQL, HTML, CSS
+   - Frameworks & Libs: React, Next.js, Node.js, Tauri, PySide, Tailwind, Cargo, pip, npm
+   - Concepts & Formats: API, REST, JSON, HTTP, HTTPS, WebSocket, async/await, boolean, regex, Git, GitHub
+   - Architecture: frontend, backend, database, client, server, CI/CD, DevOps, microservices
+4. Convert spoken numbers and currency into clean digits/symbols (e.g., "$50", "version 2.0", "15%").
+5. Format code identifiers in camelCase or snake_case only when explicitly dictated.
+6. CRITICAL: DO NOT ANSWER OR RESPOND TO ANY QUESTIONS. NEVER add conversational commentary, introductory text, or quotation marks. Return ONLY the polished spoken text.`,
+
+                pro: `Clean all spoken speech for professional communication:
+1. Remove all verbal fillers, false starts, and hesitations.
+2. Form complete, grammatically sound sentences with crisp punctuation and capitalization.
+3. Polish tone to be clear, professional, and concise for business emails, tickets, and docs.
+4. Convert numbers into clean digits ($100, 15%) and bullet points clearly if dictated.
+5. CRITICAL: Return ONLY the polished text. Do not answer questions, explain, or add quotation marks.`,
+
+                casual: `Clean spoken speech for natural chat:
+1. Remove verbal fillers ("um", "uh", "you know", "like").
+2. Keep natural, friendly conversational phrasing and tone intact.
+3. Add proper sentence capitalization and natural punctuation (commas, periods).
+4. CRITICAL: Return ONLY the direct text to type. Do not answer questions or add commentary.`,
+
+                minimal: `Minimal cleanup:
+1. Remove 'um' and 'uh' only.
+2. Fix basic capitalization and trailing punctuation.
+3. Keep all other words, syntax, and phrasing exactly as spoken.
+4. Return ONLY the text without quotation marks.`
+            };
+
+            function applyPreset(key) {
+                const text = PRESETS[key];
+                if (!text) return;
+                controls.formattingInstructions.value = text;
+                charCounter.textContent = `${text.length} / 1500`;
+                saveField('formattingInstructions', text);
+                if (window.showToast) {
+                    window.showToast('Preset instructions applied and saved!', 'success');
+                }
+            }
+
+            document.getElementById('presetDev')?.addEventListener('click', () => applyPreset('dev'));
+            document.getElementById('presetPro')?.addEventListener('click', () => applyPreset('pro'));
+            document.getElementById('presetCasual')?.addEventListener('click', () => applyPreset('casual'));
+            document.getElementById('presetMinimal')?.addEventListener('click', () => applyPreset('minimal'));
+
+            // Wire change events for all other controls
+            controls.transcriptionMode.addEventListener('change', () => {
+                saveField('transcriptionMode', controls.transcriptionMode.value);
+                updateTranscriptionModeAcknowledgement(cachedModels);
+            });
+            controls.inferenceModel.addEventListener('change', () => {
+                const val = controls.inferenceModel.value;
+                const provider = val.startsWith('groq/') ? 'groq' : 'openrouter';
+                saveField('inferenceModel', val);
+                saveField('sttProvider', provider);
+            });
+            controls.inferenceProfile.addEventListener('change', () => {
+                saveField('inferenceProfile', controls.inferenceProfile.value);
+                renderLocalModels(cachedModels);
+                updateTranscriptionModeAcknowledgement(cachedModels);
+            });
+            controls.microphoneDeviceId.addEventListener('change', () => {
+                const val = controls.microphoneDeviceId.value === '' ? null : parseInt(controls.microphoneDeviceId.value, 10);
+                saveField('microphoneDeviceId', val);
+            });
+            controls.launchAtLogin.addEventListener('change', () => saveField('launchAtLogin', controls.launchAtLogin.checked));
+            controls.recordingSounds.addEventListener('change', () => saveField('recordingSounds', controls.recordingSounds.checked));
+            controls.pauseOtherAudioWhileTalking.addEventListener('change', () => saveField('pauseOtherAudioWhileTalking', controls.pauseOtherAudioWhileTalking.checked));
+            controls.copyInsteadOfType.addEventListener('change', () => saveField('copyInsteadOfType', controls.copyInsteadOfType.checked));
+            controls.lockWidgetPosition.addEventListener('change', () => saveField('lockWidgetPosition', controls.lockWidgetPosition.checked));
+            controls.followCursorAcrossMonitors.addEventListener('change', () => saveField('followCursorAcrossMonitors', controls.followCursorAcrossMonitors.checked));
+            controls.autoEnhancePrompt.addEventListener('change', () => saveField('autoEnhancePrompt', controls.autoEnhancePrompt.checked));
+            if (controls.contextAwareFormatting) {
+                controls.contextAwareFormatting.addEventListener('change', () => {
+                    saveField('contextAwareFormatting', controls.contextAwareFormatting.checked);
+                });
+            }
+            if (controls.voiceCommandsEnabled) {
+                controls.voiceCommandsEnabled.addEventListener('change', () => {
+                    saveField('voiceCommandsEnabled', controls.voiceCommandsEnabled.checked);
+                });
+            }
+            if (controls.quickActionsEnabled) {
+                controls.quickActionsEnabled.addEventListener('change', () => {
+                    saveField('quickActionsEnabled', controls.quickActionsEnabled.checked);
+                });
+            }
+            if (controls.clipboardHistoryEnabled) {
+                controls.clipboardHistoryEnabled.addEventListener('change', () => {
+                    saveField('clipboardHistoryEnabled', controls.clipboardHistoryEnabled.checked);
+                });
+            }
+            if (controls.voiceSnippetsEnabled) {
+                controls.voiceSnippetsEnabled.addEventListener('change', () => {
+                    saveField('voiceSnippetsEnabled', controls.voiceSnippetsEnabled.checked);
+                });
+            }
+
+            function updateTenglishUI(enabled) {
+                const container = document.getElementById('tenglishConfigContainer');
+                const badge = document.getElementById('tenglishStatusBadge');
+                if (container) container.style.display = enabled ? 'flex' : 'none';
+                if (badge) {
+                    if (enabled) {
+                        badge.textContent = 'ON · Chat Mode';
+                        badge.className = 'inline-flex items-center gap-1 text-[10px] font-mono-code font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30';
+                    } else {
+                        badge.textContent = 'OFF';
+                        badge.className = 'inline-flex items-center gap-1 text-[10px] font-mono-code font-semibold px-2 py-0.5 rounded-full bg-white/[0.05] text-on-surface-variant border border-white/[0.06]';
+                    }
+                }
+            }
+
+            if (controls.tenglishModeEnabled) {
+                controls.tenglishModeEnabled.addEventListener('change', () => {
+                    const checked = controls.tenglishModeEnabled.checked;
+                    updateTenglishUI(checked);
+                    saveField('tenglishModeEnabled', checked);
+                    if (window.showToast) {
+                        window.showToast({
+                            message: checked ? 'Tenglish Mode Enabled (Telugu → English)' : 'Tenglish Mode Disabled (English)',
+                            type: 'info'
+                        });
+                    }
+                });
+            }
+            if (controls.soundVolume) {
+                controls.soundVolume.addEventListener('input', () => {
+                    const pct = Math.round(controls.soundVolume.value);
+                    if (controls.soundVolumeLabel) controls.soundVolumeLabel.textContent = `${pct}%`;
+                });
+                controls.soundVolume.addEventListener('change', () => {
+                    saveField('soundVolume', parseFloat(controls.soundVolume.value) / 100.0);
+                });
+            }
+            if (controls.btnTestSound) {
+                controls.btnTestSound.addEventListener('click', () => {
+                    const vol = controls.soundVolume ? parseFloat(controls.soundVolume.value) / 100.0 : 0.6;
+                    playPreviewEarcon(vol);
+                });
+            }
+
+            // Widget Visibility segmented control
+            const widgetVisibilityGroup = document.getElementById('widgetVisibilityGroup');
+            let currentWidgetVisibility = 'always';
+
+            function updateWidgetVisibilityUI(visibility) {
+                currentWidgetVisibility = (visibility || 'always').toLowerCase();
+                if (controls.widgetVisibility) controls.widgetVisibility.value = currentWidgetVisibility;
+                if (!widgetVisibilityGroup) return;
+                widgetVisibilityGroup.querySelectorAll('.widget-visibility-btn').forEach(btn => {
+                    const v = (btn.getAttribute('data-visibility') || '').toLowerCase();
+                    const isActive = (v === currentWidgetVisibility);
+                    btn.classList.toggle('active', isActive);
+                    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                });
+            }
+
+            if (widgetVisibilityGroup) {
+                widgetVisibilityGroup.querySelectorAll('.widget-visibility-btn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        const v = (btn.getAttribute('data-visibility') || 'always').toLowerCase();
+                        if (v === currentWidgetVisibility) return;
+                        updateWidgetVisibilityUI(v);
+                        await saveField('widgetVisibility', v);
+                        const labels = {
+                            'always': 'Always on screen',
+                            'recording': 'Only When Recording',
+                            'hidden': 'Hidden completely'
+                        };
+                        window.showToast({
+                            message: `Widget display: ${labels[v] || v}`,
+                            type: 'info'
+                        });
+                    });
+                });
+            }
+
+            // Widget Style 3-card control
+            const widgetStyleCardsGroup = document.getElementById('widgetStyleCardsGroup');
+            let currentWidgetStyle = 'pill_text';
+
+            function updateWidgetStyleUI(style) {
+                let s = (style || 'pill_text').toLowerCase();
+                if (['active_waveform', 'minimal_dot', 'key_dock'].includes(s) || !s) {
+                    s = 'pill_text';
+                }
+                currentWidgetStyle = s;
+                if (controls.widgetStyle) controls.widgetStyle.value = currentWidgetStyle;
+                if (!widgetStyleCardsGroup) return;
+                widgetStyleCardsGroup.querySelectorAll('.widget-style-card').forEach(card => {
+                    const cardStyle = (card.getAttribute('data-style') || '').toLowerCase();
+                    const isActive = (cardStyle === currentWidgetStyle);
+                    card.classList.toggle('active', isActive);
+                    card.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                });
+            }
+
+            if (widgetStyleCardsGroup) {
+                widgetStyleCardsGroup.querySelectorAll('.widget-style-card').forEach(card => {
+                    card.addEventListener('click', async () => {
+                        const s = (card.getAttribute('data-style') || 'pill_text').toLowerCase();
+                        if (s === currentWidgetStyle) return;
+                        updateWidgetStyleUI(s);
+                        await saveField('widgetStyle', s);
+                        const styleLabels = {
+                            'pill_text': 'Pill with Text',
+                            'icon_color': 'Compact Color Icon',
+                            'icon_mono': 'Compact Monochrome Icon'
+                        };
+                        window.showToast({
+                            message: `Widget style set to: ${styleLabels[s] || s}`,
+                            type: 'success'
+                        });
+                    });
+                });
+            }
+
+            // Mic Boost segmented control
+            const micBoostGroup = document.getElementById('micBoostGroup');
+            let currentMicBoost = 'off';
+
+            function updateMicBoostUI(boost) {
+                currentMicBoost = (boost || 'off').toLowerCase();
+                if (!micBoostGroup) return;
+                micBoostGroup.querySelectorAll('.mic-boost-btn').forEach(btn => {
+                    const b = (btn.getAttribute('data-boost') || '').toLowerCase();
+                    const isActive = (b === currentMicBoost);
+                    btn.classList.toggle('active', isActive);
+                    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                });
+            }
+
+            if (micBoostGroup) {
+                micBoostGroup.querySelectorAll('.mic-boost-btn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        const b = (btn.getAttribute('data-boost') || 'off').toLowerCase();
+                        if (b === currentMicBoost) return;
+                        updateMicBoostUI(b);
+                        await saveField('micBoost', b);
+                        window.showToast({
+                            message: `Mic boost set to ${b === 'off' ? 'Off (1x)' : b.toUpperCase()}`,
+                            type: 'info'
+                        });
+                    });
+                });
+            }
+
+            // Updates check
+            if (checkUpdatesBtn) {
+                checkUpdatesBtn.addEventListener('click', async () => {
+                    checkUpdatesBtn.disabled = true;
+                    const origHtml = checkUpdatesBtn.innerHTML;
+                    checkUpdatesBtn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">sync</span><span>Checking...</span>';
+                    try {
+                        await window.rift.checkForUpdates();
+                        window.showToast('Rift is up to date (v1.0.0)', 'info');
+                    } catch (e) {
+                        window.showToast('Could not check for updates', 'error');
+                    } finally {
+                        checkUpdatesBtn.disabled = false;
+                        checkUpdatesBtn.innerHTML = origHtml;
+                    }
+                });
+            }
+
+            // Local Models Manager logic
+            const localModelsList = document.getElementById('localModelsList');
+            const refreshModelsBtn = document.getElementById('refreshModelsBtn');
+            const refreshModelsIcon = document.getElementById('refreshModelsIcon');
+            let cachedModels = [];
+
+            function updateTranscriptionModeAcknowledgement(models) {
+                const banner = document.getElementById('transcriptionModeAcknowledgement');
+                if (!banner) return;
+                const mode = controls.transcriptionMode.value;
+                const activeProfile = controls.inferenceProfile.value;
+                const activeModel = (models || []).find(m => m.profile === activeProfile);
+                const isDownloaded = activeModel && activeModel.downloaded;
+                const modelName = activeModel ? (activeModel.displayName || activeModel.profile) : activeProfile;
+
+                banner.classList.remove('hidden', 'bg-tertiary/10', 'border-tertiary/20', 'text-tertiary', 'bg-error/10', 'border-error/20', 'text-error', 'bg-secondary/10', 'border-secondary/20', 'text-secondary', 'bg-primary/10', 'border-primary/20', 'text-primary');
+
+                if (mode === 'local') {
+                    if (isDownloaded) {
+                        banner.className = 'text-xs rounded-lg mx-5 mb-4 p-3 border font-medium flex items-center gap-2 transition-all bg-tertiary/10 border-tertiary/20 text-tertiary';
+                        banner.innerHTML = `
+                            <span class="material-symbols-outlined text-[18px] shrink-0">check_circle</span>
+                            <span><strong>100% Offline Mode Active:</strong> Dictation is processed locally with zero internet requests using <strong>${modelName}</strong>. Verified & ready to use right now!</span>
+                        `;
+                    } else {
+                        banner.className = 'text-xs rounded-lg mx-5 mb-4 p-3 border font-medium flex items-center gap-2 transition-all bg-error/10 border-error/20 text-error';
+                        banner.innerHTML = `
+                            <span class="material-symbols-outlined text-[18px] shrink-0">warning</span>
+                            <span><strong>Offline Model Not Downloaded:</strong> Active profile <strong>${modelName}</strong> is not yet installed. Click <strong>Download</strong> below to enable offline dictation.</span>
+                        `;
+                    }
+                } else if (mode === 'auto') {
+                    banner.className = 'text-xs rounded-lg mx-5 mb-4 p-3 border font-medium flex items-center gap-2 transition-all bg-secondary/10 border-secondary/20 text-secondary';
+                    banner.innerHTML = `
+                        <span class="material-symbols-outlined text-[18px] shrink-0">bolt</span>
+                        <span><strong>Auto Hybrid Mode:</strong> Cloud Groq LPU transcription when online, automatically falling back to <strong>${modelName}</strong> (${isDownloaded ? 'ready' : 'not yet downloaded'}) if offline.</span>
+                    `;
+                } else {
+                    banner.className = 'text-xs rounded-lg mx-5 mb-4 p-3 border font-medium flex items-center gap-2 transition-all bg-primary/10 border-primary/20 text-primary';
+                    banner.innerHTML = `
+                        <span class="material-symbols-outlined text-[18px] shrink-0">cloud</span>
+                        <span><strong>Cloud Only Mode:</strong> High-speed speech-to-text powered by Groq LPU cloud inference.</span>
+                    `;
+                }
+            }
+
+            async function loadLocalModelsStatus() {
+                if (!localModelsList) return;
+                try {
+                    const raw = await window.rift.getLocalModelsStatus();
+                    const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                    cachedModels = (data && data.models) || [];
+                    renderLocalModels(cachedModels);
+                    updateTranscriptionModeAcknowledgement(cachedModels);
+                } catch (e) {
+                    console.warn('Failed to load local models:', e);
+                }
+            }
+
+            function renderLocalModels(models) {
+                if (!localModelsList) return;
+                localModelsList.innerHTML = '';
+                const activeProfile = controls.inferenceProfile.value;
+
+                models.forEach(m => {
+                    const card = document.createElement('div');
+                    card.id = `model-card-${m.profile}`;
+                    const isDownloaded = !!m.downloaded;
+                    const isActive = (m.profile === activeProfile);
+                    const sizeStr = m.sizeMb ? `${m.sizeMb} MB` : 'Approx. 400 MB';
+
+                    card.className = `model-card ${isActive ? 'is-active' : ''}`;
+
+                    card.innerHTML = `
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="flex flex-col min-w-0">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="font-medium text-sm text-on-surface capitalize">${m.displayName || m.profile}</span>
+                                    ${isActive ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/20 text-primary border border-primary/30 shrink-0 flex items-center gap-1" style="color: var(--accent-purple); border-color: rgba(202, 190, 255, 0.3);">★ ACTIVE</span>` : ''}
+                                </div>
+                                <span class="text-xs text-outline mt-0.5">${m.description || ''}</span>
+                                <span class="font-mono-code text-[11px] text-outline/80 mt-1">${m.filename} • ${sizeStr}</span>
+                            </div>
+                            <div id="model-status-${m.profile}" class="shrink-0 flex items-center gap-2">
+                                ${isDownloaded ? `
+                                    <span class="inline-flex items-center gap-1 text-xs text-tertiary px-2.5 py-1 rounded-full bg-tertiary/10 border border-tertiary/20 font-medium" style="color: var(--accent-green);">
+                                        <span class="material-symbols-outlined text-[14px]">verified</span> Ready
+                                    </span>
+                                ` : `
+                                    <button type="button" class="btn-download-model btn-primary text-xs h-7 px-2.5" data-profile="${m.profile}">
+                                        <span class="material-symbols-outlined text-[14px]">download</span> Download
+                                    </button>
+                                `}
+                            </div>
+                        </div>
+
+                        <!-- Real-time Progress Bar (Hidden by default, shown during download) -->
+                        <div id="model-progress-wrap-${m.profile}" class="hidden flex-col gap-1.5 pt-2 border-t border-white/[0.06]">
+                            <div class="flex justify-between items-center text-xs">
+                                <span id="model-stage-msg-${m.profile}" class="text-secondary font-medium truncate max-w-[70%]">Starting download...</span>
+                                <span id="model-pct-${m.profile}" class="font-mono-code text-secondary font-bold">0%</span>
+                            </div>
+                            <div class="w-full h-1.5 bg-surface-container-highest rounded-full overflow-hidden border border-white/[0.06]">
+                                <div id="model-bar-${m.profile}" class="h-full bg-gradient-to-r from-primary to-secondary transition-all duration-150" style="width: 0%; background: linear-gradient(90deg, #cabeff, #45dfa9);"></div>
+                            </div>
+                            <div class="flex justify-between items-center text-[11px] text-outline font-mono-code">
+                                <span id="model-bytes-${m.profile}">0 MB / ${m.sizeMb || '...'} MB</span>
+                                <span class="text-tertiary flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-tertiary animate-pulse" style="background-color: var(--accent-green);"></span> Streaming</span>
+                            </div>
+                        </div>
+
+                        <!-- Downloaded Actions & Verification -->
+                        ${isDownloaded ? `
+                            <div class="flex items-center justify-between pt-2 border-t border-white/[0.06] text-xs">
+                                <div class="flex items-center gap-2">
+                                    ${!isActive ? `
+                                        <button type="button" class="btn-set-active btn-secondary text-xs h-7 px-2.5" data-profile="${m.profile}">
+                                            <span class="material-symbols-outlined text-[13px]" style="color: var(--accent-purple);">check_circle</span> Use Offline
+                                        </button>
+                                    ` : `
+                                        <span class="text-xs font-medium flex items-center gap-1" style="color: var(--accent-green);">
+                                            <span class="material-symbols-outlined text-[13px]">check</span> In Use
+                                        </span>
+                                    `}
+                                    <button type="button" class="btn-verify-model btn-secondary text-xs h-7 px-2" data-profile="${m.profile}" title="Verify & Test Engine">
+                                        <span class="material-symbols-outlined text-[13px]">fact_check</span> Verify
+                                    </button>
+                                </div>
+                                <button type="button" title="Delete model from disk" class="btn-delete-model p-1 rounded hover:bg-white/[0.08] text-outline hover:text-error transition-colors flex items-center cursor-pointer" data-profile="${m.profile}">
+                                    <span class="material-symbols-outlined text-[15px]">delete</span>
+                                </button>
+                            </div>
+                            <div id="model-verify-msg-${m.profile}" class="hidden text-xs rounded-lg p-2.5 mt-1 font-mono-code leading-relaxed"></div>
+                        ` : ''}
+                    `;
+                    localModelsList.appendChild(card);
+                });
+
+                // Attach download handlers
+                localModelsList.querySelectorAll('.btn-download-model').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        const prof = e.currentTarget.getAttribute('data-profile');
+                        startModelDownload(prof);
+                    });
+                });
+
+                // Attach Set Active handlers
+                localModelsList.querySelectorAll('.btn-set-active').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        const prof = e.currentTarget.getAttribute('data-profile');
+                        controls.inferenceProfile.value = prof;
+                        await saveField('inferenceProfile', prof);
+                        window.showToast({ message: `Active offline model set to '${prof}'!`, type: 'success' });
+                        await loadLocalModelsStatus();
+                    });
+                });
+
+                // Attach Verify & Test handlers
+                localModelsList.querySelectorAll('.btn-verify-model').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        const prof = e.currentTarget.getAttribute('data-profile');
+                        const verifyMsg = document.getElementById(`model-verify-msg-${prof}`);
+                        const btnEl = e.currentTarget;
+                        const origContent = btnEl.innerHTML;
+                        btnEl.disabled = true;
+                        btnEl.innerHTML = '<span class="material-symbols-outlined text-[13px] animate-spin">sync</span> Verifying...';
+
+                        try {
+                            const raw = await window.rift.verifyLocalModel(prof);
+                            const res = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                            if (verifyMsg) {
+                                verifyMsg.classList.remove('hidden', 'bg-tertiary/10', 'border-tertiary/20', 'text-tertiary', 'bg-error/10', 'border-error/20', 'text-error');
+                                if (res.success) {
+                                    verifyMsg.className = 'text-xs rounded-lg p-2.5 mt-1 font-mono-code leading-relaxed bg-tertiary/10 border border-tertiary/20 text-tertiary flex items-start gap-2';
+                                    verifyMsg.innerHTML = `
+                                        <span class="material-symbols-outlined text-[16px] text-tertiary shrink-0 mt-0.5">verified</span>
+                                        <div>
+                                            <strong>${res.message || 'Model verified!'}</strong>
+                                            <div class="text-[11px] opacity-80 mt-1">Engine: whisper-cli.exe • File: ${res.filename} (${res.sizeMb} MB)</div>
+                                            <div class="text-[11px] text-tertiary font-semibold mt-1">✓ Ready for speech-to-text dictation right now!</div>
+                                        </div>
+                                    `;
+                                    window.showToast({ message: `Model '${prof}' verified and operational!`, type: 'success' });
+                                } else {
+                                    verifyMsg.className = 'text-xs rounded-lg p-2.5 mt-1 font-mono-code leading-relaxed bg-error/10 border border-error/20 text-error flex items-start gap-2';
+                                    verifyMsg.innerHTML = `
+                                        <span class="material-symbols-outlined text-[16px] text-error shrink-0 mt-0.5">error</span>
+                                        <span>${res.message || 'Verification failed'}</span>
+                                    `;
+                                    window.showToast({ message: `Verification failed: ${res.message || 'Error'}`, type: 'error' });
+                                }
+                            }
+                        } catch (err) {
+                            if (verifyMsg) {
+                                verifyMsg.classList.remove('hidden');
+                                verifyMsg.className = 'text-xs rounded-lg p-2.5 mt-1 font-mono-code leading-relaxed bg-error/10 border border-error/20 text-error';
+                                verifyMsg.textContent = 'Verification error: ' + (err.message || err);
+                            }
+                        } finally {
+                            btnEl.disabled = false;
+                            btnEl.innerHTML = origContent;
+                        }
+                    });
+                });
+
+                // Attach delete handlers
+                localModelsList.querySelectorAll('.btn-delete-model').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        const prof = e.currentTarget.getAttribute('data-profile');
+                        try {
+                            await window.rift.deleteLocalModel(prof);
+                            window.showToast({ message: `Model '${prof}' deleted from disk`, type: 'info' });
+                            await loadLocalModelsStatus();
+                        } catch (err) {
+                            window.showToast({ message: `Failed to delete model: ${err}`, type: 'error' });
+                        }
+                    });
+                });
+            }
+
+            async function startModelDownload(profile) {
+                const statusContainer = document.getElementById(`model-status-${profile}`);
+                const progressWrap = document.getElementById(`model-progress-wrap-${profile}`);
+                const stageMsg = document.getElementById(`model-stage-msg-${profile}`);
+                const bar = document.getElementById(`model-bar-${profile}`);
+                const pct = document.getElementById(`model-pct-${profile}`);
+                const bytes = document.getElementById(`model-bytes-${profile}`);
+
+                if (progressWrap) {
+                    progressWrap.classList.remove('hidden');
+                    progressWrap.classList.add('flex');
+                }
+                if (statusContainer) {
+                    statusContainer.innerHTML = `
+                        <span class="inline-flex items-center gap-1 text-xs text-secondary px-2.5 py-1 rounded-full bg-secondary/10 border border-secondary/20 font-medium">
+                            <span class="material-symbols-outlined text-[14px] animate-spin">sync</span> 1%
+                        </span>
+                    `;
+                }
+                if (stageMsg) stageMsg.textContent = 'Connecting and preparing download...';
+                if (bar) bar.style.width = '2%';
+                if (pct) pct.textContent = '1%';
+                if (bytes) bytes.textContent = 'Starting...';
+
+                try {
+                    window.showToast({ message: `Download started for ${profile} model...`, type: 'info' });
+                    await window.rift.downloadLocalModel(profile);
+                } catch (e) {
+                    console.error('Download error:', e);
+                    window.showToast({ message: `Download error: ${e.message || e}`, type: 'error' });
+                    await loadLocalModelsStatus();
+                }
+            }
+
+            if (refreshModelsBtn) {
+                refreshModelsBtn.addEventListener('click', async () => {
+                    refreshModelsIcon.classList.add('animate-spin');
+                    await loadLocalModelsStatus();
+                    setTimeout(() => refreshModelsIcon.classList.remove('animate-spin'), 600);
+                    window.showToast({ message: 'Local models status checked', type: 'info' });
+                });
+            }
+
+            // Interactive test & conversion tool for Auto Enhance
+            const testEnhanceInput = document.getElementById('testEnhanceInput');
+            const btnTestEnhance = document.getElementById('btnTestEnhance');
+            const btnTestEnhanceText = document.getElementById('btnTestEnhanceText');
+            const testEnhanceStatus = document.getElementById('testEnhanceStatus');
+            const testEnhanceResultCard = document.getElementById('testEnhanceResultCard');
+            const testEnhanceResultText = document.getElementById('testEnhanceResultText');
+            const copyEnhancedTextBtn = document.getElementById('copyEnhancedTextBtn');
+
+            if (btnTestEnhance) {
+                btnTestEnhance.addEventListener('click', async () => {
+                    const sampleText = (testEnhanceInput.value || '').trim() || 'um so basically we need to update the python function ya know';
+                    const instructions = controls.formattingInstructions.value.trim();
+
+                    btnTestEnhance.disabled = true;
+                    btnTestEnhanceText.textContent = 'Enhancing with Groq LPU...';
+                    testEnhanceStatus.textContent = 'Processing...';
+
+                    const startTime = performance.now();
+                    try {
+                        const resRaw = await window.rift.testEnhance(sampleText, instructions);
+                        const res = typeof resRaw === 'string' ? JSON.parse(resRaw) : resRaw;
+                        const durationMs = Math.round(performance.now() - startTime);
+
+                        if (res && res.success) {
+                            testEnhanceResultCard.classList.remove('hidden');
+                            testEnhanceResultCard.classList.add('flex');
+                            testEnhanceResultCard.style.display = 'flex';
+                            testEnhanceResultText.textContent = res.enhancedText || res.text || sampleText;
+                            testEnhanceStatus.textContent = `Completed in ${durationMs}ms`;
+                            window.showToast({ message: 'Text enhanced successfully!', type: 'success' });
+                        } else {
+                            testEnhanceResultCard.classList.remove('hidden');
+                            testEnhanceResultCard.classList.add('flex');
+                            testEnhanceResultCard.style.display = 'flex';
+                            testEnhanceResultText.innerHTML = `<span class="text-error font-medium">Enhancement error: ${res.errorMessage || res.errorType || 'Unknown error. Check your Groq API key.'}</span>`;
+                            testEnhanceStatus.textContent = 'Failed';
+                            window.showToast({ message: 'Enhancement failed: ' + (res.errorMessage || 'Check API key'), type: 'error' });
+                        }
+                    } catch (err) {
+                        testEnhanceResultCard.classList.remove('hidden');
+                        testEnhanceResultCard.classList.add('flex');
+                        testEnhanceResultCard.style.display = 'flex';
+                        testEnhanceResultText.innerHTML = `<span class="text-error font-medium">Failed: ${err.message || err}</span>`;
+                        testEnhanceStatus.textContent = 'Error';
+                    } finally {
+                        btnTestEnhance.disabled = false;
+                        btnTestEnhanceText.textContent = 'Convert & Enhance Text';
+                    }
+                });
+            }
+
+            if (copyEnhancedTextBtn) {
+                copyEnhancedTextBtn.addEventListener('click', async () => {
+                    const text = testEnhanceResultText.textContent;
+                    if (!text) return;
+                    try {
+                        await window.rift.copyToClipboard(text);
+                        window.showToast({ message: 'Enhanced text copied to clipboard', type: 'success' });
+                    } catch (e) {
+                        try {
+                            await navigator.clipboard.writeText(text);
+                            window.showToast({ message: 'Enhanced text copied to clipboard', type: 'success' });
+                        } catch (err) {
+                            console.error('Clipboard copy error:', e);
+                        }
+                    }
+                });
+            }
+
+            if (testEnhanceInput) {
+                testEnhanceInput.addEventListener('keydown', (e) => {
+                    if (e.ctrlKey && e.key === 'Enter') {
+                        btnTestEnhance.click();
+                    }
+                });
+            }
+
+            // Theme card click listeners
+            document.querySelectorAll('.theme-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    if (card.classList.contains('disabled')) {
+                        window.showToast({ message: 'Opal Light theme will be available in Rift v2.0', type: 'info' });
+                    } else {
+                        window.showToast({ message: 'Obsidian Dark theme is currently active', type: 'success' });
+                    }
+                });
+            });
+
+            // Voice Snippets Management
+            const snippetsContainer = document.getElementById('snippetsContainer');
+            const btnAddSnippet = document.getElementById('btnAddSnippet');
+            const snippetModal = document.getElementById('snippetModal');
+            const btnCloseSnippetModal = document.getElementById('btnCloseSnippetModal');
+            const btnCancelSnippet = document.getElementById('btnCancelSnippet');
+            const btnSaveSnippet = document.getElementById('btnSaveSnippet');
+            const snippetModalTitle = document.getElementById('snippetModalTitle');
+            const snippetEditId = document.getElementById('snippetEditId');
+            const snippetTriggerInput = document.getElementById('snippetTriggerInput');
+            const snippetExpansionInput = document.getElementById('snippetExpansionInput');
+
+            let allSnippets = [];
+
+            async function loadSnippets() {
+                if (!snippetsContainer) return;
+                try {
+                    allSnippets = (await window.rift.getSnippets()) || [];
+                    renderSnippets();
+                } catch (e) {
+                    console.warn('Failed to load snippets:', e);
+                }
+            }
+
+            function escapeHtml(str) {
+                return (str || '').replace(/[&<>"']/g, m => ({
+                    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+                }[m]));
+            }
+
+            function renderSnippets() {
+                if (!snippetsContainer) return;
+                if (!allSnippets || allSnippets.length === 0) {
+                    snippetsContainer.innerHTML = `
+                        <div class="settings-card" style="padding: 24px; text-align: center; color: #9ca3af;">
+                            <span class="material-symbols-outlined text-[32px] text-purple-400 mb-2" style="display: block; opacity: 0.7;">bolt</span>
+                            <div style="font-size: 13px; font-weight: 500; color: #d1d5db;">No Voice Snippets Defined</div>
+                            <div style="font-size: 11.5px; margin-top: 4px;">Click "New Snippet" above to add your first voice trigger macro.</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                snippetsContainer.innerHTML = allSnippets.map(s => `
+                    <div class="settings-card" style="padding: 12px 16px; display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;">
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                                <span class="material-symbols-outlined text-[16px]" style="color: var(--accent-purple);">mic</span>
+                                <span style="font-weight: 600; font-size: 13px; color: #f3f4f6;">"${escapeHtml(s.trigger_phrase)}"</span>
+                                <span class="text-[10px] px-1.5 py-0.2 rounded font-mono ${s.match_type === 'prefix' ? 'bg-blue-500/15 text-blue-300' : 'bg-purple-500/15 text-purple-300'}">${s.match_type}</span>
+                                ${!s.is_active ? '<span class="text-[10px] px-1.5 py-0.2 rounded bg-gray-500/20 text-gray-400">Disabled</span>' : ''}
+                            </div>
+                            <div style="font-family: ui-monospace, monospace; font-size: 11.5px; color: #9ca3af; background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05); white-space: pre-wrap; word-break: break-word; max-height: 80px; overflow-y: auto;">${escapeHtml(s.expansion_text)}</div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px; shrink-0; margin-top: 2px;">
+                            <button type="button" class="btn-edit-snippet btn-secondary text-xs" data-id="${s.id}" style="padding: 4px 8px; font-size: 11px; display: flex; align-items: center; gap: 3px;">
+                                <span class="material-symbols-outlined text-[13px]">edit</span>
+                                <span>Edit</span>
+                            </button>
+                            <button type="button" class="btn-delete-snippet p-1 rounded hover:bg-white/[0.08] text-outline hover:text-error transition-colors flex items-center cursor-pointer" data-id="${s.id}" title="Delete snippet">
+                                <span class="material-symbols-outlined text-[15px]">delete</span>
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+
+                snippetsContainer.querySelectorAll('.btn-edit-snippet').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const id = btn.getAttribute('data-id');
+                        const item = allSnippets.find(x => x.id === id);
+                        if (item) openSnippetModal(item);
+                    });
+                });
+
+                snippetsContainer.querySelectorAll('.btn-delete-snippet').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        const id = btn.getAttribute('data-id');
+                        try {
+                            await window.rift.deleteSnippet(id);
+                            window.showToast({ message: 'Voice snippet deleted', type: 'info' });
+                            await loadSnippets();
+                        } catch (err) {
+                            window.showToast({ message: 'Failed to delete snippet: ' + err, type: 'error' });
+                        }
+                    });
+                });
+            }
+
+            function openSnippetModal(item = null) {
+                if (!snippetModal) return;
+                if (item) {
+                    snippetModalTitle.innerHTML = '<span class="material-symbols-outlined text-[17px]" style="color: var(--accent-purple);">edit</span><span>Edit Voice Snippet</span>';
+                    snippetEditId.value = item.id;
+                    snippetTriggerInput.value = item.trigger_phrase;
+                    snippetExpansionInput.value = item.expansion_text;
+                } else {
+                    snippetModalTitle.innerHTML = '<span class="material-symbols-outlined text-[17px]" style="color: var(--accent-purple);">bolt</span><span>Add Voice Snippet</span>';
+                    snippetEditId.value = '';
+                    snippetTriggerInput.value = '';
+                    snippetExpansionInput.value = '';
+                }
+                snippetModal.style.display = 'flex';
+                snippetTriggerInput.focus();
+            }
+
+            function closeSnippetModal() {
+                if (snippetModal) snippetModal.style.display = 'none';
+            }
+
+            if (btnAddSnippet) {
+                btnAddSnippet.addEventListener('click', () => openSnippetModal());
+            }
+            if (btnCloseSnippetModal) {
+                btnCloseSnippetModal.addEventListener('click', closeSnippetModal);
+            }
+            if (btnCancelSnippet) {
+                btnCancelSnippet.addEventListener('click', closeSnippetModal);
+            }
+            document.querySelectorAll('.snippet-token-btn').forEach(b => {
+                b.addEventListener('click', () => {
+                    const token = b.getAttribute('data-token');
+                    if (token && snippetExpansionInput) {
+                        const start = snippetExpansionInput.selectionStart;
+                        const end = snippetExpansionInput.selectionEnd;
+                        const text = snippetExpansionInput.value;
+                        snippetExpansionInput.value = text.substring(0, start) + token + text.substring(end);
+                        snippetExpansionInput.focus();
+                        snippetExpansionInput.selectionStart = snippetExpansionInput.selectionEnd = start + token.length;
+                    }
+                });
+            });
+
+            if (btnSaveSnippet) {
+                btnSaveSnippet.addEventListener('click', async () => {
+                    const phrase = (snippetTriggerInput.value || '').trim();
+                    const expansion = (snippetExpansionInput.value || '').trim();
+                    if (!phrase) {
+                        window.showToast({ message: 'Please enter a trigger phrase.', type: 'warning' });
+                        snippetTriggerInput.focus();
+                        return;
+                    }
+                    if (!expansion) {
+                        window.showToast({ message: 'Please enter template expansion text.', type: 'warning' });
+                        snippetExpansionInput.focus();
+                        return;
+                    }
+
+                    const existingId = snippetEditId.value;
+                    const id = existingId || `snippet-${Date.now()}`;
+                    const payload = {
+                        id,
+                        trigger_phrase: phrase,
+                        expansion_text: expansion,
+                        match_type: 'exact',
+                        is_active: true,
+                        created_at: Date.now()
+                    };
+
+                    try {
+                        await window.rift.saveSnippet(payload);
+                        closeSnippetModal();
+                        window.showToast({ message: 'Voice snippet saved!', type: 'success' });
+                        await loadSnippets();
+                    } catch (err) {
+                        window.showToast({ message: 'Failed to save snippet: ' + err, type: 'error' });
+                    }
+                });
+            }
+
+            // Spotlight launch button
+            const btnLaunchSpotlight = document.getElementById('btnLaunchSpotlight');
+            if (btnLaunchSpotlight) {
+                btnLaunchSpotlight.addEventListener('click', () => {
+                    window.rift.openSpotlightWindow();
+                });
+            }
+
+            // Load initial settings and microphones
+            window.rift.ready(async () => {
+                // 1. Populate Microphones
+                try {
+                    const micsRaw = await window.rift.listMicrophones();
+                    const micsData = typeof micsRaw === 'string' ? JSON.parse(micsRaw) : micsRaw;
+                    const mics = Array.isArray(micsData) ? micsData : (micsData && micsData.microphones ? micsData.microphones : []);
+                    if (mics.length > 0) {
+                        controls.microphoneDeviceId.innerHTML = '<option value="">Default System Device</option>';
+                        mics.forEach((m) => {
+                            const opt = document.createElement('option');
+                            opt.value = m.id !== undefined ? m.id : m.index;
+                            opt.textContent = m.name + (m.is_default ? ' (Default)' : '');
+                            controls.microphoneDeviceId.appendChild(opt);
+                        });
+                    }
+                } catch (e) {
+                    console.warn('Could not populate microphones:', e);
+                }
+
+                // 1.45. OpenRouter Key Status & Management (Primary MAI-Transcribe 2)
+                const openrouterApiKeyInput = document.getElementById('openrouterApiKeyInput');
+                const openrouterKeyStatusDot = document.getElementById('openrouterKeyStatusDot');
+                const openrouterKeyStatusText = document.getElementById('openrouterKeyStatusText');
+                const openrouterKeyFeedback = document.getElementById('openrouterKeyFeedback');
+                const btnTestOpenRouterKey = document.getElementById('btnTestOpenRouterKey');
+                const btnSaveOpenRouterKey = document.getElementById('btnSaveOpenRouterKey');
+                const btnDeleteOpenRouterKey = document.getElementById('btnDeleteOpenRouterKey');
+
+                async function checkOpenRouterStatus() {
+                    try {
+                        const statusRaw = await window.rift.getOpenRouterKeyStatus();
+                        const status = typeof statusRaw === 'string' ? JSON.parse(statusRaw) : statusRaw;
+                        if (status && status.isConfigured) {
+                            openrouterKeyStatusDot.className = 'h-1.5 w-1.5 rounded-full bg-tertiary shadow-[0_0_6px_rgba(69,223,169,0.7)]';
+                            openrouterKeyStatusText.className = 'text-tertiary font-medium';
+                            openrouterKeyStatusText.textContent = `Connected (${status.maskedKey || 'Active'})`;
+                            if (!openrouterApiKeyInput.value) {
+                                openrouterApiKeyInput.placeholder = status.maskedKey || 'sk-or-v1-... (Configured)';
+                            }
+                            if (btnDeleteOpenRouterKey) btnDeleteOpenRouterKey.classList.remove('hidden');
+                        } else {
+                            openrouterKeyStatusDot.className = 'h-1.5 w-1.5 rounded-full bg-error';
+                            openrouterKeyStatusText.className = 'text-error font-medium';
+                            openrouterKeyStatusText.textContent = 'Not Configured';
+                            if (btnDeleteOpenRouterKey) btnDeleteOpenRouterKey.classList.add('hidden');
+                        }
+                    } catch (e) {
+                        console.warn('Failed to get openrouter key status:', e);
+                    }
+                }
+
+                if (btnTestOpenRouterKey) {
+                    btnTestOpenRouterKey.addEventListener('click', async () => {
+                        const key = (openrouterApiKeyInput.value || '').trim();
+                        if (!key) {
+                            openrouterKeyFeedback.classList.remove('hidden');
+                            openrouterKeyFeedback.className = 'text-xs font-mono-code text-error';
+                            openrouterKeyFeedback.textContent = '✗ Please enter an OpenRouter key (sk-or-v1-...) to test.';
+                            return;
+                        }
+
+                        openrouterKeyFeedback.classList.remove('hidden');
+                        openrouterKeyFeedback.className = 'text-xs font-mono-code text-on-surface-variant';
+                        openrouterKeyFeedback.textContent = 'Verifying key & checking credit balance...';
+
+                        try {
+                            const resRaw = await window.rift.testOpenRouterKey(key);
+                            const res = typeof resRaw === 'string' ? JSON.parse(resRaw) : resRaw;
+                            if (res && res.valid) {
+                                openrouterKeyFeedback.className = 'text-xs font-mono-code text-tertiary';
+                                openrouterKeyFeedback.textContent = '✓ ' + (res.message || 'Key connected!');
+                            } else {
+                                openrouterKeyFeedback.className = 'text-xs font-mono-code text-error';
+                                openrouterKeyFeedback.textContent = '✗ ' + (res.message || 'Invalid OpenRouter API key.');
+                            }
+                        } catch (err) {
+                            openrouterKeyFeedback.className = 'text-xs font-mono-code text-error';
+                            openrouterKeyFeedback.textContent = '✗ Connection test failed: ' + err;
+                        }
+                    });
+                }
+
+                if (btnSaveOpenRouterKey) {
+                    btnSaveOpenRouterKey.addEventListener('click', async () => {
+                        const key = (openrouterApiKeyInput.value || '').trim();
+                        if (!key) {
+                            window.showToast({ message: 'Please enter an OpenRouter key starting with sk-or-...', type: 'warning' });
+                            return;
+                        }
+                        try {
+                            await window.rift.saveOpenRouterKey(key);
+                            window.showToast({ message: 'OpenRouter API Key saved securely!', type: 'success' });
+                            openrouterApiKeyInput.value = '';
+                            await checkOpenRouterStatus();
+                            if (controls.inferenceModel && !controls.inferenceModel.value) {
+                                controls.inferenceModel.value = 'openai/whisper-large-v3-turbo';
+                                saveField('inferenceModel', 'openai/whisper-large-v3-turbo');
+                            }
+                        } catch (err) {
+                            window.showToast({ message: 'Failed to save OpenRouter key: ' + err, type: 'error' });
+                        }
+                    });
+                }
+
+                if (btnDeleteOpenRouterKey) {
+                    btnDeleteOpenRouterKey.addEventListener('click', async () => {
+                        try {
+                            await window.rift.deleteOpenRouterKey();
+                            window.showToast({ message: 'OpenRouter API Key removed', type: 'info' });
+                            openrouterApiKeyInput.value = '';
+                            openrouterApiKeyInput.placeholder = 'Enter or update sk-or-v1-... key';
+                            await checkOpenRouterStatus();
+                        } catch (err) {
+                            window.showToast({ message: 'Failed to remove key: ' + err, type: 'error' });
+                        }
+                    });
+                }
+
+                if (openrouterApiKeyInput) {
+                    openrouterApiKeyInput.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') {
+                            btnSaveOpenRouterKey.click();
+                        }
+                    });
+                }
+
+                // 1.5. Groq Key Status & Management
+                const groqApiKeyInput = document.getElementById('groqApiKeyInput');
+                const groqKeyStatusDot = document.getElementById('groqKeyStatusDot');
+                const groqKeyStatusText = document.getElementById('groqKeyStatusText');
+                const groqKeyFeedback = document.getElementById('groqKeyFeedback');
+                const btnTestGroqKey = document.getElementById('btnTestGroqKey');
+                const btnSaveGroqKey = document.getElementById('btnSaveGroqKey');
+
+                async function checkGroqStatus() {
+                    try {
+                        const statusRaw = await window.rift.getGroqKeyStatus();
+                        const status = typeof statusRaw === 'string' ? JSON.parse(statusRaw) : statusRaw;
+                        if (status && status.isConfigured) {
+                            groqKeyStatusDot.className = 'h-1.5 w-1.5 rounded-full bg-tertiary shadow-[0_0_6px_rgba(69,223,169,0.7)]';
+                            groqKeyStatusText.className = 'text-tertiary font-medium';
+                            groqKeyStatusText.textContent = `Connected (${status.maskedKey || 'Active'})`;
+                            if (!groqApiKeyInput.value) {
+                                groqApiKeyInput.placeholder = status.maskedKey || 'gsk_... (Configured)';
+                            }
+                        } else {
+                            groqKeyStatusDot.className = 'h-1.5 w-1.5 rounded-full bg-error';
+                            groqKeyStatusText.className = 'text-error font-medium';
+                            groqKeyStatusText.textContent = 'Not Configured';
+                        }
+                    } catch (e) {
+                        console.warn('Failed to get groq key status:', e);
+                    }
+                }
+
+                if (btnTestGroqKey) {
+                    btnTestGroqKey.addEventListener('click', async () => {
+                        const key = (groqApiKeyInput.value || '').trim();
+                        if (!key) {
+                            groqKeyFeedback.classList.remove('hidden');
+                            groqKeyFeedback.className = 'text-xs font-mono-code text-error';
+                            groqKeyFeedback.textContent = '✗ Please enter a Groq API key starting with gsk_... to test.';
+                            return;
+                        }
+
+                        groqKeyFeedback.classList.remove('hidden');
+                        groqKeyFeedback.className = 'text-xs font-mono-code text-on-surface-variant';
+                        groqKeyFeedback.textContent = 'Verifying with Groq API...';
+
+                        try {
+                            const resRaw = await window.rift.testGroqKey(key);
+                            const res = typeof resRaw === 'string' ? JSON.parse(resRaw) : resRaw;
+                            if (res && res.valid) {
+                                groqKeyFeedback.className = 'text-xs font-mono-code text-tertiary';
+                                groqKeyFeedback.textContent = '✓ ' + (res.message || 'Key is valid and active!');
+                            } else {
+                                groqKeyFeedback.className = 'text-xs font-mono-code text-error';
+                                groqKeyFeedback.textContent = '✗ ' + (res.message || 'Invalid API key.');
+                            }
+                        } catch (err) {
+                            groqKeyFeedback.className = 'text-xs font-mono-code text-error';
+                            groqKeyFeedback.textContent = '✗ Connection test failed: ' + err;
+                        }
+                    });
+                }
+
+                if (btnSaveGroqKey) {
+                    btnSaveGroqKey.addEventListener('click', async () => {
+                        const key = (groqApiKeyInput.value || '').trim();
+                        if (!key) {
+                            window.showToast({ message: 'Please enter a key starting with gsk_...', type: 'warning' });
+                            return;
+                        }
+                        try {
+                            await window.rift.saveGroqKey(key);
+                            window.showToast({ message: 'Groq API Key saved successfully!', type: 'success' });
+                            groqApiKeyInput.value = '';
+                            await checkGroqStatus();
+                        } catch (err) {
+                            window.showToast({ message: 'Failed to save key: ' + err, type: 'error' });
+                        }
+                    });
+                }
+
+                if (groqApiKeyInput) {
+                    groqApiKeyInput.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') {
+                            btnSaveGroqKey.click();
+                        }
+                    });
+                }
+
+                await checkOpenRouterStatus();
+                await checkGroqStatus();
+
+                // 2. Populate Settings
+                try {
+                    const settingsRaw = await window.rift.getSettings();
+                    const s = typeof settingsRaw === 'string' ? JSON.parse(settingsRaw) : settingsRaw;
+                    if (s) {
+                        if (s.transcriptionMode) controls.transcriptionMode.value = s.transcriptionMode;
+                        if (s.inferenceModel) {
+                            let modelVal = s.inferenceModel;
+                            if (modelVal === 'whisper-large-v3-turbo') modelVal = 'groq/whisper-large-v3-turbo';
+                            if (modelVal === 'whisper-large-v3') modelVal = 'groq/whisper-large-v3';
+                            controls.inferenceModel.value = modelVal;
+                        }
+                        if (s.inferenceProfile) controls.inferenceProfile.value = s.inferenceProfile;
+                        if (s.widgetVisibility) updateWidgetVisibilityUI(s.widgetVisibility);
+                        if (s.widgetStyle) updateWidgetStyleUI(s.widgetStyle);
+
+                        if (s.microphoneDeviceId !== undefined && s.microphoneDeviceId !== null) {
+                            controls.microphoneDeviceId.value = s.microphoneDeviceId;
+                        } else {
+                            controls.microphoneDeviceId.value = '';
+                        }
+
+                        controls.launchAtLogin.checked = !!s.launchAtLogin;
+                        controls.recordingSounds.checked = s.recordingSounds !== false;
+                        if (controls.soundVolume) {
+                            const rawVol = s.soundVolume !== undefined ? s.soundVolume : (s.sound_volume !== undefined ? s.sound_volume : 0.6);
+                            const pct = Math.round(rawVol * 100);
+                            controls.soundVolume.value = pct;
+                            if (controls.soundVolumeLabel) controls.soundVolumeLabel.textContent = `${pct}%`;
+                        }
+                        controls.pauseOtherAudioWhileTalking.checked = !!s.pauseOtherAudioWhileTalking;
+                        controls.copyInsteadOfType.checked = !!s.copyInsteadOfType;
+                        controls.lockWidgetPosition.checked = !!s.lockWidgetPosition;
+                        controls.followCursorAcrossMonitors.checked = s.followCursorAcrossMonitors !== false;
+                        controls.autoEnhancePrompt.checked = !!s.autoEnhancePrompt;
+                        if (controls.contextAwareFormatting) {
+                            controls.contextAwareFormatting.checked = s.contextAwareFormatting !== false && s.context_aware_formatting !== false;
+                        }
+                        if (controls.voiceCommandsEnabled) {
+                            controls.voiceCommandsEnabled.checked = s.voiceCommandsEnabled !== false && s.voice_commands_enabled !== false;
+                        }
+                        if (controls.quickActionsEnabled) {
+                            controls.quickActionsEnabled.checked = s.quickActionsEnabled !== false && s.quick_actions_enabled !== false;
+                        }
+                        if (controls.clipboardHistoryEnabled) {
+                            controls.clipboardHistoryEnabled.checked = s.clipboardHistoryEnabled !== false && s.clipboard_history_enabled !== false;
+                        }
+                        if (controls.voiceSnippetsEnabled) {
+                            controls.voiceSnippetsEnabled.checked = s.voiceSnippetsEnabled !== false && s.voice_snippets_enabled !== false;
+                        }
+
+                        const tenglishOn = s.tenglishModeEnabled !== undefined ? !!s.tenglishModeEnabled : !!s.tenglish_mode_enabled;
+                        if (controls.tenglishModeEnabled) {
+                            controls.tenglishModeEnabled.checked = tenglishOn;
+                            updateTenglishUI(tenglishOn);
+                        }
+
+                        if (s.formattingInstructions !== undefined) {
+                            controls.formattingInstructions.value = s.formattingInstructions;
+                            charCounter.textContent = `${s.formattingInstructions.length} / 1500`;
+                        }
+
+                        if (s.micBoost !== undefined || s.mic_boost !== undefined) {
+                            updateMicBoostUI(s.micBoost || s.mic_boost || 'off');
+                        } else {
+                            updateMicBoostUI('off');
+                        }
+                    }
+                } catch (e) {
+                    console.error('Failed to load settings:', e);
+                }
+
+                // 3. Populate Local Models
+                await loadLocalModelsStatus();
+
+                // 3b. Populate Voice Snippets
+                await loadSnippets();
+
+                // 4. Listen for model download events
+                window.rift.on('modelDownloadProgress', (dataRaw) => {
+                    try {
+                        const data = typeof dataRaw === 'string' ? JSON.parse(dataRaw) : dataRaw;
+                        const prof = data.profile;
+                        const percent = data.percent || 0;
+                        const stage = data.stage || 'downloading';
+                        const message = data.message || '';
+
+                        const statusContainer = document.getElementById(`model-status-${prof}`);
+                        const progressWrap = document.getElementById(`model-progress-wrap-${prof}`);
+                        const stageMsg = document.getElementById(`model-stage-msg-${prof}`);
+                        const bar = document.getElementById(`model-bar-${prof}`);
+                        const pctEl = document.getElementById(`model-pct-${prof}`);
+                        const bytesEl = document.getElementById(`model-bytes-${prof}`);
+
+                        if (progressWrap && progressWrap.classList.contains('hidden')) {
+                            progressWrap.classList.remove('hidden');
+                            progressWrap.classList.add('flex');
+                        }
+
+                        if (statusContainer) {
+                            statusContainer.innerHTML = `
+                                <span class="inline-flex items-center gap-1 text-xs text-secondary px-2.5 py-1 rounded-full bg-secondary/10 border border-secondary/20 font-medium">
+                                    <span class="material-symbols-outlined text-[14px] animate-spin">sync</span> ${percent}%
+                                </span>
+                            `;
+                        }
+
+                        if (stageMsg) stageMsg.textContent = message || (stage === 'engine' ? 'Setting up Whisper Engine...' : 'Downloading model...');
+                        if (bar) bar.style.width = `${Math.min(percent, 100)}%`;
+                        if (pctEl) pctEl.textContent = `${percent}%`;
+
+                        if (bytesEl && data.receivedBytes && data.totalBytes) {
+                            const recMb = (data.receivedBytes / (1024 * 1024)).toFixed(1);
+                            const totMb = (data.totalBytes / (1024 * 1024)).toFixed(1);
+                            bytesEl.textContent = `${recMb} MB / ${totMb} MB`;
+                        }
+                    } catch (e) {
+                        console.error('Progress handler error:', e);
+                    }
+                });
+
+                window.rift.on('modelDownloadComplete', (dataRaw) => {
+                    try {
+                        const data = typeof dataRaw === 'string' ? JSON.parse(dataRaw) : dataRaw;
+                        if (data.success) {
+                            window.showToast({
+                                message: `🎉 Model '${data.displayName || data.profile}' (${data.sizeMb || ''} MB) is ready for offline dictation!`,
+                                type: 'success'
+                            });
+                        } else {
+                            window.showToast({
+                                message: `Model download failed: ${data.message || 'Error'}`,
+                                type: 'error'
+                            });
+                        }
+                        loadLocalModelsStatus();
+                    } catch (e) {}
+                });
+
+                // Launch Setup Wizard button
+                const runWizardBtn = document.getElementById('runOnboardingWizardBtn');
+                if (runWizardBtn) {
+                    runWizardBtn.addEventListener('click', () => {
+                        window.location.href = 'onboarding-welcome.html';
+                    });
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,85 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Rift",
+  "version": "1.0.0",
+  "identifier": "com.rift.dictation",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "widget",
+        "title": "Rift Widget",
+        "url": "widget/widget.html",
+        "width": 260,
+        "height": 76,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "shadow": false,
+        "visible": true
+      },
+      {
+        "label": "main",
+        "title": "Rift",
+        "url": "screens/home.html",
+        "width": 1100,
+        "height": 720,
+        "minWidth": 860,
+        "minHeight": 580,
+        "visible": true,
+        "resizable": true,
+        "decorations": true
+      },
+      {
+        "label": "scratchpad",
+        "title": "Rift Scratch Pad",
+        "url": "screens/scratchpad.html",
+        "width": 440,
+        "height": 540,
+        "minWidth": 360,
+        "minHeight": 380,
+        "decorations": false,
+        "transparent": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": false,
+        "resizable": true,
+        "visible": false
+      },
+      {
+        "label": "spotlight",
+        "title": "Ask Rift - Spotlight Voice AI",
+        "url": "screens/spotlight.html",
+        "width": 640,
+        "height": 440,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "shadow": false,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.ico",
+      "icons/tray_icon.png"
+    ],
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "10.15",
+      "infoPlist": "Info.plist"
+    }
+  }
+}

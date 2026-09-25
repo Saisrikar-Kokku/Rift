@@ -1,0 +1,5 @@
+[target.x86_64-pc-windows-msvc]
+rustflags = [
+    "-C", "link-arg=/LIBPATH:C:/Program Files/Microsoft Visual Studio/2022/Community/SDK/ScopeCppSDK/vc15/SDK/lib",
+    "-C", "link-arg=/LIBPATH:C:/Program Files/Microsoft Visual Studio/2022/Community/SDK/ScopeCppSDK/vc15/VC/lib"
+]

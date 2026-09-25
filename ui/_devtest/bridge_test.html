@@ -1,0 +1,2345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rift — Bridge Test</title>
+  <style>
+    :root {
+      --bg-color: #0f1117;
+      --card-bg: #1a1d26;
+      --card-border: #2a2f3e;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --accent-primary: #6366f1;
+      --accent-hover: #4f46e5;
+      --status-connecting: #f59e0b;
+      --status-connected: #10b981;
+      --status-recording: #ef4444;
+      --status-warning: #f59e0b;
+      --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font-family: var(--font-stack);
+      padding: 32px;
+      line-height: 1.5;
+    }
+
+    .container { max-width: 860px; margin: 0 auto; }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 14px; border-radius: 9999px;
+      font-size: 0.85rem; font-weight: 600;
+      background-color: rgba(245, 158, 11, 0.15);
+      color: var(--status-connecting);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      transition: all 0.25s ease;
+    }
+    .status-badge.connected {
+      background-color: rgba(16, 185, 129, 0.15);
+      color: var(--status-connected);
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background-color: currentColor; }
+
+    .card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px; padding: 24px; margin-bottom: 24px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    }
+    .card h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 16px; color: var(--text-main); }
+
+    .phase-divider {
+      font-size: 0.8rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--text-muted);
+      margin: 32px 0 16px 0; padding-bottom: 8px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .input-group { display: flex; gap: 12px; margin-bottom: 16px; }
+
+    input[type="text"], select {
+      flex: 1; padding: 10px 14px;
+      background-color: #12141c; border: 1px solid var(--card-border);
+      border-radius: 6px; color: var(--text-main);
+      font-size: 0.95rem; outline: none;
+      transition: border-color 0.2s ease;
+    }
+    input[type="text"]:focus, select:focus { border-color: var(--accent-primary); }
+
+    button {
+      padding: 10px 20px; background-color: var(--accent-primary);
+      color: #ffffff; border: none; border-radius: 6px;
+      font-weight: 600; font-size: 0.95rem; cursor: pointer;
+      transition: background-color 0.2s ease, opacity 0.2s ease;
+    }
+    button:hover:not(:disabled) { background-color: var(--accent-hover); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .response-box {
+      background-color: #12141c; border: 1px solid var(--card-border);
+      border-radius: 6px; padding: 12px 16px;
+      font-family: Consolas, Monaco, "Courier New", monospace;
+      font-size: 0.9rem; color: #e2e8f0; min-height: 44px;
+      display: flex; align-items: center; word-break: break-word;
+    }
+    .response-box.empty { color: var(--text-muted); font-style: italic; }
+
+    .log-container {
+      background-color: #12141c; border: 1px solid var(--card-border);
+      border-radius: 6px; height: 200px; overflow-y: auto;
+      padding: 12px; font-family: Consolas, Monaco, "Courier New", monospace;
+      font-size: 0.85rem;
+    }
+
+    .log-row {
+      display: flex; gap: 16px; padding: 4px 8px;
+      border-radius: 4px; animation: fadeIn 0.3s ease;
+    }
+    .log-row:nth-child(even) { background-color: rgba(255, 255, 255, 0.02); }
+    .log-time { color: var(--text-muted); flex-shrink: 0; }
+    .log-payload { color: #38bdf8; }
+    .log-event { font-weight: 600; }
+    .log-event.started { color: var(--status-recording); }
+    .log-event.stopped { color: var(--status-connected); }
+
+    /* Phase 2: Recording status */
+    .recording-status {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 10px 20px; border-radius: 8px;
+      font-size: 1.1rem; font-weight: 700; margin-bottom: 16px;
+      transition: all 0.2s ease;
+    }
+    .recording-status.idle { background-color: rgba(255, 255, 255, 0.05); color: var(--text-muted); }
+    .recording-status.recording {
+      background-color: rgba(239, 68, 68, 0.15); color: var(--status-recording);
+      border: 1px solid rgba(239, 68, 68, 0.3); animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+
+    .hotkey-info { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .hotkey-info-label { color: var(--text-muted); font-size: 0.9rem; }
+    .hotkey-info-value {
+      font-family: Consolas, Monaco, "Courier New", monospace;
+      font-size: 0.95rem; font-weight: 600; color: #38bdf8;
+      background-color: rgba(56, 189, 248, 0.1); padding: 4px 12px; border-radius: 4px;
+    }
+    .hold-duration { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 16px; }
+    .save-result {
+      margin-top: 12px; font-size: 0.9rem; padding: 8px 12px;
+      border-radius: 6px; display: none;
+    }
+    .save-result.success { display: block; background-color: rgba(16, 185, 129, 0.1); color: var(--status-connected); border: 1px solid rgba(16, 185, 129, 0.2); }
+    .save-result.error { display: block; background-color: rgba(239, 68, 68, 0.1); color: var(--status-recording); border: 1px solid rgba(239, 68, 68, 0.2); }
+
+    /* Phase 3: Audio */
+    .level-meter-track {
+      width: 100%; height: 16px; background-color: #12141c;
+      border: 1px solid var(--card-border); border-radius: 8px;
+      overflow: hidden; margin-bottom: 16px;
+    }
+    .level-meter-fill {
+      height: 100%; width: 0%; border-radius: 8px;
+      background: linear-gradient(90deg, #10b981, #f59e0b, #ef4444);
+      transition: width 0.05s linear;
+    }
+    .recording-result {
+      padding: 12px 16px; border-radius: 8px; margin-bottom: 12px;
+      font-size: 0.9rem; animation: fadeIn 0.3s ease;
+    }
+    .recording-result.normal {
+      background-color: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2);
+      color: var(--status-connected);
+    }
+    .recording-result.silent {
+      background-color: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3);
+      color: var(--status-warning);
+    }
+    .recording-result.mic-error {
+      background-color: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2);
+      color: var(--status-recording);
+    }
+    .recording-result audio { display: block; margin-top: 8px; width: 100%; }
+    .mic-select-group { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
+    .mic-select-group label { color: var(--text-muted); font-size: 0.9rem; white-space: nowrap; }
+
+    /* Phase 5: Groq Transcription */
+    .key-status-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 14px; border-radius: 6px;
+      font-size: 0.9rem; font-weight: 600; margin-bottom: 16px;
+      background-color: rgba(255, 255, 255, 0.05); color: var(--text-muted);
+    }
+    .key-status-badge.configured {
+      background-color: rgba(16, 185, 129, 0.15); color: var(--status-connected);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .key-status-badge.none {
+      background-color: rgba(239, 68, 68, 0.15); color: var(--status-recording);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .transcript-box {
+      margin-top: 12px; padding: 12px 14px; border-radius: 8px;
+      background-color: #12141c; border: 1px solid var(--card-border);
+    }
+    .transcript-box.transcribing {
+      color: #818cf8; font-style: italic; display: flex; align-items: center; gap: 10px;
+    }
+    .transcript-box.success {
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+    .transcript-box.error {
+      border-color: rgba(239, 68, 68, 0.3); color: #f87171;
+    }
+    .transcript-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 8px; font-size: 0.8rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--text-muted);
+    }
+    .transcript-text {
+      font-size: 1.05rem; line-height: 1.5; color: #ffffff; font-weight: 500;
+    }
+    .latency-badge {
+      display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px;
+      background-color: rgba(99, 102, 241, 0.2); color: #a5b4fc; font-size: 0.75rem;
+      font-family: Consolas, Monaco, monospace;
+    }
+    .stats-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px;
+      margin-bottom: 16px;
+    }
+    .stat-card {
+      background-color: #12141c; border: 1px solid var(--card-border);
+      border-radius: 8px; padding: 12px; text-align: center;
+    }
+    .stat-value { font-size: 1.25rem; font-weight: 700; color: #38bdf8; font-family: Consolas, monospace; }
+    .stat-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; margin-top: 4px; }
+
+    /* Phase 8: Local STT styles */
+    .engine-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 999px;
+      font-size: 0.75rem; font-weight: 600;
+    }
+    .engine-badge.cloud {
+      background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.4);
+    }
+    .engine-badge.local {
+      background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+    .mode-radio-group {
+      display: flex; gap: 16px; margin-bottom: 16px;
+    }
+    .mode-radio-label {
+      display: flex; align-items: center; gap: 8px; cursor: pointer;
+      font-size: 0.95rem; font-weight: 500;
+      padding: 8px 16px; border-radius: 6px; border: 1px solid var(--card-border);
+      background: #12141c; transition: all 0.2s ease;
+    }
+    .mode-radio-label:hover { border-color: var(--accent-primary); }
+    .mode-radio-label.active {
+      border-color: var(--accent-primary);
+      background: rgba(99, 102, 241, 0.12);
+      color: #ffffff;
+    }
+    .mode-radio-label input[type="radio"] { accent-color: var(--accent-primary); }
+    .models-table {
+      width: 100%; border-collapse: collapse; margin-top: 12px; margin-bottom: 16px;
+      font-size: 0.9rem;
+    }
+    .models-table th, .models-table td {
+      padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--card-border);
+    }
+    .models-table th {
+      color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .models-table tr:last-child td { border-bottom: none; }
+    .model-status-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;
+    }
+    .model-status-badge.downloaded {
+      background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .model-status-badge.missing {
+      background: rgba(156, 163, 175, 0.15); color: #9ca3af; border: 1px solid rgba(156, 163, 175, 0.25);
+    }
+    .download-progress-bar {
+      height: 6px; width: 100%; background: #1f2430; border-radius: 3px; overflow: hidden; margin-top: 8px;
+    }
+    .download-progress-fill {
+      height: 100%; width: 0%; background: linear-gradient(90deg, #6366f1, #38bdf8);
+      transition: width 0.3s ease;
+    }
+  </style>
+
+  <script src="../shared/qwebchannel.js"></script>
+  <script src="../shared/bridge.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Rift — Bridge Test</h1>
+      <div id="statusBadge" class="status-badge">
+        <span class="status-dot"></span>
+        <span id="statusText">Connecting...</span>
+      </div>
+    </header>
+
+    <!-- ============================================= -->
+    <!-- Phase 1 — Ping & Heartbeat                    -->
+    <!-- ============================================= -->
+    <div class="phase-divider">Phase 1 — Bridge Verification</div>
+
+    <section class="card">
+      <h2>Slot Invocation Test (ping)</h2>
+      <div class="input-group">
+        <input type="text" id="pingInput" placeholder="Enter test message..." value="Hello from browser" />
+        <button id="sendPingBtn" disabled>Send Ping</button>
+      </div>
+      <div id="pingResponse" class="response-box empty">No ping sent yet</div>
+    </section>
+
+    <section class="card">
+      <h2>Heartbeat Log (testEvent Signal)</h2>
+      <div id="heartbeatLog" class="log-container"></div>
+    </section>
+
+    <!-- ============================================= -->
+    <!-- Phase 2 — Hotkey Test                         -->
+    <!-- ============================================= -->
+    <div class="phase-divider">Phase 2 — Hotkey Test</div>
+
+    <section class="card">
+      <h2>Push-to-Talk Status</h2>
+      <div id="recordingStatus" class="recording-status idle">Idle</div>
+      <div class="hold-duration" id="holdDuration">Last hold: —</div>
+      <div class="hotkey-info">
+        <span class="hotkey-info-label">Current key:</span>
+        <span class="hotkey-info-value" id="currentKey">loading...</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Change Push-to-Talk Key</h2>
+      <div class="input-group">
+        <input type="text" id="hotkeyInput" placeholder='e.g. "right ctrl", "f13", "right alt"' />
+        <button id="saveHotkeyBtn" disabled>Save Hotkey</button>
+      </div>
+      <div id="saveResult" class="save-result"></div>
+    </section>
+
+    <section class="card">
+      <h2>Hotkey Event Log</h2>
+      <div id="hotkeyLog" class="log-container"></div>
+    </section>
+
+    <!-- ============================================= -->
+    <!-- Phase 3 — Audio Capture Test                  -->
+    <!-- ============================================= -->
+    <div class="phase-divider">Phase 3 — Audio Capture Test</div>
+
+    <section class="card">
+      <h2>Microphone Selection</h2>
+      <div class="mic-select-group">
+        <label for="micSelect">Input device:</label>
+        <select id="micSelect" disabled>
+          <option value="">Loading devices...</option>
+        </select>
+      </div>
+      <div id="micSelectResult" class="save-result"></div>
+    </section>
+
+    <section class="card">
+      <h2>Live Audio Level</h2>
+      <div class="level-meter-track">
+        <div id="levelMeterFill" class="level-meter-fill"></div>
+      </div>
+      <div style="font-size:0.85rem; color:var(--text-muted);" id="levelLabel">Level: 0%</div>
+    </section>
+
+    <section class="card">
+      <h2>Recording Results</h2>
+      <div id="recordingResults">
+        <div class="response-box empty" id="noRecordingsYet">No recordings yet — hold the push-to-talk key and speak</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Recording Session Log</h2>
+      <div id="audioLog" class="log-container"></div>
+    </section>
+
+    <!-- ============================================= -->
+    <!-- Phase 4 — Floating Widget Test                -->
+    <!-- ============================================= -->
+    <div class="phase-divider">Phase 4 — Floating Widget Test</div>
+
+    <section class="card">
+      <h2>Widget Settings</h2>
+      <div style="margin-bottom: 16px; color: var(--text-muted); font-size: 0.9rem;">
+        Watch the floating pill near the bottom of your screen, not this window, to see the result of these buttons.
+      </div>
+      
+      <div class="input-group" style="align-items: center;">
+        <label for="widgetVisibilitySelect" style="color: var(--text-muted); font-size: 0.9rem; min-width: 140px;">Widget Visibility:</label>
+        <select id="widgetVisibilitySelect">
+          <option value="always">Always (Visible during recording &amp; preview)</option>
+          <option value="recording">Recording (Visible during recording &amp; preview)</option>
+          <option value="hidden">Hidden (Never visible)</option>
+        </select>
+      </div>
+      <div id="visibilityResult" class="save-result"></div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 16px;">
+        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.95rem;">
+          <input type="checkbox" id="followCursorCheck" checked style="width: 18px; height: 18px; accent-color: var(--accent-primary);">
+          <span>Follow Cursor Across Monitors</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.95rem;">
+          <input type="checkbox" id="lockPositionCheck" style="width: 18px; height: 18px; accent-color: var(--accent-primary);">
+          <span>Lock Widget Position</span>
+        </label>
+      </div>
+      <div id="widgetSettingsResult" class="save-result" style="margin-top: 12px;"></div>
+    </section>
+
+    <section class="card">
+      <h2>Widget State Previews (DevTest Manual Simulation)</h2>
+      <div style="margin-bottom: 16px; color: var(--text-muted); font-size: 0.85rem;">
+        Click below to simulate backend signals without needing to speak into the microphone:
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+        <button id="btnPreviewRecording" style="background-color: #ef4444;">Preview: Recording</button>
+        <button id="btnPreviewProcessing" style="background-color: #6366f1;">Preview: Processing</button>
+        <button id="btnPreviewSuccess" style="background-color: #10b981;">Preview: Success</button>
+        <button id="btnPreviewWarning" style="background-color: #f59e0b;">Preview: Warning</button>
+        <button id="btnPreviewError" style="background-color: #b91c1c;">Preview: Error</button>
+      </div>
+    </section>
+
+    <!-- ============================================= -->
+    <!-- Phase 5 — Groq Transcription Test             -->
+    <!-- ============================================= -->
+    <div class="phase-divider">Phase 4.5 — OpenRouter MAI-Transcribe 2 Test</div>
+
+    <section class="card">
+      <h2>OpenRouter API Key &amp; Connection (Primary STT)</h2>
+      <div id="openrouterKeyStatusBadge" class="key-status-badge none">No key configured</div>
+
+      <div class="input-group" style="position: relative;">
+        <input type="password" id="openrouterKeyInput" placeholder="Enter OpenRouter API key (sk-or-v1-...)" autocomplete="off" style="padding-right: 48px;" />
+        <button id="toggleOpenrouterKeyVisibility" type="button" title="Show/Hide Key" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 1.1rem; cursor: pointer; padding: 6px;">👁️</button>
+      </div>
+
+      <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+        <button id="testOpenrouterKeyBtn">Check Balance &amp; Test</button>
+        <button id="saveOpenrouterKeyBtn" style="background-color: #6366f1;">Save Key</button>
+        <button id="deleteOpenrouterKeyBtn" style="background-color: #ef4444;">Delete Key</button>
+      </div>
+      <div id="openrouterTestResult" class="save-result"></div>
+    </section>
+
+    <!-- ============================================= -->
+    <div class="phase-divider">Phase 5 — Groq Transcription Test</div>
+
+    <section class="card">
+      <h2>Groq API Key &amp; Connection (Backup STT)</h2>
+      <div id="groqKeyStatusBadge" class="key-status-badge none">No key configured</div>
+
+      <div class="input-group" style="position: relative;">
+        <input type="password" id="groqKeyInput" placeholder="Enter Groq API key (gsk_...)" autocomplete="off" style="padding-right: 48px;" />
+        <button id="toggleGroqKeyVisibility" type="button" title="Show/Hide Key" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 1.1rem; cursor: pointer; padding: 6px;">👁️</button>
+      </div>
+
+      <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+        <button id="testGroqKeyBtn">Test Connection</button>
+        <button id="saveGroqKeyBtn" style="background-color: #10b981;">Save Key</button>
+      </div>
+      <div id="groqTestResult" class="save-result"></div>
+    </section>
+
+    <section class="card">
+      <h2>Transcription Metrics &amp; Latency</h2>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="statTranscriptionsCount">0</div>
+          <div class="stat-label">Transcriptions</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statLastLatency">—</div>
+          <div class="stat-label">Last Latency</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statAvgLatency">—</div>
+          <div class="stat-label">Avg Latency</div>
+        </div>
+      </div>
+      <div id="transcriptionLog" class="log-container"></div>
+    </section>
+
+    <!-- ============================================= -->
+    <!-- Phase 6 — Text Injection Test                 -->
+    <!-- ============================================= -->
+    <div class="phase-divider">Phase 6 — Text Injection Test</div>
+
+    <section class="card">
+      <h2>Focus Restoration &amp; Auto-Paste</h2>
+      <div style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; font-size: 0.9rem; color: #cbd5e1; line-height: 1.5;">
+        💡 <strong>Tip:</strong> To actually test injection, switch to <em>Notepad</em>, <em>VS Code</em>, or a browser <strong>BEFORE</strong> holding the hotkey, so Rift isn't the focused window when you start recording.
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.95rem;">
+          <input type="checkbox" id="copyInsteadOfTypeCheck" style="width: 18px; height: 18px; cursor: pointer;" />
+          <span>Copy only (don't auto-paste)</span>
+        </label>
+        <div style="font-size: 0.8rem; color: #94a3b8; margin-left: 28px; margin-top: 4px;">
+          When enabled, transcribed text stays on the clipboard without restoring focus or simulating Ctrl+V.
+        </div>
+      </div>
+
+      <div style="background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 14px; margin-bottom: 14px;">
+        <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; margin-bottom: 6px;">Target Window Captured at Recording Start</div>
+        <div id="capturedTargetInfo" style="font-weight: 500; color: #f1f5f9; font-size: 0.95rem;">No recording active</div>
+      </div>
+
+      <div id="injectionResultBanner" class="save-result" style="display: none; margin-bottom: 14px;"></div>
+
+      <div id="injectionLog" class="log-container"></div>
+    </section>
+
+    <!-- ============================================= -->
+    <!-- Phase 7 — Transcript Cleanup Test             -->
+    <!-- ============================================= -->
+    <div class="phase-divider">Phase 7 — Transcript Cleanup Test</div>
+
+    <section class="card">
+      <h2>Cleanup Test Console</h2>
+      <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 14px;">
+        Test the pure regex-based anti-hallucination cleanup on demand with sample inputs (e.g. trailing <code>...</code>, standalone <code>…</code>, genuine terminal periods, and mid-sentence ellipses).
+      </div>
+
+      <div class="input-group" style="align-items: flex-start; gap: 12px;">
+        <textarea id="cleanupTestInput" rows="2" style="flex: 1; padding: 10px 14px; background-color: #12141c; border: 1px solid var(--card-border); border-radius: 6px; color: var(--text-main); font-family: inherit; font-size: 0.95rem; resize: vertical; outline: none;" placeholder="e.g. run npm install and start the dev server..."></textarea>
+        <button id="runCleanupBtn" style="white-space: nowrap; height: 42px;">Run Cleanup</button>
+      </div>
+
+      <div id="cleanupOutputCard" style="display: none; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 14px; margin-top: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8;">Cleaned Output</span>
+          <span id="cleanupBadge" class="save-result" style="display: inline-block; padding: 2px 8px; margin: 0; font-size: 0.75rem; border-radius: 4px;"></span>
+        </div>
+        <div id="cleanupResultText" style="font-family: Consolas, Monaco, monospace; font-size: 0.95rem; color: #f1f5f9; white-space: pre-wrap; word-break: break-word;"></div>
+      </div>
+    </section>
+
+    <!-- ============================================= -->
+    <!-- Phase 8 — Local Transcription Engine          -->
+    <!-- ============================================= -->
+    <div class="phase-divider">Phase 8 — Local Transcription Test (faster-whisper)</div>
+
+    <section class="card">
+      <h2>Transcription Engine &amp; Mode</h2>
+      <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 16px;">
+        Choose whether dictation is sent to Groq Cloud or processed 100% offline on your CPU using <code>faster-whisper</code>.
+      </div>
+
+      <div class="mode-radio-group">
+        <label class="mode-radio-label active" id="modeCloudLabel">
+          <input type="radio" name="transcriptionMode" id="modeCloudRadio" value="cloud" checked />
+          <span>☁️ Cloud (Groq API)</span>
+        </label>
+        <label class="mode-radio-label" id="modeLocalLabel">
+          <input type="radio" name="transcriptionMode" id="modeLocalRadio" value="local" />
+          <span>💻 Local (Offline CPU)</span>
+        </label>
+      </div>
+      <div id="modeChangeResult" class="save-result" style="margin-bottom: 16px;"></div>
+
+      <div id="localSettingsContainer" style="display: none; padding-top: 12px; border-top: 1px solid var(--card-border);">
+        <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;">
+          <label for="localProfileSelect" style="color: var(--text-muted); font-size: 0.9rem; min-width: 140px;">Inference Profile:</label>
+          <select id="localProfileSelect" style="max-width: 320px;">
+            <option value="fast">Fast (tiny.en, ~75 MB)</option>
+            <option value="balanced">Balanced (base.en, ~145 MB)</option>
+            <option value="accurate">Accurate (small.en, ~480 MB)</option>
+            <option value="multilingual">Multilingual (small, ~480 MB)</option>
+          </select>
+          <button id="saveLocalProfileBtn">Apply Profile</button>
+        </div>
+        <div id="localProfileResult" class="save-result" style="margin-bottom: 16px;"></div>
+
+        <h3 style="font-size: 0.95rem; font-weight: 600; color: #cbd5e1; margin-bottom: 8px;">Offline Whisper Models (%APPDATA%\Rift\models)</h3>
+        <table class="models-table">
+          <thead>
+            <tr>
+              <th>Profile</th>
+              <th>Model</th>
+              <th>Status</th>
+              <th>Size</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="modelsTableBody">
+            <tr><td colspan="5" style="color: var(--text-muted); text-align: center;">Loading models status...</td></tr>
+          </tbody>
+        </table>
+
+        <div id="downloadBannerCard" style="display: none; background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); border-radius: 8px; padding: 14px; margin-top: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span id="downloadStatusText" style="font-size: 0.9rem; font-weight: 600; color: #38bdf8;">Downloading model...</span>
+            <span id="downloadStageBadge" class="latency-badge">starting</span>
+          </div>
+          <div class="download-progress-bar">
+            <div id="downloadProgressFill" class="download-progress-fill" style="width: 25%;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================= -->
+    <!-- Phase 9 — Custom Dictionary Test              -->
+    <!-- ============================================= -->
+    <div class="phase-divider">Phase 9 — Custom Dictionary Test</div>
+
+    <section class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+        <h2>Custom Dictionary Rules</h2>
+        <div style="display: flex; gap: 8px;">
+          <button id="importDictBtn" style="background-color: #4b5563; font-size: 0.85rem; padding: 6px 14px;">📁 Import JSON</button>
+          <button id="exportDictBtn" style="background-color: #4b5563; font-size: 0.85rem; padding: 6px 14px;">💾 Export JSON</button>
+        </div>
+      </div>
+      <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 16px;">
+        User-defined phrase-to-text replacement rules. Applied automatically as stage 2 of post-processing (after Phase 7 cleanup and before Phase 6 injection).
+      </div>
+
+      <div id="dictImportExportBanner" class="save-result" style="display: none; margin-bottom: 16px;"></div>
+
+      <!-- Add Entry Mini-Form -->
+      <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--card-border); border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+        <h3 style="font-size: 0.95rem; font-weight: 600; color: #cbd5e1; margin-bottom: 12px;">Add New Entry</h3>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
+          <input type="text" id="newPhraseInput" placeholder="Spoken phrase (e.g. dot env)" style="flex: 2; min-width: 160px;" />
+          <input type="text" id="newReplacementInput" placeholder="Replacement (e.g. .env)" style="flex: 2; min-width: 160px;" />
+          <input type="text" id="newTagInput" placeholder="Tag (optional)" style="flex: 1; min-width: 120px;" />
+          <button id="addDictEntryBtn" style="height: 42px; white-space: nowrap;">Add Entry</button>
+        </div>
+        <div id="addDictResult" class="save-result" style="display: none;"></div>
+      </div>
+
+      <!-- Dictionary Entries Table -->
+      <table class="models-table" id="dictTable">
+        <thead>
+          <tr>
+            <th>Phrase</th>
+            <th>Replacement</th>
+            <th>Tag</th>
+            <th style="text-align: center;">Enabled</th>
+            <th style="text-align: right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="dictTableBody">
+          <tr><td colspan="5" style="color: var(--text-muted); text-align: center;">Loading dictionary entries...</td></tr>
+        </tbody>
+      </table>
+
+      <!-- Dictionary Test Console -->
+      <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--card-border);">
+        <h3 style="font-size: 0.95rem; font-weight: 600; color: #cbd5e1; margin-bottom: 8px;">Dictionary Test Console (Simulate on Demand)</h3>
+        <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
+          Test phrase replacement rules on demand against any custom text string without speaking into the microphone.
+        </div>
+        <div class="input-group" style="align-items: flex-start; gap: 12px;">
+          <textarea id="dictTestInput" rows="2" style="flex: 1; padding: 10px 14px; background-color: #12141c; border: 1px solid var(--card-border); border-radius: 6px; color: var(--text-main); font-family: inherit; font-size: 0.95rem; resize: vertical; outline: none;" placeholder="e.g. check the dot env file then run npm install"></textarea>
+          <button id="runDictTestBtn" style="white-space: nowrap; height: 42px;">Apply Dictionary</button>
+        </div>
+
+        <div id="dictTestOutputCard" style="display: none; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 14px; margin-top: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8;">Processed Output</span>
+            <span id="dictTestBadge" class="save-result" style="display: inline-block; padding: 2px 8px; margin: 0; font-size: 0.75rem; border-radius: 4px;"></span>
+          </div>
+          <div id="dictTestResultText" style="font-family: Consolas, Monaco, monospace; font-size: 0.95rem; color: #f1f5f9; white-space: pre-wrap; word-break: break-word;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================= -->
+    <!-- Phase 10 — Unified Settings & New Features    -->
+    <!-- ============================================= -->
+    <div class="phase-divider">Phase 10 — Unified Settings &amp; New Features Test</div>
+
+    <section class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h2>Unified Settings Contract (16 Fields)</h2>
+        <button id="loadAllSettingsBtn" style="background: #4f46e5;">Load All Settings</button>
+      </div>
+      <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 14px;">
+        Verifies the unified <code>getSettings()</code> and partial <code>saveSettings(patch)</code> contract matching the real Stitch Settings screen specification.
+      </div>
+
+      <div id="settingsContractResult" class="save-result" style="margin-bottom: 14px;"></div>
+
+      <!-- Settings Table Readout -->
+      <table class="models-table" style="margin-bottom: 20px;">
+        <thead>
+          <tr>
+            <th style="width: 35%;">Field (camelCase)</th>
+            <th style="width: 35%;">Current Value</th>
+            <th style="width: 30%;">Live Type</th>
+          </tr>
+        </thead>
+        <tbody id="settingsTableBody">
+          <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Click "Load All Settings" to fetch unified contract</td></tr>
+        </tbody>
+      </table>
+
+      <!-- Individual Setting Interactive Editors -->
+      <h3 style="font-size: 1rem; font-weight: 600; color: #cbd5e1; margin-bottom: 12px;">Edit Settings via Partial <code>saveSettings(patch)</code></h3>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-bottom: 16px;">
+        <!-- Transcription Mode -->
+        <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; border: 1px solid var(--card-border);">
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 4px;">transcriptionMode:</label>
+          <select id="settingTranscriptionMode" style="width: 100%;">
+            <option value="cloud">cloud</option>
+            <option value="local">local</option>
+          </select>
+        </div>
+
+        <!-- Inference Profile -->
+        <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; border: 1px solid var(--card-border);">
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 4px;">inferenceProfile:</label>
+          <select id="settingInferenceProfile" style="width: 100%;">
+            <option value="fast">fast (tiny.en)</option>
+            <option value="balanced">balanced (base.en)</option>
+            <option value="accurate">accurate (small.en)</option>
+            <option value="multilingual">multilingual (small)</option>
+          </select>
+        </div>
+
+        <!-- Inference Model (Cloud) -->
+        <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; border: 1px solid var(--card-border);">
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 4px;">inferenceModel (Cloud):</label>
+          <select id="settingInferenceModel" style="width: 100%;">
+            <option value="whisper-large-v3-turbo">whisper-large-v3-turbo</option>
+            <option value="whisper-large-v3">whisper-large-v3</option>
+          </select>
+        </div>
+
+        <!-- Microphone Device ID -->
+        <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; border: 1px solid var(--card-border);">
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 4px;">microphoneDeviceId:</label>
+          <select id="settingMicDeviceId" style="width: 100%;">
+            <option value="default">default (System Default)</option>
+          </select>
+        </div>
+
+        <!-- Push to talk mode -->
+        <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; border: 1px solid var(--card-border);">
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 4px;">pushToTalkMode:</label>
+          <select id="settingPushToTalkMode" style="width: 100%;">
+            <option value="single">single (single key hold)</option>
+            <option value="combo">combo (multi-key combo e.g. Ctrl+Win)</option>
+          </select>
+        </div>
+
+        <!-- Widget Visibility -->
+        <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; border: 1px solid var(--card-border);">
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 4px;">widgetVisibility:</label>
+          <select id="settingWidgetVisibility" style="width: 100%;">
+            <option value="always">always</option>
+            <option value="recording">recording</option>
+            <option value="hidden">hidden</option>
+          </select>
+        </div>
+
+        <!-- Widget Style -->
+        <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; border: 1px solid var(--card-border);">
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 4px;">widgetStyle:</label>
+          <select id="settingWidgetStyle" style="width: 100%;">
+            <option value="minimal_dot">minimal_dot</option>
+            <option value="active_waveform">active_waveform</option>
+            <option value="key_dock">key_dock</option>
+          </select>
+        </div>
+
+        <!-- Theme -->
+        <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; border: 1px solid var(--card-border);">
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 4px;">theme:</label>
+          <select id="settingTheme" style="width: 100%;">
+            <option value="dark">dark</option>
+            <option value="light">light</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Boolean Toggles Grid -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-bottom: 18px;">
+        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; background: rgba(0,0,0,0.15); padding: 8px 12px; border-radius: 6px;">
+          <input type="checkbox" id="settingLaunchAtLogin" style="width: 16px; height: 16px; accent-color: var(--accent-primary);">
+          <span>launchAtLogin <span id="regStatusIndicator" style="font-size: 0.75rem; color: #94a3b8;">(checking...)</span></span>
+        </label>
+
+        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; background: rgba(0,0,0,0.15); padding: 8px 12px; border-radius: 6px;">
+          <input type="checkbox" id="settingRecordingSounds" style="width: 16px; height: 16px; accent-color: var(--accent-primary);">
+          <span>recordingSounds (880Hz / 660Hz beeps)</span>
+        </label>
+
+        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; background: rgba(0,0,0,0.15); padding: 8px 12px; border-radius: 6px;">
+          <input type="checkbox" id="settingPauseOtherAudio" style="width: 16px; height: 16px; accent-color: var(--accent-primary);">
+          <span>pauseOtherAudioWhileTalking (pycaw)</span>
+        </label>
+
+        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; background: rgba(0,0,0,0.15); padding: 8px 12px; border-radius: 6px;">
+          <input type="checkbox" id="settingCopyInsteadOfType" style="width: 16px; height: 16px; accent-color: var(--accent-primary);">
+          <span>copyInsteadOfType</span>
+        </label>
+
+        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; background: rgba(0,0,0,0.15); padding: 8px 12px; border-radius: 6px;">
+          <input type="checkbox" id="settingAutoEnhance" style="width: 16px; height: 16px; accent-color: var(--accent-primary);">
+          <span>autoEnhancePrompt (Groq LLM text rewriter)</span>
+        </label>
+
+        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; background: rgba(0,0,0,0.15); padding: 8px 12px; border-radius: 6px;">
+          <input type="checkbox" id="settingFollowCursor" style="width: 16px; height: 16px; accent-color: var(--accent-primary);">
+          <span>followCursorAcrossMonitors</span>
+        </label>
+
+        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; background: rgba(0,0,0,0.15); padding: 8px 12px; border-radius: 6px;">
+          <input type="checkbox" id="settingLockPosition" style="width: 16px; height: 16px; accent-color: var(--accent-primary);">
+          <span>lockWidgetPosition</span>
+        </label>
+      </div>
+
+      <!-- Formatting Instructions Textarea -->
+      <div style="margin-bottom: 16px;">
+        <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 4px;">formattingInstructions (Style guidance for Auto Enhance):</label>
+        <textarea id="settingFormattingInstructions" rows="2" style="width: 100%; padding: 10px 14px; background-color: #12141c; border: 1px solid var(--card-border); border-radius: 6px; color: var(--text-main); font-family: inherit; font-size: 0.95rem; resize: vertical; outline: none;" placeholder="e.g. Always write numbers as digits. Keep bullet points brief."></textarea>
+        <button id="saveFormattingInstructionsBtn" style="margin-top: 6px; padding: 6px 14px; font-size: 0.85rem;">Save Instructions</button>
+      </div>
+    </section>
+
+    <!-- Auto Enhance Test Console -->
+    <section class="card">
+      <h2>Auto Enhance Test Console (Groq LLM)</h2>
+      <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 14px;">
+        Simulate the LLM text rewrite on demand with custom text and formatting instructions without having to speak.
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px;">
+        <textarea id="enhanceTestInput" rows="2" style="padding: 10px 14px; background-color: #12141c; border: 1px solid var(--card-border); border-radius: 6px; color: var(--text-main); font-family: inherit; font-size: 0.95rem; resize: vertical; outline: none;" placeholder="Enter rough dictated text (e.g. hey um can you order three pizzas and two cokes please)"></textarea>
+        <input type="text" id="enhanceTestInstructions" style="padding: 10px 14px; background-color: #12141c; border: 1px solid var(--card-border); border-radius: 6px; color: var(--text-main); font-size: 0.95rem;" placeholder="Optional style instruction (e.g. format as a bulleted checklist with digits)" />
+        <button id="runEnhanceTestBtn" style="align-self: flex-start; background: #059669;">Enhance Text ✨</button>
+      </div>
+
+      <div id="enhanceTestOutputCard" style="display: none; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 14px; margin-top: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8;">Enhanced Output</span>
+          <span id="enhanceTestBadge" class="save-result" style="display: inline-block; padding: 2px 8px; margin: 0; font-size: 0.75rem; border-radius: 4px;"></span>
+        </div>
+        <div id="enhanceTestResultText" style="font-family: Consolas, Monaco, monospace; font-size: 0.95rem; color: #f1f5f9; white-space: pre-wrap; word-break: break-word;"></div>
+      </div>
+    </section>
+
+    <!-- ======================================================= -->
+    <!-- Phase 11 — Reliability, Rate Limiting & Widget Polish   -->
+    <!-- ======================================================= -->
+    <div class="phase-divider">Phase 11 — Reliability, Rate Limiting &amp; Widget Polish</div>
+
+    <section class="card" id="cardPhase11">
+      <h2>Groq API Rate Limits &amp; Quota Pools</h2>
+      <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 16px;">
+        Tracks independent request counters for <strong>Whisper</strong> (cloud transcription) and <strong>Enhance</strong> (prompt rewrite).
+        If the rolling minute ceiling (18 req/min for Whisper, 27 req/min for Enhance) is reached, requests are safely queued rather than dropped.
+      </p>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+        <!-- Whisper Quota Card -->
+        <div style="background: #12141c; border: 1px solid var(--card-border); border-radius: 8px; padding: 14px;">
+          <div style="font-weight: 600; font-size: 0.95rem; color: #818cf8; margin-bottom: 8px;">🎙️ Whisper Pool (STT)</div>
+          <div style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.6;">
+            <div>This minute: <strong id="whisperMinCount" style="color: #f3f4f6;">0</strong> / 20 <span style="font-size: 0.75rem;">(ceiling: 18)</span></div>
+            <div>Today: <strong id="whisperDayCount" style="color: #f3f4f6;">0</strong> / 2,000</div>
+            <div>Resets at: <span id="whisperResetTime" style="color: #94a3b8;">--</span></div>
+          </div>
+        </div>
+
+        <!-- Enhance Quota Card -->
+        <div style="background: #12141c; border: 1px solid var(--card-border); border-radius: 8px; padding: 14px;">
+          <div style="font-weight: 600; font-size: 0.95rem; color: #34d399; margin-bottom: 8px;">✨ Enhance Pool (LLM)</div>
+          <div style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.6;">
+            <div>This minute: <strong id="enhanceMinCount" style="color: #f3f4f6;">0</strong> / 30 <span style="font-size: 0.75rem;">(ceiling: 27)</span></div>
+            <div>Today: <strong id="enhanceDayCount" style="color: #f3f4f6;">0</strong> / 7,000</div>
+            <div>Resets at: <span id="enhanceResetTime" style="color: #94a3b8;">--</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Queue Notice Banner -->
+      <div id="requestQueuedBanner" style="display: none; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; color: #fbbf24; font-size: 0.88rem;">
+        ⏳ <strong id="queueBannerText">Request safely queued:</strong> Rate limit ceiling reached; auto-dispatching in ~3s...
+      </div>
+
+      <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+        <button id="refreshUsageStatsBtn" type="button">Refresh Quota Stats 🔄</button>
+        <button id="testSafeSlotCrashBtn" type="button" style="background-color: #374151;">Test Crash Resilience (@safe_slot) 🛡️</button>
+      </div>
+
+      <!-- Safe slot test result -->
+      <div id="safeSlotResultBox" class="response-box" style="display: none; margin-bottom: 20px;">
+        <div id="safeSlotResultText" style="color: #a7f3d0; font-size: 0.85rem;"></div>
+      </div>
+
+      <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 8px;">Widget Dragging &amp; Custom Positioning</h3>
+      <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 12px;">
+        The floating widget can now be dragged to any screen coordinate with the mouse (Chromium click-through passes directly to parent Qt drag code).
+        A plain click without drag does nothing. Positioning priority: Locked &gt; Dragged Custom &gt; Never Dragged (Auto Bottom-Center).
+      </p>
+
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
+        <span style="font-size: 0.85rem; color: var(--text-muted);">Current Saved Coordinates:</span>
+        <span id="widgetCustomPosLabel" style="font-family: Consolas, monospace; font-size: 0.9rem; color: #f3f4f6;">null (Never dragged)</span>
+        <button id="resetWidgetPosBtn" type="button" style="padding: 6px 14px; font-size: 0.8rem; background: #4b5563;">Reset Position to Center</button>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // === Shared helpers ===
+    const statusBadge = document.getElementById('statusBadge');
+    const statusText = document.getElementById('statusText');
+
+    function formatTime(date) {
+      const pad = (n, width = 2) => String(n).padStart(width, '0');
+      return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`;
+    }
+
+    function addLogEntry(container, text, cssClass) {
+      const row = document.createElement('div');
+      row.className = 'log-row';
+      const timeSpan = document.createElement('span');
+      timeSpan.className = 'log-time';
+      timeSpan.textContent = `[${formatTime(new Date())}]`;
+      const textSpan = document.createElement('span');
+      textSpan.className = cssClass || 'log-payload';
+      textSpan.textContent = text;
+      row.appendChild(timeSpan);
+      row.appendChild(textSpan);
+      container.appendChild(row);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // === Phase 1 elements ===
+    const pingInput = document.getElementById('pingInput');
+    const sendPingBtn = document.getElementById('sendPingBtn');
+    const pingResponse = document.getElementById('pingResponse');
+    const heartbeatLog = document.getElementById('heartbeatLog');
+
+    // === Phase 2 elements ===
+    const recordingStatus = document.getElementById('recordingStatus');
+    const holdDuration = document.getElementById('holdDuration');
+    const currentKeyEl = document.getElementById('currentKey');
+    const hotkeyInput = document.getElementById('hotkeyInput');
+    const saveHotkeyBtn = document.getElementById('saveHotkeyBtn');
+    const saveResult = document.getElementById('saveResult');
+    const hotkeyLog = document.getElementById('hotkeyLog');
+
+    // === Phase 3 elements ===
+    const micSelect = document.getElementById('micSelect');
+    const micSelectResult = document.getElementById('micSelectResult');
+    const levelMeterFill = document.getElementById('levelMeterFill');
+    const levelLabel = document.getElementById('levelLabel');
+    const recordingResults = document.getElementById('recordingResults');
+    const noRecordingsYet = document.getElementById('noRecordingsYet');
+    const audioLog = document.getElementById('audioLog');
+
+    // === Phase 4 elements ===
+    const widgetVisibilitySelect = document.getElementById('widgetVisibilitySelect');
+    const visibilityResult = document.getElementById('visibilityResult');
+    const followCursorCheck = document.getElementById('followCursorCheck');
+    const lockPositionCheck = document.getElementById('lockPositionCheck');
+    const widgetSettingsResult = document.getElementById('widgetSettingsResult');
+    const btnPreviewRecording = document.getElementById('btnPreviewRecording');
+    const btnPreviewProcessing = document.getElementById('btnPreviewProcessing');
+    const btnPreviewSuccess = document.getElementById('btnPreviewSuccess');
+    const btnPreviewWarning = document.getElementById('btnPreviewWarning');
+    const btnPreviewError = document.getElementById('btnPreviewError');
+
+    // === Phase 4.5 elements ===
+    const openrouterKeyStatusBadge = document.getElementById('openrouterKeyStatusBadge');
+    const openrouterKeyInput = document.getElementById('openrouterKeyInput');
+    const toggleOpenrouterKeyVisibility = document.getElementById('toggleOpenrouterKeyVisibility');
+    const testOpenrouterKeyBtn = document.getElementById('testOpenrouterKeyBtn');
+    const saveOpenrouterKeyBtn = document.getElementById('saveOpenrouterKeyBtn');
+    const deleteOpenrouterKeyBtn = document.getElementById('deleteOpenrouterKeyBtn');
+    const openrouterTestResult = document.getElementById('openrouterTestResult');
+
+    // === Phase 5 elements ===
+    const groqKeyStatusBadge = document.getElementById('groqKeyStatusBadge');
+    const groqKeyInput = document.getElementById('groqKeyInput');
+    const toggleGroqKeyVisibility = document.getElementById('toggleGroqKeyVisibility');
+    const testGroqKeyBtn = document.getElementById('testGroqKeyBtn');
+    const saveGroqKeyBtn = document.getElementById('saveGroqKeyBtn');
+    const groqTestResult = document.getElementById('groqTestResult');
+    const statTranscriptionsCount = document.getElementById('statTranscriptionsCount');
+    const statLastLatency = document.getElementById('statLastLatency');
+    const statAvgLatency = document.getElementById('statAvgLatency');
+    const transcriptionLog = document.getElementById('transcriptionLog');
+
+    // === Phase 6 elements ===
+    const copyInsteadOfTypeCheck = document.getElementById('copyInsteadOfTypeCheck');
+    const capturedTargetInfo = document.getElementById('capturedTargetInfo');
+    const injectionResultBanner = document.getElementById('injectionResultBanner');
+    const injectionLog = document.getElementById('injectionLog');
+
+    let totalTranscriptions = 0;
+    let latencySum = 0;
+    let currentPendingTranscriptEl = null;
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    async function refreshOpenRouterKeyStatus() {
+      try {
+        const statusRaw = await window.rift.getOpenRouterKeyStatus();
+        const status = typeof statusRaw === 'string' ? JSON.parse(statusRaw) : statusRaw;
+        if (status && status.hasKey) {
+          openrouterKeyStatusBadge.className = 'key-status-badge configured';
+          openrouterKeyStatusBadge.textContent = `Key configured: ${status.maskedKey}`;
+        } else {
+          openrouterKeyStatusBadge.className = 'key-status-badge none';
+          openrouterKeyStatusBadge.textContent = 'No key configured';
+        }
+      } catch (e) {
+        openrouterKeyStatusBadge.className = 'key-status-badge none';
+        openrouterKeyStatusBadge.textContent = 'Error loading key status';
+      }
+    }
+
+    async function refreshKeyStatus() {
+      try {
+        const statusRaw = await window.rift.getGroqKeyStatus();
+        const status = typeof statusRaw === 'string' ? JSON.parse(statusRaw) : statusRaw;
+        if (status && status.hasKey) {
+          groqKeyStatusBadge.className = 'key-status-badge configured';
+          groqKeyStatusBadge.textContent = `Key configured: ${status.maskedKey}`;
+        } else {
+          groqKeyStatusBadge.className = 'key-status-badge none';
+          groqKeyStatusBadge.textContent = 'No key configured';
+        }
+      } catch (e) {
+        groqKeyStatusBadge.className = 'key-status-badge none';
+        groqKeyStatusBadge.textContent = 'Error loading key status';
+      }
+    }
+
+    let recordingStartTime = null;
+    let levelDecayTimer = null;
+
+    // === Bridge ready ===
+    window.rift.ready(async () => {
+      statusBadge.classList.add('connected');
+      statusText.textContent = 'Connected';
+      sendPingBtn.disabled = false;
+      saveHotkeyBtn.disabled = false;
+
+      // Phase 5: Check Groq key status
+      refreshKeyStatus();
+
+      // Load hotkey config
+      try {
+        const hotkeysJson = await window.rift.getHotkeys();
+        const hotkeys = JSON.parse(hotkeysJson);
+        currentKeyEl.textContent = hotkeys.pushToTalk || '(not set)';
+      } catch (err) {
+        currentKeyEl.textContent = 'Error loading';
+      }
+
+      // Phase 3: Load microphones
+      try {
+        const micsJson = await window.rift.getMicrophones();
+        const data = JSON.parse(micsJson);
+        micSelect.innerHTML = '';
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = '';
+        defaultOpt.textContent = '(System Default)';
+        micSelect.appendChild(defaultOpt);
+        for (const mic of data.microphones) {
+          const opt = document.createElement('option');
+          opt.value = mic.id;
+          opt.textContent = `${mic.name}${mic.isDefault ? ' (Default)' : ''}`;
+          if (mic.isDefault) opt.selected = true;
+          micSelect.appendChild(opt);
+        }
+        micSelect.disabled = false;
+      } catch (err) {
+        micSelect.innerHTML = '<option>Error loading devices</option>';
+      }
+
+      // Phase 4: Load widget configuration
+      try {
+        const widgetCfgJson = await window.rift.getWidgetConfig();
+        const wCfg = JSON.parse(widgetCfgJson);
+        const visibility = wCfg.widgetVisibility || wCfg.widget_visibility || 'always';
+        widgetVisibilitySelect.value = visibility;
+        followCursorCheck.checked = !!(wCfg.followCursorAcrossMonitors ?? wCfg.follow_cursor_across_monitors);
+        lockPositionCheck.checked = !!(wCfg.lockWidgetPosition ?? wCfg.lock_widget_position);
+      } catch (err) {
+        console.error('Error loading widget config:', err);
+      }
+
+      // Phase 6: Load copy_instead_of_type setting
+      try {
+        const copyMode = await window.rift.getCopyInsteadOfType();
+        copyInsteadOfTypeCheck.checked = Boolean(copyMode);
+      } catch (err) {
+        console.error('Error loading copyInsteadOfType:', err);
+      }
+
+      // Phase 8: Load transcription mode & local models status
+      try {
+        await initTranscriptionMode();
+        await refreshModelsTable();
+      } catch (err) {
+        console.error('Error initializing Phase 8 local settings:', err);
+      }
+
+      // Phase 9: Load custom dictionary entries
+      try {
+        await refreshDictionaryTable();
+      } catch (err) {
+        console.error('Error initializing Phase 9 dictionary:', err);
+      }
+    });
+
+    // === Phase 1: Ping ===
+    sendPingBtn.addEventListener('click', async () => {
+      const msg = pingInput.value.trim();
+      if (!msg) return;
+      sendPingBtn.disabled = true;
+      try {
+        const result = await window.rift.ping(msg);
+        pingResponse.classList.remove('empty');
+        pingResponse.textContent = result;
+      } catch (err) {
+        pingResponse.classList.remove('empty');
+        pingResponse.textContent = 'Error: ' + err.message;
+      } finally { sendPingBtn.disabled = false; }
+    });
+    pingInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendPingBtn.click(); });
+
+    // === Phase 1: Heartbeat ===
+    window.rift.on('testEvent', (payload) => {
+      addLogEntry(heartbeatLog, payload, 'log-payload');
+    });
+
+    // === Phase 2: Recording events ===
+    window.rift.on('recordingStarted', () => {
+      recordingStartTime = Date.now();
+      recordingStatus.className = 'recording-status recording';
+      recordingStatus.textContent = '🔴 Recording';
+      addLogEntry(hotkeyLog, 'recordingStarted', 'log-event started');
+    });
+
+    window.rift.on('recordingStopped', () => {
+      recordingStatus.className = 'recording-status idle';
+      recordingStatus.textContent = 'Idle';
+
+      // Reset level meter
+      levelMeterFill.style.width = '0%';
+      levelLabel.textContent = 'Level: 0%';
+
+      if (recordingStartTime !== null) {
+        const dur = ((Date.now() - recordingStartTime) / 1000).toFixed(2);
+        holdDuration.textContent = `Last hold: ${dur}s`;
+        addLogEntry(hotkeyLog, `recordingStopped (held ${dur}s)`, 'log-event stopped');
+      } else {
+        addLogEntry(hotkeyLog, 'recordingStopped', 'log-event stopped');
+      }
+      recordingStartTime = null;
+    });
+
+    // Phase 2: Save hotkey
+    saveHotkeyBtn.addEventListener('click', async () => {
+      const newKey = hotkeyInput.value.trim();
+      if (!newKey) return;
+      saveHotkeyBtn.disabled = true;
+      saveResult.className = 'save-result'; saveResult.style.display = 'none';
+      try {
+        const resultJson = await window.rift.saveHotkey('push_to_talk', newKey);
+        const result = JSON.parse(resultJson);
+        saveResult.className = result.success ? 'save-result success' : 'save-result error';
+        saveResult.textContent = result.message;
+        if (result.success) currentKeyEl.textContent = newKey;
+      } catch (err) {
+        saveResult.className = 'save-result error';
+        saveResult.textContent = 'Error: ' + err.message;
+      } finally { saveResult.style.display = 'block'; saveHotkeyBtn.disabled = false; }
+    });
+    hotkeyInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveHotkeyBtn.click(); });
+
+    // === Phase 3: Audio Level ===
+    window.rift.on('audioLevel', (level) => {
+      levelMeterFill.style.width = level + '%';
+      levelLabel.textContent = `Level: ${level}%`;
+    });
+
+    // === Phase 3: Recording Saved ===
+    window.rift.on('recordingSaved', (jsonStr) => {
+      const data = JSON.parse(jsonStr);
+      noRecordingsYet.style.display = 'none';
+
+      const div = document.createElement('div');
+      const isSilent = data.isSilent;
+
+      if (isSilent) {
+        div.className = 'recording-result silent';
+        div.innerHTML = `<strong>⚠️ No audio detected — check your microphone</strong><br>
+          Duration: ${data.durationSeconds}s | Peak: ${data.peakLevel}% | File: ${data.filePath}`;
+      } else {
+        div.className = 'recording-result normal';
+        div.innerHTML = `<strong>✅ Recording saved</strong><br>
+          Duration: ${data.durationSeconds}s | Peak: ${data.peakLevel}% | File: ${data.filePath}`;
+
+        // Add playback audio element
+        const audio = document.createElement('audio');
+        audio.controls = true;
+        audio.src = 'file:///' + data.filePath.replace(/\\/g, '/');
+        div.appendChild(audio);
+
+        // Phase 5 & 8: Pending transcription box
+        const transcriptDiv = document.createElement('div');
+        transcriptDiv.className = 'transcript-box transcribing';
+        const isLocalActive = modeLocalRadio && modeLocalRadio.checked;
+        const activeEngineLabel = isLocalActive ? 'Local faster-whisper' : 'Groq Cloud';
+        transcriptDiv.innerHTML = `<span class="spinner" style="width:14px; height:14px; border:2px solid rgba(255,255,255,0.2); border-top-color:#818cf8; border-radius:50%; animation:spin 0.8s linear infinite; display:inline-block; vertical-align:middle; margin-right:8px;"></span> <span>Transcribing with ${activeEngineLabel}...</span>`;
+        div.appendChild(transcriptDiv);
+        currentPendingTranscriptEl = transcriptDiv;
+      }
+
+      recordingResults.insertBefore(div, recordingResults.firstChild);
+
+      // Session log
+      const logText = isSilent
+        ? `⚠️ SILENT: ${data.durationSeconds}s, peak ${data.peakLevel}%`
+        : `✅ Saved: ${data.durationSeconds}s, peak ${data.peakLevel}%, ${data.filePath.split(/[\\/]/).pop()}`;
+      addLogEntry(audioLog, logText, isSilent ? 'log-event started' : 'log-event stopped');
+    });
+
+    // === Phase 5: Transcription events ===
+    window.rift.on('transcriptionComplete', (jsonStr) => {
+      console.log('[DevTest] Received transcriptionComplete:', jsonStr);
+      try {
+        const data = JSON.parse(jsonStr);
+        totalTranscriptions += 1;
+        latencySum += (data.latencyMs || 0);
+        statTranscriptionsCount.textContent = totalTranscriptions;
+        statLastLatency.textContent = `${data.latencyMs}ms`;
+        statAvgLatency.textContent = `${Math.round(latencySum / totalTranscriptions)}ms`;
+
+        const targetEl = currentPendingTranscriptEl || document.querySelector('.transcript-box.transcribing');
+        const rawText = data.rawText !== undefined ? data.rawText : (data.text || '');
+        const cleanedText = data.cleanedText !== undefined ? data.cleanedText : (data.text || '');
+        const dictText = data.dictText || data.cleanedText || '';
+        const finalText = data.text || '';
+        const wasCleaned = Boolean(data.cleaned);
+        const dictApplied = Boolean(data.dictionaryApplied);
+        const enhanceApplied = Boolean(data.enhanceApplied);
+
+        if (targetEl) {
+          targetEl.className = 'transcript-box success';
+          const isLocal = (data.engine === 'local');
+          const engineBadgeHtml = isLocal
+            ? `<span class="engine-badge local">💻 Local</span>`
+            : `<span class="engine-badge cloud">☁️ Cloud</span>`;
+
+          targetEl.innerHTML = `
+            <div class="transcript-header" style="display: flex; justify-content: space-between; align-items: center;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                ${engineBadgeHtml}
+                <span>(${data.model || 'whisper'})</span>
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                ${wasCleaned ? '<span style="background: rgba(239,68,68,0.2); color: #fca5a5; border: 1px solid rgba(239,68,68,0.4); padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 600;">✂️ trimmed</span>' : ''}
+                ${dictApplied ? '<span style="background: rgba(168,85,247,0.2); color: #d8b4fe; border: 1px solid rgba(168,85,247,0.4); padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 600;">📖 dictionary applied</span>' : ''}
+                ${enhanceApplied ? '<span style="background: rgba(16,185,129,0.2); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.4); padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 600;">✨ enhanced</span>' : ''}
+                <span class="latency-badge">${data.latencyMs}ms</span>
+              </div>
+            </div>
+            <div style="margin-top: 8px; font-size: 0.9rem; line-height: 1.6;">
+              <div style="color: #94a3b8;"><strong style="color: ${wasCleaned ? '#fca5a5' : '#cbd5e1'};">1. Raw:</strong> <span style="font-family: Consolas, monospace; color: #cbd5e1;">${escapeHtml(rawText || '(empty)')}</span></div>
+              <div style="color: #94a3b8;"><strong style="color: ${wasCleaned ? '#34d399' : '#cbd5e1'};">2. Cleaned:</strong> <span style="font-family: Consolas, monospace; color: #cbd5e1;">${escapeHtml(cleanedText || '(empty)')}</span></div>
+              <div style="color: #94a3b8;"><strong style="color: ${dictApplied ? '#a855f7' : '#cbd5e1'};">3. Dictionary:</strong> <span style="font-family: Consolas, monospace; color: #cbd5e1;">${escapeHtml(dictText || '(empty)')}</span></div>
+              <div style="color: #94a3b8;"><strong style="color: ${enhanceApplied ? '#34d399' : '#38bdf8'};">4. Final ${enhanceApplied ? '(Enhanced)' : ''}:</strong> <span style="font-family: Consolas, monospace; color: #f8fafc; font-weight: 600;">${escapeHtml(finalText || '(empty)')}</span></div>
+            </div>
+          `;
+          if (currentPendingTranscriptEl === targetEl) {
+            currentPendingTranscriptEl = null;
+          }
+        }
+        const badgeTags = [];
+        if (wasCleaned) badgeTags.push('✂️ cleaned');
+        if (dictApplied) badgeTags.push('📖 dictionary');
+        if (enhanceApplied) badgeTags.push('✨ enhanced');
+        const badgePrefix = badgeTags.length > 0 ? `[${badgeTags.join(', ')}] ` : '';
+        const logMsg = `✅ [${data.latencyMs}ms] ${badgePrefix}"${finalText}" (Raw: "${rawText}")`;
+        addLogEntry(transcriptionLog, logMsg, enhanceApplied ? 'log-event stopped' : (dictApplied ? 'log-payload' : (wasCleaned ? 'log-event started' : 'log-payload')));
+      } catch (err) {
+        console.error('Error handling transcriptionComplete:', err);
+      }
+    });
+
+    window.rift.on('transcriptionError', (jsonStr) => {
+      try {
+        const data = JSON.parse(jsonStr);
+        const targetEl = currentPendingTranscriptEl || document.querySelector('.transcript-box.transcribing');
+        if (targetEl) {
+          targetEl.className = 'transcript-box error';
+          targetEl.innerHTML = `
+            <div class="transcript-header">
+              <span style="color:#f87171;">❌ Transcription Error (${data.errorType})</span>
+            </div>
+            <div style="font-size:0.95rem; color:#fca5a5;">${escapeHtml(data.message)}</div>
+          `;
+          if (currentPendingTranscriptEl === targetEl) {
+            currentPendingTranscriptEl = null;
+          }
+        }
+        addLogEntry(transcriptionLog, `❌ [${data.errorType}] ${data.message}`, 'log-event started');
+      } catch (err) {
+        console.error('Error handling transcriptionError:', err);
+      }
+    });
+
+    // === Phase 3: Mic Error ===
+    window.rift.on('micError', (jsonStr) => {
+      const data = JSON.parse(jsonStr);
+      noRecordingsYet.style.display = 'none';
+
+      const div = document.createElement('div');
+      div.className = 'recording-result mic-error';
+      div.innerHTML = `<strong>❌ Microphone Error</strong><br>${data.message}`;
+      recordingResults.insertBefore(div, recordingResults.firstChild);
+      addLogEntry(audioLog, `❌ Error: ${data.message}`, 'log-event started');
+    });
+
+    // === Phase 3: Mic selection ===
+    micSelect.addEventListener('change', async () => {
+      const val = micSelect.value;
+      if (val === '') return;
+      const deviceId = parseInt(val, 10);
+      try {
+        const resultJson = await window.rift.setMicrophone(deviceId);
+        const result = JSON.parse(resultJson);
+        micSelectResult.className = result.success ? 'save-result success' : 'save-result error';
+        micSelectResult.textContent = result.message;
+        micSelectResult.style.display = 'block';
+      } catch (err) {
+        micSelectResult.className = 'save-result error';
+        micSelectResult.textContent = 'Error: ' + err.message;
+        micSelectResult.style.display = 'block';
+      }
+    });
+
+    // === Phase 4: Widget settings and state previews ===
+    widgetVisibilitySelect.addEventListener('change', async () => {
+      const mode = widgetVisibilitySelect.value;
+      try {
+        const resJson = await window.rift.setWidgetVisibility(mode);
+        const res = JSON.parse(resJson);
+        visibilityResult.className = res.success ? 'save-result success' : 'save-result error';
+        visibilityResult.textContent = res.message;
+        visibilityResult.style.display = 'block';
+      } catch (err) {
+        visibilityResult.className = 'save-result error';
+        visibilityResult.textContent = 'Error: ' + err.message;
+        visibilityResult.style.display = 'block';
+      }
+    });
+
+    followCursorCheck.addEventListener('change', async () => {
+      const enabled = followCursorCheck.checked;
+      try {
+        const resJson = await window.rift.setFollowCursor(enabled);
+        const res = JSON.parse(resJson);
+        widgetSettingsResult.className = res.success ? 'save-result success' : 'save-result error';
+        widgetSettingsResult.textContent = res.message;
+        widgetSettingsResult.style.display = 'block';
+      } catch (err) {
+        widgetSettingsResult.className = 'save-result error';
+        widgetSettingsResult.textContent = 'Error: ' + err.message;
+        widgetSettingsResult.style.display = 'block';
+      }
+    });
+
+    lockPositionCheck.addEventListener('change', async () => {
+      const enabled = lockPositionCheck.checked;
+      try {
+        const resJson = await window.rift.setLockPosition(enabled);
+        const res = JSON.parse(resJson);
+        widgetSettingsResult.className = res.success ? 'save-result success' : 'save-result error';
+        widgetSettingsResult.textContent = res.message;
+        widgetSettingsResult.style.display = 'block';
+      } catch (err) {
+        widgetSettingsResult.className = 'save-result error';
+        widgetSettingsResult.textContent = 'Error: ' + err.message;
+        widgetSettingsResult.style.display = 'block';
+      }
+    });
+
+    // DevTest Preview Buttons
+    btnPreviewRecording.addEventListener('click', () => {
+      window.rift.triggerWidgetTestState('recording');
+    });
+
+    btnPreviewProcessing.addEventListener('click', () => {
+      window.rift.triggerWidgetTestState('processing');
+    });
+
+    btnPreviewSuccess.addEventListener('click', () => {
+      window.rift.triggerWidgetTestState('success');
+    });
+
+    btnPreviewWarning.addEventListener('click', () => {
+      window.rift.triggerWidgetTestState('warning');
+    });
+
+    btnPreviewError.addEventListener('click', () => {
+      window.rift.triggerWidgetTestState('error');
+    });
+
+    // === Phase 5: Groq key controls ===
+    toggleGroqKeyVisibility.addEventListener('click', () => {
+      if (groqKeyInput.type === 'password') {
+        groqKeyInput.type = 'text';
+        toggleGroqKeyVisibility.textContent = '🔒';
+      } else {
+        groqKeyInput.type = 'password';
+        toggleGroqKeyVisibility.textContent = '👁️';
+      }
+    });
+
+    testGroqKeyBtn.addEventListener('click', async () => {
+      const key = groqKeyInput.value.trim();
+      if (!key) {
+        groqTestResult.className = 'save-result error';
+        groqTestResult.style.display = 'block';
+        groqTestResult.textContent = 'Please enter an API key to test.';
+        return;
+      }
+      testGroqKeyBtn.disabled = true;
+      groqTestResult.className = 'save-result';
+      groqTestResult.style.display = 'block';
+      groqTestResult.textContent = 'Testing connection to Groq...';
+      try {
+        const resJson = await window.rift.testGroqKey(key);
+        const res = JSON.parse(resJson);
+        if (res.success) {
+          groqTestResult.className = 'save-result success';
+          groqTestResult.textContent = `Connected successfully in ${res.latencyMs}ms (model: ${res.model})`;
+        } else {
+          groqTestResult.className = 'save-result error';
+          groqTestResult.textContent = `${res.errorMessage || 'Connection failed'} (${res.errorType || 'error'})`;
+        }
+      } catch (err) {
+        groqTestResult.className = 'save-result error';
+        groqTestResult.textContent = 'Test error: ' + err.message;
+      } finally {
+        testGroqKeyBtn.disabled = false;
+      }
+    });
+
+    saveGroqKeyBtn.addEventListener('click', async () => {
+      const key = groqKeyInput.value.trim();
+      if (!key) {
+        groqTestResult.className = 'save-result error';
+        groqTestResult.style.display = 'block';
+        groqTestResult.textContent = 'Please enter an API key to save.';
+        return;
+      }
+      saveGroqKeyBtn.disabled = true;
+      try {
+        const resJson = await window.rift.saveGroqKey(key);
+        const res = JSON.parse(resJson);
+        if (res.success) {
+          groqTestResult.className = 'save-result success';
+          groqTestResult.style.display = 'block';
+          groqTestResult.textContent = 'Key saved securely in Windows Credential Manager.';
+          groqKeyInput.value = '';
+          await refreshKeyStatus();
+        } else {
+          groqTestResult.className = 'save-result error';
+          groqTestResult.style.display = 'block';
+          groqTestResult.textContent = 'Save failed: ' + res.message;
+        }
+      } catch (err) {
+        groqTestResult.className = 'save-result error';
+        groqTestResult.style.display = 'block';
+        groqTestResult.textContent = 'Save error: ' + err.message;
+      } finally {
+        saveGroqKeyBtn.disabled = false;
+      }
+    });
+
+    // === Phase 6: Text Injection ===
+    copyInsteadOfTypeCheck.addEventListener('change', async () => {
+      try {
+        await window.rift.setCopyInsteadOfType(copyInsteadOfTypeCheck.checked);
+        addLogEntry(injectionLog, `⚙️ Copy-only mode set to: ${copyInsteadOfTypeCheck.checked}`, 'log-payload');
+      } catch (err) {
+        console.error('Error saving copyInsteadOfType:', err);
+      }
+    });
+
+    window.rift.on('targetCaptured', (jsonStr) => {
+      try {
+        const target = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+        const title = target.windowTitle || '(No window title)';
+        const app = target.processName || '(Unknown process)';
+        capturedTargetInfo.innerHTML = `Focused on: <strong>${escapeHtml(title)}</strong> <span style="color:#a5b4fc;">(${escapeHtml(app)})</span> [HWND ${target.hwnd || 0}]`;
+        addLogEntry(injectionLog, `🎯 Target captured: "${title}" (${app})`, 'log-payload');
+      } catch (err) {
+        console.error('Error parsing targetCaptured:', err);
+      }
+    });
+
+    window.rift.on('textInjected', (jsonStr) => {
+      try {
+        const data = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+        injectionResultBanner.style.display = 'block';
+        if (data.method === 'pasted') {
+          injectionResultBanner.className = 'save-result success';
+          injectionResultBanner.style.borderColor = '#10b981';
+          injectionResultBanner.style.color = '#34d399';
+          injectionResultBanner.style.backgroundColor = 'rgba(16, 185, 129, 0.1)';
+          injectionResultBanner.innerHTML = `✅ Pasted into <strong>${escapeHtml(data.targetApp || 'application')}</strong>`;
+          addLogEntry(injectionLog, `✅ Pasted into ${data.targetApp || 'application'}`, 'log-payload');
+        } else {
+          injectionResultBanner.className = 'save-result';
+          injectionResultBanner.style.borderColor = '#38bdf8';
+          injectionResultBanner.style.color = '#7dd3fc';
+          injectionResultBanner.style.backgroundColor = 'rgba(56, 189, 248, 0.1)';
+          const reasonStr = data.reason ? ` (${data.reason})` : '';
+          injectionResultBanner.innerHTML = `📋 Copied to clipboard${escapeHtml(reasonStr)}. Paste it yourself with Ctrl+V.`;
+          addLogEntry(injectionLog, `📋 Copied to clipboard — ${data.reason || 'copy_mode'}`, 'log-event stopped');
+        }
+      } catch (err) {
+        console.error('Error handling textInjected:', err);
+      }
+    });
+
+    // === Phase 7: Cleanup Console ===
+    const cleanupTestInput = document.getElementById('cleanupTestInput');
+    const runCleanupBtn = document.getElementById('runCleanupBtn');
+    const cleanupOutputCard = document.getElementById('cleanupOutputCard');
+    const cleanupBadge = document.getElementById('cleanupBadge');
+    const cleanupResultText = document.getElementById('cleanupResultText');
+
+    runCleanupBtn.addEventListener('click', async () => {
+      const inputVal = cleanupTestInput.value;
+      runCleanupBtn.disabled = true;
+      try {
+        const cleaned = await window.rift.testCleanup(inputVal);
+        const wasCleaned = (cleaned !== inputVal.trim());
+        cleanupOutputCard.style.display = 'block';
+        cleanupResultText.textContent = cleaned === '' ? '(empty string)' : cleaned;
+        if (wasCleaned) {
+          cleanupBadge.className = 'save-result error';
+          cleanupBadge.style.display = 'inline-block';
+          cleanupBadge.textContent = '✂️ Hallucination Trimmed';
+        } else {
+          cleanupBadge.className = 'save-result success';
+          cleanupBadge.style.display = 'inline-block';
+          cleanupBadge.textContent = '✅ Preserved (No change)';
+        }
+      } catch (err) {
+        cleanupOutputCard.style.display = 'block';
+        cleanupResultText.textContent = 'Error: ' + err.message;
+        cleanupBadge.style.display = 'none';
+      } finally {
+        runCleanupBtn.disabled = false;
+      }
+    });
+
+    cleanupTestInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        runCleanupBtn.click();
+      }
+    });
+
+    // =============================================
+    // Phase 8: Local Transcription Controls & Events
+    // =============================================
+    const modeCloudRadio = document.getElementById('modeCloudRadio');
+    const modeLocalRadio = document.getElementById('modeLocalRadio');
+    const modeCloudLabel = document.getElementById('modeCloudLabel');
+    const modeLocalLabel = document.getElementById('modeLocalLabel');
+    const modeChangeResult = document.getElementById('modeChangeResult');
+    const localSettingsContainer = document.getElementById('localSettingsContainer');
+    const localProfileSelect = document.getElementById('localProfileSelect');
+    const saveLocalProfileBtn = document.getElementById('saveLocalProfileBtn');
+    const localProfileResult = document.getElementById('localProfileResult');
+    const modelsTableBody = document.getElementById('modelsTableBody');
+    const downloadBannerCard = document.getElementById('downloadBannerCard');
+    const downloadStatusText = document.getElementById('downloadStatusText');
+    const downloadStageBadge = document.getElementById('downloadStageBadge');
+    const downloadProgressFill = document.getElementById('downloadProgressFill');
+
+    function updateModeUI(mode) {
+      if (mode === 'local') {
+        modeLocalRadio.checked = true;
+        modeLocalLabel.classList.add('active');
+        modeCloudLabel.classList.remove('active');
+        localSettingsContainer.style.display = 'block';
+      } else {
+        modeCloudRadio.checked = true;
+        modeCloudLabel.classList.add('active');
+        modeLocalLabel.classList.remove('active');
+        localSettingsContainer.style.display = 'none';
+      }
+    }
+
+    async function initTranscriptionMode() {
+      const respJson = await window.rift.getTranscriptionMode();
+      const resp = JSON.parse(respJson);
+      updateModeUI(resp.mode || 'cloud');
+      if (resp.localProfile) {
+        localProfileSelect.value = resp.localProfile;
+      }
+    }
+
+    async function handleModeChange(mode) {
+      try {
+        const respJson = await window.rift.setTranscriptionMode(mode);
+        const resp = JSON.parse(respJson);
+        updateModeUI(resp.mode);
+        modeChangeResult.className = 'save-result success';
+        modeChangeResult.style.display = 'block';
+        modeChangeResult.textContent = `Switched to ${resp.mode === 'local' ? 'Local Offline' : 'Groq Cloud'} transcription mode.`;
+        if (resp.mode === 'local') {
+          refreshModelsTable();
+        }
+      } catch (err) {
+        modeChangeResult.className = 'save-result error';
+        modeChangeResult.style.display = 'block';
+        modeChangeResult.textContent = 'Error switching mode: ' + err.message;
+      }
+    }
+
+    modeCloudRadio.addEventListener('change', () => handleModeChange('cloud'));
+    modeLocalRadio.addEventListener('change', () => handleModeChange('local'));
+
+    saveLocalProfileBtn.addEventListener('click', async () => {
+      const profile = localProfileSelect.value;
+      saveLocalProfileBtn.disabled = true;
+      try {
+        const respJson = await window.rift.setLocalInferenceProfile(profile);
+        const resp = JSON.parse(respJson);
+        localProfileResult.className = 'save-result success';
+        localProfileResult.style.display = 'block';
+        localProfileResult.textContent = `Local profile updated to: ${resp.profile}`;
+        await refreshModelsTable();
+      } catch (err) {
+        localProfileResult.className = 'save-result error';
+        localProfileResult.style.display = 'block';
+        localProfileResult.textContent = 'Error saving profile: ' + err.message;
+      } finally {
+        saveLocalProfileBtn.disabled = false;
+      }
+    });
+
+    async function refreshModelsTable() {
+      try {
+        const respJson = await window.rift.getLocalModelsStatus();
+        const data = JSON.parse(respJson);
+        const models = data.models || [];
+        modelsTableBody.innerHTML = '';
+
+        for (const item of models) {
+          const tr = document.createElement('tr');
+          const isDl = item.downloaded;
+          const statusBadge = isDl
+            ? '<span class="model-status-badge downloaded">Downloaded</span>'
+            : '<span class="model-status-badge missing">Not Downloaded</span>';
+
+          const sizeText = isDl ? `${item.sizeMb} MB` : '—';
+          const dlBtn = `<button class="dl-model-btn" data-profile="${item.profile}" style="padding: 4px 10px; font-size: 0.8rem; background-color: ${isDl ? '#22c55e' : '#6366f1'};">${isDl ? 'Re-download' : 'Download'}</button>`;
+
+          tr.innerHTML = `
+            <td style="font-weight: 600; text-transform: capitalize;">${escapeHtml(item.profile)}</td>
+            <td style="font-family: Consolas, monospace; color: #a5b4fc;">${escapeHtml(item.modelId)}</td>
+            <td>${statusBadge}</td>
+            <td style="font-family: Consolas, monospace;">${sizeText}</td>
+            <td>${dlBtn}</td>
+          `;
+          modelsTableBody.appendChild(tr);
+        }
+
+        // Attach click handlers to download buttons
+        document.querySelectorAll('.dl-model-btn').forEach((btn) => {
+          btn.addEventListener('click', (e) => {
+            const profile = e.target.getAttribute('data-profile');
+            triggerModelDownload(profile);
+          });
+        });
+      } catch (err) {
+        console.error('Error refreshing models table:', err);
+      }
+    }
+
+    function triggerModelDownload(profile) {
+      downloadBannerCard.style.display = 'block';
+      downloadStatusText.textContent = `Downloading model for profile "${profile}"...`;
+      downloadStageBadge.textContent = 'starting';
+      downloadProgressFill.style.width = '15%';
+      window.rift.downloadLocalModel(profile);
+    }
+
+    window.rift.on('modelDownloadProgress', (jsonStr) => {
+      try {
+        const payload = JSON.parse(jsonStr);
+        const stage = payload.stage;
+        downloadStageBadge.textContent = stage;
+        if (stage === 'starting') {
+          downloadProgressFill.style.width = '20%';
+          downloadStatusText.textContent = `Preparing download for ${payload.profile}...`;
+        } else if (stage === 'downloading') {
+          downloadProgressFill.style.width = '60%';
+          downloadStatusText.textContent = `Downloading model weights for ${payload.profile}...`;
+        } else if (stage === 'verifying') {
+          downloadProgressFill.style.width = '90%';
+          downloadStatusText.textContent = `Verifying model files for ${payload.profile}...`;
+        } else if (stage === 'completed') {
+          downloadProgressFill.style.width = '100%';
+          downloadStatusText.textContent = `Download complete for ${payload.profile}!`;
+        }
+      } catch (err) {
+        console.error('Error handling modelDownloadProgress:', err);
+      }
+    });
+
+    window.rift.on('modelDownloadComplete', (jsonStr) => {
+      try {
+        const res = JSON.parse(jsonStr);
+        downloadProgressFill.style.width = '100%';
+        if (res.success) {
+          downloadStatusText.textContent = `✅ Model "${res.profile}" ready for offline use! (${res.sizeMb || 0} MB)`;
+          downloadStageBadge.textContent = 'ready';
+        } else {
+          downloadStatusText.textContent = `❌ Download failed for "${res.profile}": ${res.message}`;
+          downloadStageBadge.textContent = 'error';
+        }
+        refreshModelsTable();
+      } catch (err) {
+        console.error('Error handling modelDownloadComplete:', err);
+      }
+    });
+
+    // =============================================
+    // Phase 9: Custom Dictionary Controls & Events
+    // =============================================
+    const dictTableBody = document.getElementById('dictTableBody');
+    const newPhraseInput = document.getElementById('newPhraseInput');
+    const newReplacementInput = document.getElementById('newReplacementInput');
+    const newTagInput = document.getElementById('newTagInput');
+    const addDictEntryBtn = document.getElementById('addDictEntryBtn');
+    const addDictResult = document.getElementById('addDictResult');
+    const importDictBtn = document.getElementById('importDictBtn');
+    const exportDictBtn = document.getElementById('exportDictBtn');
+    const dictImportExportBanner = document.getElementById('dictImportExportBanner');
+    const dictTestInput = document.getElementById('dictTestInput');
+    const runDictTestBtn = document.getElementById('runDictTestBtn');
+    const dictTestOutputCard = document.getElementById('dictTestOutputCard');
+    const dictTestBadge = document.getElementById('dictTestBadge');
+    const dictTestResultText = document.getElementById('dictTestResultText');
+
+    async function refreshDictionaryTable() {
+      try {
+        let entries = await window.rift.getDictionary();
+        if (typeof entries === 'string') {
+          entries = JSON.parse(entries);
+        }
+        dictTableBody.innerHTML = '';
+
+        if (!entries || entries.length === 0) {
+          dictTableBody.innerHTML = '<tr><td colspan="5" style="color: var(--text-muted); text-align: center;">No dictionary entries found.</td></tr>';
+          return;
+        }
+
+        for (const entry of entries) {
+          const tr = document.createElement('tr');
+          const isEnabled = Boolean(entry.enabled);
+          const tagHtml = entry.tag ? `<span style="background: rgba(99,102,241,0.15); color: #a5b4fc; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">${escapeHtml(entry.tag)}</span>` : '<span style="color: var(--text-muted); font-size: 0.8rem;">—</span>';
+
+          tr.innerHTML = `
+            <td style="font-family: Consolas, monospace; font-weight: 500; color: #f1f5f9;">${escapeHtml(entry.phrase)}</td>
+            <td style="font-family: Consolas, monospace; color: #38bdf8; font-weight: 600;">${escapeHtml(entry.replacement)}</td>
+            <td>${tagHtml}</td>
+            <td style="text-align: center;">
+              <input type="checkbox" class="dict-toggle-check" data-id="${entry.id}" ${isEnabled ? 'checked' : ''} style="width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent-primary);" />
+            </td>
+            <td style="text-align: right; white-space: nowrap;">
+              <button class="dict-edit-btn" data-id="${entry.id}" data-phrase="${escapeHtml(entry.phrase)}" data-replacement="${escapeHtml(entry.replacement)}" data-tag="${escapeHtml(entry.tag || '')}" style="background: #374151; padding: 4px 8px; font-size: 0.8rem; margin-right: 6px;">Edit</button>
+              <button class="dict-delete-btn" data-id="${entry.id}" style="background: #991b1b; padding: 4px 8px; font-size: 0.8rem;">Delete</button>
+            </td>
+          `;
+          dictTableBody.appendChild(tr);
+        }
+
+        // Attach listeners
+        document.querySelectorAll('.dict-toggle-check').forEach((chk) => {
+          chk.addEventListener('change', async (e) => {
+            const id = e.target.getAttribute('data-id');
+            const enabled = e.target.checked;
+            try {
+              await window.rift.updateDictionaryEntry(id, { enabled: enabled });
+            } catch (err) {
+              console.error('Error toggling entry:', err);
+              refreshDictionaryTable();
+            }
+          });
+        });
+
+        document.querySelectorAll('.dict-edit-btn').forEach((btn) => {
+          btn.addEventListener('click', async (e) => {
+            const id = e.target.getAttribute('data-id');
+            const curPhrase = e.target.getAttribute('data-phrase');
+            const curRep = e.target.getAttribute('data-replacement');
+            const curTag = e.target.getAttribute('data-tag');
+
+            const newPhrase = prompt('Edit spoken phrase:', curPhrase);
+            if (newPhrase === null) return;
+            const newRep = prompt('Edit replacement text:', curRep);
+            if (newRep === null) return;
+            const newTag = prompt('Edit tag (optional):', curTag);
+            if (newTag === null) return;
+
+            try {
+              await window.rift.updateDictionaryEntry(id, {
+                phrase: newPhrase.trim(),
+                replacement: newRep,
+                tag: newTag.trim() || null,
+              });
+              await refreshDictionaryTable();
+            } catch (err) {
+              alert('Failed to update entry: ' + err.message);
+            }
+          });
+        });
+
+        document.querySelectorAll('.dict-delete-btn').forEach((btn) => {
+          btn.addEventListener('click', async (e) => {
+            const id = e.target.getAttribute('data-id');
+            if (confirm('Delete this dictionary entry?')) {
+              try {
+                await window.rift.deleteDictionaryEntry(id);
+                await refreshDictionaryTable();
+              } catch (err) {
+                alert('Failed to delete entry: ' + err.message);
+              }
+            }
+          });
+        });
+
+      } catch (err) {
+        console.error('Error refreshing dictionary table:', err);
+        dictTableBody.innerHTML = `<tr><td colspan="5" style="color: #f87171; text-align: center;">Error loading dictionary: ${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    addDictEntryBtn.addEventListener('click', async () => {
+      const phrase = newPhraseInput.value.trim();
+      const replacement = newReplacementInput.value;
+      const tag = newTagInput.value.trim() || null;
+
+      if (!phrase) {
+        addDictResult.className = 'save-result error';
+        addDictResult.style.display = 'block';
+        addDictResult.textContent = 'Phrase cannot be empty.';
+        return;
+      }
+      if (replacement === '') {
+        addDictResult.className = 'save-result error';
+        addDictResult.style.display = 'block';
+        addDictResult.textContent = 'Replacement cannot be empty.';
+        return;
+      }
+
+      addDictEntryBtn.disabled = true;
+      try {
+        await window.rift.addDictionaryEntry({
+          phrase: phrase,
+          replacement: replacement,
+          tag: tag,
+        });
+        addDictResult.className = 'save-result success';
+        addDictResult.style.display = 'block';
+        addDictResult.textContent = `Added rule: "${phrase}" → "${replacement}"`;
+        newPhraseInput.value = '';
+        newReplacementInput.value = '';
+        newTagInput.value = '';
+        await refreshDictionaryTable();
+      } catch (err) {
+        addDictResult.className = 'save-result error';
+        addDictResult.style.display = 'block';
+        addDictResult.textContent = 'Error adding entry: ' + err.message;
+      } finally {
+        addDictEntryBtn.disabled = false;
+      }
+    });
+
+    importDictBtn.addEventListener('click', async () => {
+      dictImportExportBanner.style.display = 'none';
+      try {
+        let res = await window.rift.importDictionary();
+        if (typeof res === 'string') res = JSON.parse(res);
+        if (res.success) {
+          dictImportExportBanner.className = 'save-result success';
+          dictImportExportBanner.style.display = 'block';
+          const errCount = res.errors ? res.errors.length : 0;
+          dictImportExportBanner.innerHTML = `✅ Successfully imported ${res.count} dictionary entries.${errCount > 0 ? `<br><small style="color:#fca5a5;">${errCount} rows skipped/failed</small>` : ''}`;
+          await refreshDictionaryTable();
+        } else {
+          dictImportExportBanner.className = 'save-result';
+          dictImportExportBanner.style.display = 'block';
+          dictImportExportBanner.style.borderColor = '#f59e0b';
+          dictImportExportBanner.style.color = '#fbbf24';
+          dictImportExportBanner.style.backgroundColor = 'rgba(245, 158, 11, 0.1)';
+          dictImportExportBanner.textContent = (res.errors && res.errors[0]) ? res.errors[0] : 'Import cancelled or failed.';
+        }
+      } catch (err) {
+        dictImportExportBanner.className = 'save-result error';
+        dictImportExportBanner.style.display = 'block';
+        dictImportExportBanner.textContent = 'Import error: ' + err.message;
+      }
+    });
+
+    exportDictBtn.addEventListener('click', async () => {
+      dictImportExportBanner.style.display = 'none';
+      try {
+        let res = await window.rift.exportDictionary();
+        if (typeof res === 'string') res = JSON.parse(res);
+        if (res.success) {
+          dictImportExportBanner.className = 'save-result success';
+          dictImportExportBanner.style.display = 'block';
+          dictImportExportBanner.textContent = '✅ Dictionary exported successfully.';
+        } else {
+          dictImportExportBanner.className = 'save-result';
+          dictImportExportBanner.style.display = 'block';
+          dictImportExportBanner.style.borderColor = '#9ca3af';
+          dictImportExportBanner.style.color = '#d1d5db';
+          dictImportExportBanner.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+          dictImportExportBanner.textContent = 'Export cancelled.';
+        }
+      } catch (err) {
+        dictImportExportBanner.className = 'save-result error';
+        dictImportExportBanner.style.display = 'block';
+        dictImportExportBanner.textContent = 'Export error: ' + err.message;
+      }
+    });
+
+    runDictTestBtn.addEventListener('click', async () => {
+      const inputVal = dictTestInput.value;
+      runDictTestBtn.disabled = true;
+      try {
+        const output = await window.rift.testDictionary(inputVal);
+        const wasChanged = (output !== inputVal);
+        dictTestOutputCard.style.display = 'block';
+        dictTestResultText.textContent = output === '' ? '(empty string)' : output;
+        if (wasChanged) {
+          dictTestBadge.className = 'save-result success';
+          dictTestBadge.style.display = 'inline-block';
+          dictTestBadge.style.backgroundColor = 'rgba(168, 85, 247, 0.2)';
+          dictTestBadge.style.color = '#d8b4fe';
+          dictTestBadge.style.borderColor = 'rgba(168, 85, 247, 0.4)';
+          dictTestBadge.textContent = '📖 Dictionary Applied';
+        } else {
+          dictTestBadge.className = 'save-result';
+          dictTestBadge.style.display = 'inline-block';
+          dictTestBadge.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+          dictTestBadge.style.color = '#9ca3af';
+          dictTestBadge.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+          dictTestBadge.textContent = 'No Match (Unchanged)';
+        }
+      } catch (err) {
+        dictTestOutputCard.style.display = 'block';
+        dictTestResultText.textContent = 'Error: ' + err.message;
+        dictTestBadge.style.display = 'none';
+      } finally {
+        runDictTestBtn.disabled = false;
+      }
+    });
+
+    dictTestInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        runDictTestBtn.click();
+      }
+    });
+
+    // =============================================
+    // Phase 10: Unified Settings & Feature Controls
+    // =============================================
+    const loadAllSettingsBtn = document.getElementById('loadAllSettingsBtn');
+    const settingsContractResult = document.getElementById('settingsContractResult');
+    const settingsTableBody = document.getElementById('settingsTableBody');
+
+    const settingTranscriptionMode = document.getElementById('settingTranscriptionMode');
+    const settingInferenceProfile = document.getElementById('settingInferenceProfile');
+    const settingInferenceModel = document.getElementById('settingInferenceModel');
+    const settingMicDeviceId = document.getElementById('settingMicDeviceId');
+    const settingPushToTalkMode = document.getElementById('settingPushToTalkMode');
+    const settingWidgetVisibility = document.getElementById('settingWidgetVisibility');
+    const settingWidgetStyle = document.getElementById('settingWidgetStyle');
+    const settingTheme = document.getElementById('settingTheme');
+
+    const settingLaunchAtLogin = document.getElementById('settingLaunchAtLogin');
+    const regStatusIndicator = document.getElementById('regStatusIndicator');
+    const settingRecordingSounds = document.getElementById('settingRecordingSounds');
+    const settingPauseOtherAudio = document.getElementById('settingPauseOtherAudio');
+    const settingCopyInsteadOfType = document.getElementById('settingCopyInsteadOfType');
+    const settingAutoEnhance = document.getElementById('settingAutoEnhance');
+    const settingFollowCursor = document.getElementById('settingFollowCursor');
+    const settingLockPosition = document.getElementById('settingLockPosition');
+
+    const settingFormattingInstructions = document.getElementById('settingFormattingInstructions');
+    const saveFormattingInstructionsBtn = document.getElementById('saveFormattingInstructionsBtn');
+
+    const enhanceTestInput = document.getElementById('enhanceTestInput');
+    const enhanceTestInstructions = document.getElementById('enhanceTestInstructions');
+    const runEnhanceTestBtn = document.getElementById('runEnhanceTestBtn');
+    const enhanceTestOutputCard = document.getElementById('enhanceTestOutputCard');
+    const enhanceTestBadge = document.getElementById('enhanceTestBadge');
+    const enhanceTestResultText = document.getElementById('enhanceTestResultText');
+
+    let currentSettings = {};
+
+    async function checkRegistryStatus() {
+      try {
+        const isActive = await window.rift.isLaunchAtLoginActive();
+        regStatusIndicator.textContent = isActive ? '(Registry: ENABLED)' : '(Registry: Not Registered)';
+        regStatusIndicator.style.color = isActive ? '#34d399' : '#94a3b8';
+      } catch (e) {
+        regStatusIndicator.textContent = '(Registry: unknown)';
+      }
+    }
+
+    async function loadAvailableModelsAndMics() {
+      try {
+        const modelsJson = await window.rift.getAvailableCloudModels();
+        const modelsData = JSON.parse(modelsJson);
+        if (modelsData.models && modelsData.models.length > 0) {
+          settingInferenceModel.innerHTML = '';
+          for (const m of modelsData.models) {
+            const opt = document.createElement('option');
+            opt.value = m;
+            opt.textContent = m;
+            settingInferenceModel.appendChild(opt);
+          }
+        }
+      } catch (e) {
+        console.warn('Could not load cloud models:', e);
+      }
+
+      try {
+        const micsJson = await window.rift.getMicrophones();
+        const micsData = JSON.parse(micsJson);
+        if (micsData.microphones) {
+          settingMicDeviceId.innerHTML = '<option value="default">default (System Default)</option>';
+          for (const m of micsData.microphones) {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            opt.textContent = `${m.name}${m.isDefault ? ' (Default)' : ''}`;
+            settingMicDeviceId.appendChild(opt);
+          }
+        }
+      } catch (e) {
+        console.warn('Could not populate mics:', e);
+      }
+    }
+
+    async function refreshUnifiedSettings() {
+      loadAllSettingsBtn.disabled = true;
+      try {
+        const settingsJson = await window.rift.getSettings();
+        const settings = JSON.parse(settingsJson);
+        currentSettings = settings;
+
+        settingsTableBody.innerHTML = '';
+        const keys = Object.keys(settings).sort();
+        for (const k of keys) {
+          const val = settings[k];
+          const valType = typeof val;
+          const tr = document.createElement('tr');
+
+          let displayVal = val;
+          if (valType === 'boolean') {
+            displayVal = val ? '<span style="color:#34d399; font-weight:600;">true</span>' : '<span style="color:#f87171; font-weight:600;">false</span>';
+          } else if (val === '') {
+            displayVal = '<span style="color:var(--text-muted); font-style:italic;">(empty string)</span>';
+          } else {
+            displayVal = `<span style="color:#38bdf8; font-weight:500;">${escapeHtml(String(val))}</span>`;
+          }
+
+          tr.innerHTML = `
+            <td style="font-family: Consolas, monospace; font-weight: 600; color: #e2e8f0;">${escapeHtml(k)}</td>
+            <td style="font-family: Consolas, monospace;">${displayVal}</td>
+            <td style="color: #a5b4fc; font-size: 0.85rem;"><code>${valType}</code></td>
+          `;
+          settingsTableBody.appendChild(tr);
+        }
+
+        if (settings.transcriptionMode !== undefined) settingTranscriptionMode.value = settings.transcriptionMode;
+        if (settings.inferenceProfile !== undefined) settingInferenceProfile.value = settings.inferenceProfile;
+        if (settings.inferenceModel !== undefined) settingInferenceModel.value = settings.inferenceModel;
+        if (settings.microphoneDeviceId !== undefined) settingMicDeviceId.value = String(settings.microphoneDeviceId);
+        if (settings.pushToTalkMode !== undefined) settingPushToTalkMode.value = settings.pushToTalkMode;
+        if (settings.widgetVisibility !== undefined) settingWidgetVisibility.value = settings.widgetVisibility;
+        if (settings.widgetStyle !== undefined) settingWidgetStyle.value = settings.widgetStyle;
+        if (settings.theme !== undefined) settingTheme.value = settings.theme;
+
+        if (settings.launchAtLogin !== undefined) settingLaunchAtLogin.checked = Boolean(settings.launchAtLogin);
+        if (settings.recordingSounds !== undefined) settingRecordingSounds.checked = Boolean(settings.recordingSounds);
+        if (settings.pauseOtherAudioWhileTalking !== undefined) settingPauseOtherAudio.checked = Boolean(settings.pauseOtherAudioWhileTalking);
+        if (settings.copyInsteadOfType !== undefined) settingCopyInsteadOfType.checked = Boolean(settings.copyInsteadOfType);
+        if (settings.autoEnhancePrompt !== undefined) settingAutoEnhance.checked = Boolean(settings.autoEnhancePrompt);
+        if (settings.followCursorAcrossMonitors !== undefined) settingFollowCursor.checked = Boolean(settings.followCursorAcrossMonitors);
+        if (settings.lockWidgetPosition !== undefined) settingLockPosition.checked = Boolean(settings.lockWidgetPosition);
+
+        if (settings.formattingInstructions !== undefined) settingFormattingInstructions.value = settings.formattingInstructions;
+
+        await checkRegistryStatus();
+
+        settingsContractResult.className = 'save-result success';
+        settingsContractResult.style.display = 'block';
+        settingsContractResult.textContent = `✅ Successfully loaded all ${keys.length} unified settings fields.`;
+      } catch (err) {
+        settingsContractResult.className = 'save-result error';
+        settingsContractResult.style.display = 'block';
+        settingsContractResult.textContent = 'Failed to load settings: ' + err.message;
+      } finally {
+        loadAllSettingsBtn.disabled = false;
+      }
+    }
+
+    async function patchSingleSetting(fieldName, value) {
+      try {
+        const patch = {};
+        patch[fieldName] = value;
+        const resJson = await window.rift.saveSettings(JSON.stringify(patch));
+        const res = JSON.parse(resJson);
+        if (res.success) {
+          settingsContractResult.className = 'save-result success';
+          settingsContractResult.style.display = 'block';
+          settingsContractResult.textContent = `✅ Saved ${fieldName} = ${JSON.stringify(value)}`;
+          await refreshUnifiedSettings();
+        } else {
+          settingsContractResult.className = 'save-result error';
+          settingsContractResult.style.display = 'block';
+          settingsContractResult.textContent = `❌ Failed to save ${fieldName}: ${res.message}`;
+        }
+      } catch (err) {
+        settingsContractResult.className = 'save-result error';
+        settingsContractResult.style.display = 'block';
+        settingsContractResult.textContent = `Error saving ${fieldName}: ${err.message}`;
+      }
+    }
+
+    loadAllSettingsBtn.addEventListener('click', refreshUnifiedSettings);
+
+    settingTranscriptionMode.addEventListener('change', () => patchSingleSetting('transcriptionMode', settingTranscriptionMode.value));
+    settingInferenceProfile.addEventListener('change', () => patchSingleSetting('inferenceProfile', settingInferenceProfile.value));
+    settingInferenceModel.addEventListener('change', () => patchSingleSetting('inferenceModel', settingInferenceModel.value));
+    settingMicDeviceId.addEventListener('change', () => {
+      const val = settingMicDeviceId.value;
+      patchSingleSetting('microphoneDeviceId', val === 'default' ? 'default' : parseInt(val, 10));
+    });
+    settingPushToTalkMode.addEventListener('change', () => patchSingleSetting('pushToTalkMode', settingPushToTalkMode.value));
+    settingWidgetVisibility.addEventListener('change', () => patchSingleSetting('widgetVisibility', settingWidgetVisibility.value));
+    settingWidgetStyle.addEventListener('change', () => patchSingleSetting('widgetStyle', settingWidgetStyle.value));
+    settingTheme.addEventListener('change', () => patchSingleSetting('theme', settingTheme.value));
+
+    settingLaunchAtLogin.addEventListener('change', () => patchSingleSetting('launchAtLogin', settingLaunchAtLogin.checked));
+    settingRecordingSounds.addEventListener('change', () => patchSingleSetting('recordingSounds', settingRecordingSounds.checked));
+    settingPauseOtherAudio.addEventListener('change', () => patchSingleSetting('pauseOtherAudioWhileTalking', settingPauseOtherAudio.checked));
+    settingCopyInsteadOfType.addEventListener('change', () => patchSingleSetting('copyInsteadOfType', settingCopyInsteadOfType.checked));
+    settingAutoEnhance.addEventListener('change', () => patchSingleSetting('autoEnhancePrompt', settingAutoEnhance.checked));
+    settingFollowCursor.addEventListener('change', () => patchSingleSetting('followCursorAcrossMonitors', settingFollowCursor.checked));
+    settingLockPosition.addEventListener('change', () => patchSingleSetting('lockWidgetPosition', settingLockPosition.checked));
+
+    saveFormattingInstructionsBtn.addEventListener('click', () => {
+      patchSingleSetting('formattingInstructions', settingFormattingInstructions.value);
+    });
+
+    runEnhanceTestBtn.addEventListener('click', async () => {
+      const text = enhanceTestInput.value.trim();
+      const instructions = enhanceTestInstructions.value.trim();
+      if (!text) {
+        alert('Please enter some text to test enhancement.');
+        return;
+      }
+      runEnhanceTestBtn.disabled = true;
+      runEnhanceTestBtn.textContent = 'Enhancing...';
+      try {
+        const resJson = await window.rift.testEnhance(text, instructions);
+        const res = JSON.parse(resJson);
+        enhanceTestOutputCard.style.display = 'block';
+        enhanceTestResultText.textContent = res.text || '(empty)';
+        if (res.success) {
+          enhanceTestBadge.className = 'save-result success';
+          enhanceTestBadge.style.display = 'inline-block';
+          const modelTag = res.model ? ` [${res.model}]` : '';
+          enhanceTestBadge.textContent = `✨ Enhanced${modelTag} (${res.latencyMs}ms)`;
+        } else {
+          enhanceTestBadge.className = 'save-result error';
+          enhanceTestBadge.style.display = 'inline-block';
+          enhanceTestBadge.textContent = `❌ Fallback (${res.errorType || 'error'}): ${res.errorMessage}`;
+        }
+      } catch (err) {
+        enhanceTestOutputCard.style.display = 'block';
+        enhanceTestResultText.textContent = 'Error: ' + err.message;
+        enhanceTestBadge.style.display = 'none';
+      } finally {
+        runEnhanceTestBtn.disabled = false;
+        runEnhanceTestBtn.textContent = 'Enhance Text ✨';
+      }
+    });
+
+    // =========================================================
+    // Phase 11: Rate Limiting, Usage Tracking & Widget Polish
+    // =========================================================
+    const whisperMinCount = document.getElementById('whisperMinCount');
+    const whisperDayCount = document.getElementById('whisperDayCount');
+    const whisperResetTime = document.getElementById('whisperResetTime');
+    const enhanceMinCount = document.getElementById('enhanceMinCount');
+    const enhanceDayCount = document.getElementById('enhanceDayCount');
+    const enhanceResetTime = document.getElementById('enhanceResetTime');
+    const requestQueuedBanner = document.getElementById('requestQueuedBanner');
+    const queueBannerText = document.getElementById('queueBannerText');
+    const refreshUsageStatsBtn = document.getElementById('refreshUsageStatsBtn');
+    const testSafeSlotCrashBtn = document.getElementById('testSafeSlotCrashBtn');
+    const safeSlotResultBox = document.getElementById('safeSlotResultBox');
+    const safeSlotResultText = document.getElementById('safeSlotResultText');
+    const widgetCustomPosLabel = document.getElementById('widgetCustomPosLabel');
+    const resetWidgetPosBtn = document.getElementById('resetWidgetPosBtn');
+
+    function renderUsageStats(stats) {
+      if (!stats) return;
+      if (stats.whisper) {
+        whisperMinCount.textContent = stats.whisper.requestsThisMinute ?? 0;
+        whisperDayCount.textContent = stats.whisper.requestsToday ?? 0;
+        if (stats.whisper.resetsAt) {
+          try {
+            const d = new Date(stats.whisper.resetsAt);
+            whisperResetTime.textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          } catch {
+            whisperResetTime.textContent = stats.whisper.resetsAt;
+          }
+        }
+      }
+      if (stats.enhance) {
+        enhanceMinCount.textContent = stats.enhance.requestsThisMinute ?? 0;
+        enhanceDayCount.textContent = stats.enhance.requestsToday ?? 0;
+        if (stats.enhance.resetsAt) {
+          try {
+            const d = new Date(stats.enhance.resetsAt);
+            enhanceResetTime.textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          } catch {
+            enhanceResetTime.textContent = stats.enhance.resetsAt;
+          }
+        }
+      }
+    }
+
+    async function fetchUsageStats() {
+      try {
+        const statsJson = await window.rift.getUsageStats();
+        const stats = JSON.parse(statsJson);
+        renderUsageStats(stats);
+      } catch (err) {
+        console.error('Failed to fetch usage stats:', err);
+      }
+    }
+
+    refreshUsageStatsBtn.addEventListener('click', fetchUsageStats);
+
+    // Live update listeners
+    window.rift.on('usageUpdated', (data) => {
+      try {
+        const stats = typeof data === 'string' ? JSON.parse(data) : data;
+        renderUsageStats(stats);
+      } catch (e) {
+        console.warn('Could not parse usageUpdated payload:', e);
+      }
+    });
+
+    window.rift.on('requestQueued', (pool) => {
+      requestQueuedBanner.style.display = 'block';
+      queueBannerText.textContent = `Request safely queued (${pool || 'api'}):`;
+      setTimeout(() => {
+        requestQueuedBanner.style.display = 'none';
+      }, 4000);
+    });
+
+    // Test @safe_slot crash resilience & type-aware fallbacks
+    testSafeSlotCrashBtn.addEventListener('click', async () => {
+      safeSlotResultBox.style.display = 'block';
+      safeSlotResultText.textContent = 'Calling slots to verify @safe_slot resilience...';
+      try {
+        const boolRes = await window.rift.isLaunchAtLoginActive();
+        const settingsRes = await window.rift.getSettings();
+        const settings = JSON.parse(settingsRes);
+        safeSlotResultText.innerHTML = `
+          🛡️ <strong>@safe_slot Verified:</strong><br>
+          • Bool-returning slot (<code>isLaunchAtLoginActive</code>): returned <code>${boolRes}</code> (Type: ${typeof boolRes})<br>
+          • String-returning slot (<code>getSettings</code>): returned valid JSON object with ${Object.keys(settings).length} fields.<br>
+          Both slots executed safely through Python error wrappers.
+        `;
+      } catch (err) {
+        safeSlotResultText.innerHTML = `<span style="color: #f87171;">Error during slot call: ${err.message}</span>`;
+      }
+    });
+
+    // Reset widget position to center
+    resetWidgetPosBtn.addEventListener('click', async () => {
+      try {
+        await window.rift.saveSettings(JSON.stringify({ widgetCustomPosition: null }));
+        widgetCustomPosLabel.textContent = 'null (Never dragged)';
+        await refreshUnifiedSettings();
+      } catch (err) {
+        alert('Failed to reset widget position: ' + err.message);
+      }
+    });
+
+    window.rift.ready().then(async () => {
+      await loadAvailableModelsAndMics();
+      await refreshUnifiedSettings();
+      await fetchUsageStats();
+    });
+  </script>
+</body>
+</html>

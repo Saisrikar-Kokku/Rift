@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>History - Rift</title>
+    <link href="../shared/fonts.css" rel="stylesheet">
+    <link href="../shared/tailwind.css" rel="stylesheet">
+    <link href="../shared/modal.css" rel="stylesheet">
+    <style>
+        /* Modern BridgeVoice Design Tokens */
+        :root {
+            --bg-base: #0a0a0f;
+            --bg-sidebar: #121218;
+            --bg-card: #161620;
+            --bg-card-hover: #1f1f2c;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(202, 190, 255, 0.25);
+            --text-primary: #e4e1ea;
+            --text-muted: #938ea1;
+            --accent-purple: #cabeff;
+            --accent-green: #45dfa9;
+            --accent-blue: #b4c5ff;
+        }
+
+        html, body {
+            background-color: var(--bg-base) !important;
+            color: var(--text-primary) !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            min-height: 100vh !important;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Standardized Sidebar */
+        .rift-sidebar {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            bottom: 0 !important;
+            width: 220px !important;
+            background-color: var(--bg-sidebar) !important;
+            border-right: 1px solid var(--border-subtle) !important;
+            z-index: 50 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            padding: 24px 14px !important;
+            box-sizing: border-box !important;
+        }
+
+        /* Top Header Bar */
+        .rift-header {
+            position: fixed !important;
+            top: 0 !important;
+            left: 220px !important;
+            right: 0 !important;
+            height: 56px !important;
+            background-color: rgba(14, 14, 20, 0.9) !important;
+            backdrop-filter: blur(16px) !important;
+            -webkit-backdrop-filter: blur(16px) !important;
+            border-bottom: 1px solid var(--border-subtle) !important;
+            z-index: 40 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            padding: 0 36px !important;
+            box-sizing: border-box !important;
+        }
+
+        /* Main Content Container */
+        .rift-main-area {
+            margin-left: 220px !important;
+            min-height: 100vh !important;
+            background-color: var(--bg-base) !important;
+            padding-top: 84px !important; /* 56px header + 28px breathing room */
+            padding-bottom: 64px !important;
+            padding-left: 40px !important;
+            padding-right: 40px !important;
+            box-sizing: border-box !important;
+        }
+
+        .rift-content {
+            max-width: 1040px !important;
+            margin: 0 auto !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 24px !important;
+        }
+
+        /* Transcript Cards */
+        .history-card {
+            background-color: var(--bg-card) !important;
+            border: 1px solid var(--border-subtle) !important;
+            border-radius: 14px !important;
+            padding: 20px 24px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 14px !important;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+            position: relative;
+        }
+
+        .history-card:hover {
+            background-color: var(--bg-card-hover) !important;
+            border-color: var(--border-hover) !important;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;
+        }
+
+        .history-card-header {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            gap: 12px !important;
+            flex-wrap: wrap !important;
+        }
+
+        .history-card-meta {
+            display: flex !important;
+            align-items: center !important;
+            gap: 10px !important;
+            flex-wrap: wrap !important;
+            font-size: 12px !important;
+            font-family: 'JetBrains Mono', monospace !important;
+            color: var(--text-muted) !important;
+        }
+
+        .history-badge {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 5px !important;
+            padding: 3px 8px !important;
+            border-radius: 6px !important;
+            font-size: 11px !important;
+            font-family: 'JetBrains Mono', monospace !important;
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            color: var(--text-primary) !important;
+        }
+
+        .history-badge-cloud {
+            color: #cabeff !important;
+            background-color: rgba(202, 190, 255, 0.1) !important;
+            border-color: rgba(202, 190, 255, 0.2) !important;
+        }
+
+        .history-badge-local {
+            color: #45dfa9 !important;
+            background-color: rgba(69, 223, 169, 0.1) !important;
+            border-color: rgba(69, 223, 169, 0.2) !important;
+        }
+
+        .history-card-actions {
+            display: flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+        }
+
+        .history-action-btn {
+            height: 32px !important;
+            width: 32px !important;
+            border-radius: 8px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            background-color: rgba(255, 255, 255, 0.04) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            color: var(--text-muted) !important;
+            cursor: pointer !important;
+            transition: all 0.15s ease !important;
+        }
+
+        .history-action-btn:hover {
+            background-color: rgba(255, 255, 255, 0.1) !important;
+            color: var(--text-primary) !important;
+            border-color: rgba(255, 255, 255, 0.18) !important;
+        }
+
+        .history-action-btn.delete-btn:hover {
+            background-color: rgba(239, 68, 68, 0.15) !important;
+            color: #ef4444 !important;
+            border-color: rgba(239, 68, 68, 0.3) !important;
+        }
+
+        .history-text {
+            font-size: 15px !important;
+            line-height: 1.65 !important;
+            color: var(--text-primary) !important;
+            font-weight: 400 !important;
+            word-break: break-word !important;
+            user-select: text !important;
+            -webkit-user-select: text !important;
+            white-space: pre-wrap !important;
+        }
+
+        /* Filter Chips */
+        .filter-chip {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+            padding: 6px 14px !important;
+            border-radius: 9999px !important;
+            font-size: 12px !important;
+            font-weight: 500 !important;
+            color: var(--text-muted) !important;
+            background-color: #14141c !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            cursor: pointer !important;
+            transition: all 0.15s ease !important;
+        }
+
+        .filter-chip:hover {
+            background-color: #1c1c28 !important;
+            color: var(--text-primary) !important;
+            border-color: rgba(255, 255, 255, 0.16) !important;
+        }
+
+        .filter-chip.active {
+            background-color: #cabeff !important;
+            color: #14083a !important;
+            border-color: #cabeff !important;
+            font-weight: 600 !important;
+            box-shadow: 0 0 16px rgba(202, 190, 255, 0.25) !important;
+        }
+
+        /* Search Input */
+        .search-container {
+            position: relative;
+            flex: 1;
+            max-width: 380px;
+        }
+
+        .search-input {
+            width: 100%;
+            height: 40px;
+            padding: 0 40px 0 38px;
+            border-radius: 10px;
+            background-color: #14141c;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+            font-size: 13px;
+            font-family: inherit;
+            box-sizing: border-box;
+            transition: all 0.15s ease;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: rgba(202, 190, 255, 0.5);
+            box-shadow: 0 0 0 3px rgba(202, 190, 255, 0.12);
+            background-color: #181822;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 18px;
+            pointer-events: none;
+        }
+
+        .search-clear-btn {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 16px;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            padding: 0;
+            display: none;
+        }
+
+        .search-clear-btn:hover {
+            color: var(--text-primary);
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 7px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.14);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.26);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Standardized Fixed Sidebar -->
+    <aside class="rift-sidebar">
+        <div style="display: flex; flex-direction: column; gap: 24px;">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 4px 8px;">
+                <img alt="Rift Logo" style="height: 32px; width: auto; object-fit: contain;" src="../assets/logo.svg">
+                <span style="font-size: 18px; font-weight: 700; color: #e4e1ea; letter-spacing: -0.02em;">Rift</span>
+            </div>
+            <nav style="display: flex; flex-direction: column; gap: 4px;">
+                <a href="home.html"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; color: #938ea1; font-size: 14px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#1a1a24'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#938ea1';">
+                    <span class="material-symbols-outlined text-[19px]">home</span>
+                    <span>Home</span>
+                </a>
+                <a href="history.html" aria-current="page"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; background-color: #1f1f28; color: #e4e1ea; font-size: 14px; font-weight: 600; text-decoration: none;">
+                    <span class="material-symbols-outlined text-[19px] text-primary" style="color: #cabeff;">schedule</span>
+                    <span>History</span>
+                </a>
+                <a href="dictionary.html"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; color: #938ea1; font-size: 14px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#1a1a24'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#938ea1';">
+                    <span class="material-symbols-outlined text-[19px]">book_2</span>
+                    <span>Dictionary</span>
+                </a>
+                <a href="shortcuts.html"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; color: #938ea1; font-size: 14px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#1a1a24'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#938ea1';">
+                    <span class="material-symbols-outlined text-[19px]">keyboard</span>
+                    <span>Shortcuts</span>
+                </a>
+                <a href="settings.html"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; color: #938ea1; font-size: 14px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#1a1a24'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#938ea1';">
+                    <span class="material-symbols-outlined text-[19px]">settings</span>
+                    <span>Settings</span>
+                </a>
+            </nav>
+        </div>
+        <div style="padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08); padding-left: 8px; padding-right: 8px; display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #938ea1;">v1.0.0</span>
+            <div style="display: flex; align-items: center; gap: 6px;" title="Engine Ready">
+                <span style="height: 8px; width: 8px; border-radius: 50%; background-color: #45dfa9; box-shadow: 0 0 8px rgba(69,223,169,0.8);"></span>
+                <span style="font-size: 11px; color: #938ea1; font-family: 'JetBrains Mono', monospace;">Ready</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Top App Bar Header -->
+    <header class="rift-header">
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <a href="settings.html" style="display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 9999px; background-color: #1a1a24; border: 1px solid rgba(255,255,255,0.08); text-decoration: none; color: #cac4d7; font-size: 12px; font-family: 'JetBrains Mono', monospace;" title="Configure engine in Settings">
+                <span class="material-symbols-outlined text-tertiary" style="font-size: 15px; color: #45dfa9;">mic</span>
+                <span id="headerEngineText" style="color: #e4e1ea;">whisper-large-v3-turbo</span>
+                <span style="color: #938ea1;">• Fast</span>
+            </a>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; background-color: #1a1a24; border: 1px solid rgba(255,255,255,0.08); font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #938ea1;">
+                <span id="headerShortcutBadge">Right Alt</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 9999px; background-color: #1a1a24; border: 1px solid rgba(255,255,255,0.08); font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #cac4d7;">
+                <span style="position: relative; display: flex; height: 8px; width: 8px;">
+                    <span style="position: absolute; display: inline-flex; height: 100%; width: 100%; border-radius: 50%; background-color: #45dfa9; opacity: 0.75;" class="animate-ping"></span>
+                    <span style="position: relative; display: inline-flex; border-radius: 50%; height: 8px; width: 8px; background-color: #45dfa9;"></span>
+                </span>
+                <span style="font-weight: 500;">Online</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="rift-main-area">
+        <div class="rift-content">
+
+            <!-- 1. Header Row (Title + Item Count Badge + Search Bar) -->
+            <div style="display: flex; flex-direction: column; gap: 20px;">
+                <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 14px;">
+                        <div style="height: 48px; width: 48px; border-radius: 14px; background-color: rgba(202, 190, 255, 0.12); border: 1px solid rgba(202, 190, 255, 0.25); display: flex; align-items: center; justify-content: center; color: #cabeff; box-shadow: 0 0 20px rgba(202, 190, 255, 0.1); flex-shrink: 0;">
+                            <span class="material-symbols-outlined" style="font-size: 26px;">schedule</span>
+                        </div>
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <h1 style="font-size: 24px; font-weight: 700; color: #e4e1ea; letter-spacing: -0.02em; margin: 0;">History</h1>
+                                <span id="itemCountBadge" style="font-size: 11px; font-family: 'JetBrains Mono', monospace; padding: 2px 8px; border-radius: 6px; background-color: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.08); color: #938ea1;">
+                                    0 items
+                                </span>
+                            </div>
+                            <p style="font-size: 13px; color: #938ea1; margin: 2px 0 0 0;">Everything you've dictated, stored securely in local SQLite.</p>
+                        </div>
+                    </div>
+
+                    <!-- Quick Search Input -->
+                    <div class="search-container">
+                        <span class="material-symbols-outlined search-icon">search</span>
+                        <input id="historySearch" class="search-input" type="text" placeholder="Search transcripts or apps... (Ctrl+K)">
+                        <button id="searchClearBtn" class="search-clear-btn" title="Clear search">
+                            <span class="material-symbols-outlined" style="font-size: 16px;">close</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 2. Filter Chips & Clear History Row -->
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--border-subtle);">
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;" id="filterChipsContainer">
+                        <button data-filter="all" class="filter-chip active">
+                            <span>All</span>
+                            <span id="filterCountAll" style="font-size: 10px; opacity: 0.85; font-family: 'JetBrains Mono', monospace;">0</span>
+                        </button>
+                        <button data-filter="today" class="filter-chip">
+                            <span>Today</span>
+                        </button>
+                        <button data-filter="week" class="filter-chip">
+                            <span>This week</span>
+                        </button>
+                        <button data-filter="cloud" class="filter-chip">
+                            <span style="height: 6px; width: 6px; border-radius: 50%; background-color: #cabeff;"></span>
+                            <span>Cloud</span>
+                        </button>
+                        <button data-filter="local" class="filter-chip">
+                            <span style="height: 6px; width: 6px; border-radius: 50%; background-color: #45dfa9;"></span>
+                            <span>Local</span>
+                        </button>
+                    </div>
+
+                    <button id="clearHistoryBtn"
+                        style="display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.08); color: #938ea1; font-size: 12px; cursor: pointer; transition: all 0.15s ease;"
+                        onmouseover="this.style.color='#ef4444'; this.style.borderColor='rgba(239, 68, 68, 0.3)'; this.style.backgroundColor='rgba(239, 68, 68, 0.08)';"
+                        onmouseout="this.style.color='#938ea1'; this.style.borderColor='rgba(255, 255, 255, 0.08)'; this.style.backgroundColor='transparent';"
+                        title="Clear all dictation history permanently">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">delete_sweep</span>
+                        <span>Clear History</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3. Dynamic Transcripts List Container -->
+            <div id="transcriptsContainer" style="display: flex; flex-direction: column; gap: 12px;">
+                <!-- Cards rendered dynamically via JS -->
+            </div>
+
+            <!-- 4. Empty State Placeholder -->
+            <div id="emptyStatePlaceholder" style="display: none; border-radius: 16px; border: 1px dashed rgba(255,255,255,0.1); padding: 64px 24px; text-align: center; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background-color: rgba(20,20,28,0.4);">
+                <span class="material-symbols-outlined" style="font-size: 44px; color: rgba(147,142,161,0.35);">history</span>
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <p id="emptyStateTitle" style="font-size: 16px; font-weight: 600; color: #e4e1ea; margin: 0;">No dictations found</p>
+                    <p id="emptyStateSubtitle" style="font-size: 13px; color: #938ea1; margin: 0; max-width: 420px;">
+                        Hold your hotkey (<span id="emptyHotkeyText" style="font-family: 'JetBrains Mono', monospace; color: #cabeff; font-weight: 600;">Right Alt</span>) anywhere on Windows to dictate.
+                    </p>
+                </div>
+                <button id="emptyStateActionBtn" style="display: none; margin-top: 6px; padding: 6px 14px; border-radius: 8px; background-color: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.12); color: #e4e1ea; font-size: 12px; cursor: pointer;">
+                    Clear Search Filter
+                </button>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Scripts -->
+    <script src="../shared/qwebchannel.js"></script>
+    <script src="../shared/bridge.js"></script>
+    <script src="../shared/modal.js"></script>
+    <script src="../shared/toast.js"></script>
+    <script>
+        (function() {
+            'use strict';
+
+            const searchInput = document.getElementById('historySearch');
+            const searchClearBtn = document.getElementById('searchClearBtn');
+            const container = document.getElementById('transcriptsContainer');
+            const emptyState = document.getElementById('emptyStatePlaceholder');
+            const emptyStateTitle = document.getElementById('emptyStateTitle');
+            const emptyStateSubtitle = document.getElementById('emptyStateSubtitle');
+            const emptyStateActionBtn = document.getElementById('emptyStateActionBtn');
+            const emptyHotkeyText = document.getElementById('emptyHotkeyText');
+            const itemCountBadge = document.getElementById('itemCountBadge');
+            const filterCountAll = document.getElementById('filterCountAll');
+            const clearBtn = document.getElementById('clearHistoryBtn');
+            const filterButtons = document.querySelectorAll('.filter-chip');
+            const headerShortcutBadge = document.getElementById('headerShortcutBadge');
+            const headerEngineText = document.getElementById('headerEngineText');
+
+            let allEntries = [];
+            let currentFilter = 'all';
+
+            // Helper: Calendar-based Time categorization
+            function getTimeCategory(isoString) {
+                if (!isoString) return 'older';
+                try {
+                    const d = new Date(isoString);
+                    const now = new Date();
+                    if (d.toDateString() === now.toDateString()) {
+                        return 'today';
+                    }
+                    const diffDays = (now - d) / (1000 * 60 * 60 * 24);
+                    if (diffDays <= 7) {
+                        return 'week';
+                    }
+                } catch (e) {}
+                return 'older';
+            }
+
+            // Helper: Human-readable timestamp
+            function formatTime(isoString) {
+                if (!isoString) return 'Recent';
+                try {
+                    const d = new Date(isoString);
+                    const now = new Date();
+                    const isToday = d.toDateString() === now.toDateString();
+                    const timeStr = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+                    if (isToday) return `Today, ${timeStr}`;
+
+                    const yesterday = new Date();
+                    yesterday.setDate(yesterday.getDate() - 1);
+                    if (d.toDateString() === yesterday.toDateString()) {
+                        return `Yesterday, ${timeStr}`;
+                    }
+
+                    return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${timeStr}`;
+                } catch (e) {
+                    return 'Recent';
+                }
+            }
+
+            function escapeHtml(str) {
+                if (!str) return '';
+                return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+
+            function renderEntries() {
+                container.innerHTML = '';
+                const query = (searchInput.value || '').toLowerCase().trim();
+                let visibleCount = 0;
+
+                allEntries.forEach(entry => {
+                    const text = (entry.text || '').toLowerCase();
+                    const origin = (entry.engine || 'cloud').toLowerCase();
+                    const app = (entry.target_app || '').toLowerCase();
+                    const model = (entry.model || '').toLowerCase();
+                    const timeCategory = getTimeCategory(entry.timestamp);
+
+                    const matchesQuery = !query || text.includes(query) || app.includes(query) || model.includes(query);
+                    let matchesFilter = false;
+                    if (currentFilter === 'all') matchesFilter = true;
+                    else if (currentFilter === 'today') matchesFilter = (timeCategory === 'today');
+                    else if (currentFilter === 'week') matchesFilter = (timeCategory === 'today' || timeCategory === 'week');
+                    else if (currentFilter === 'local') matchesFilter = (origin === 'local');
+                    else if (currentFilter === 'cloud') matchesFilter = (origin === 'cloud');
+
+                    if (matchesQuery && matchesFilter) {
+                        visibleCount++;
+                        const card = createEntryCard(entry);
+                        container.appendChild(card);
+                    }
+                });
+
+                // Update Badges
+                filterCountAll.textContent = allEntries.length;
+                if (query || currentFilter !== 'all') {
+                    itemCountBadge.textContent = `${visibleCount} of ${allEntries.length} items`;
+                } else {
+                    itemCountBadge.textContent = `${allEntries.length} items`;
+                }
+
+                // Empty State Display
+                if (visibleCount === 0) {
+                    emptyState.style.display = 'flex';
+                    if (allEntries.length === 0) {
+                        emptyStateTitle.textContent = 'No dictations recorded yet';
+                        emptyStateSubtitle.innerHTML = `Hold your push-to-talk key (<span style="color: #cabeff; font-weight: 600;">${headerShortcutBadge.textContent || 'Right Alt'}</span>) anywhere on Windows to dictate.`;
+                        emptyStateActionBtn.style.display = 'none';
+                    } else {
+                        emptyStateTitle.textContent = 'No matches found';
+                        emptyStateSubtitle.textContent = `No dictations matched your current search or filter criteria.`;
+                        emptyStateActionBtn.style.display = 'inline-block';
+                    }
+                } else {
+                    emptyState.style.display = 'none';
+                }
+            }
+
+            function createEntryCard(entry) {
+                const card = document.createElement('article');
+                card.className = 'history-card';
+                card.dataset.id = entry.id;
+
+                const engine = (entry.engine || 'openrouter').toLowerCase();
+                const isLocal = engine === 'local';
+                const engineClass = isLocal ? 'history-badge-local' : 'history-badge-cloud';
+                let modelName = entry.model || 'microsoft/mai-transcribe-2';
+                if (modelName.includes('mai-transcribe-2')) modelName = 'MAI-Transcribe 2';
+                else if (modelName.includes('whisper-large-v3-turbo')) modelName = 'Whisper Turbo';
+                else if (modelName.includes('whisper-large-v3')) modelName = 'Whisper Large';
+
+                let engineLabel = 'OpenRouter • MAI-Transcribe 2';
+                if (engine === 'groq' || engine === 'cloud') {
+                    engineLabel = modelName.includes('Large') ? 'Groq • Whisper Large' : 'Groq • Whisper Turbo';
+                } else if (engine === 'local') {
+                    engineLabel = 'Local • Whisper';
+                } else if (engine === 'openrouter') {
+                    engineLabel = `OpenRouter • ${modelName}`;
+                }
+                const engineIcon = isLocal ? 'memory' : 'cloud';
+                const wordCount = entry.words_count || (entry.text ? entry.text.split(/\s+/).filter(Boolean).length : 0);
+                const duration = entry.duration_seconds ? `${entry.duration_seconds.toFixed(1)}s` : '';
+                const timeFormatted = formatTime(entry.timestamp);
+                const appName = entry.target_app || null;
+
+                card.innerHTML = `
+                    <div class="history-card-header">
+                        <div class="history-card-meta">
+                            <span class="history-badge ${engineClass}">
+                                <span class="material-symbols-outlined" style="font-size: 13px;">${engineIcon}</span>
+                                <span>${engineLabel}</span>
+                            </span>
+
+                            ${appName ? `
+                                <span class="history-badge" title="Target Application">
+                                    <span class="material-symbols-outlined" style="font-size: 13px; color: #b4c5ff;">apps</span>
+                                    <span>${escapeHtml(appName)}</span>
+                                </span>
+                            ` : ''}
+
+                            <span>${timeFormatted}</span>
+                            <span style="opacity: 0.3;">•</span>
+                            <span style="color: #938ea1;">${escapeHtml(modelName)}</span>
+                            <span style="opacity: 0.3;">•</span>
+                            <span>${wordCount} words</span>
+                            ${duration ? `<span class="history-badge" style="color: #45dfa9; background-color: rgba(69, 223, 169, 0.08);">${duration}</span>` : ''}
+                        </div>
+
+                        <div class="history-card-actions">
+                            <button class="history-action-btn copy-btn" title="Copy transcript to clipboard">
+                                <span class="material-symbols-outlined" style="font-size: 16px;">content_copy</span>
+                            </button>
+                            <button class="history-action-btn delete-btn" title="Delete transcript">
+                                <span class="material-symbols-outlined" style="font-size: 16px;">delete</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <p class="history-text">${escapeHtml(entry.text || '')}</p>
+                `;
+
+                // Wire Copy Action
+                const copyBtn = card.querySelector('.copy-btn');
+                copyBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const text = entry.text || '';
+                    if (!text) return;
+                    try {
+                        await window.rift.copyToClipboard(text);
+                        const icon = copyBtn.querySelector('.material-symbols-outlined');
+                        icon.textContent = 'check';
+                        icon.style.color = '#45dfa9';
+                        window.showToast({ message: 'Copied transcript to clipboard', type: 'success' });
+                        setTimeout(() => {
+                            icon.textContent = 'content_copy';
+                            icon.style.color = '';
+                        }, 1400);
+                    } catch (err) {
+                        window.showToast({ message: 'Failed to copy text', type: 'error' });
+                    }
+                });
+
+                // Wire Delete Action
+                const delBtn = card.querySelector('.delete-btn');
+                delBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const confirmed = await window.showConfirmModal({
+                        title: 'Delete Entry',
+                        message: 'Permanently delete this dictation record from history?',
+                        confirmText: 'Delete',
+                        isDestructive: true
+                    });
+                    if (!confirmed) return;
+
+                    try {
+                        // Pass string id to guarantee proper serde deserialization
+                        await window.rift.deleteHistoryEntry(String(entry.id));
+                        allEntries = allEntries.filter(e => e.id !== entry.id);
+                        renderEntries();
+                        window.showToast({ message: 'Transcript deleted', type: 'info' });
+                    } catch (err) {
+                        window.showToast({ message: 'Failed to delete transcript', type: 'error' });
+                    }
+                });
+
+                return card;
+            }
+
+            async function loadHistory() {
+                try {
+                    const resRaw = await window.rift.getHistory(JSON.stringify({ limit: 500 }));
+                    const list = typeof resRaw === 'string' ? JSON.parse(resRaw) : resRaw;
+                    allEntries = Array.isArray(list) ? list : [];
+                    renderEntries();
+                } catch (err) {
+                    console.error('Error fetching history:', err);
+                }
+            }
+
+            async function updateHotkeysAndEngine() {
+                try {
+                    const hkRaw = await window.rift.getHotkeys();
+                    const hk = typeof hkRaw === 'string' ? JSON.parse(hkRaw) : hkRaw;
+                    const key = (hk && hk.pushToTalk) || 'Right Alt';
+                    if (headerShortcutBadge) headerShortcutBadge.textContent = key;
+                    if (emptyHotkeyText) emptyHotkeyText.textContent = key;
+                } catch (e) {}
+
+                try {
+                    const sRaw = await window.rift.getSettings();
+                    const s = typeof sRaw === 'string' ? JSON.parse(sRaw) : sRaw;
+                    if (s) {
+                        const model = s.cloudModel || s.inferenceModel || 'whisper-large-v3-turbo';
+                        if (headerEngineText) headerEngineText.textContent = model;
+                    }
+                } catch (e) {}
+            }
+
+            // Search input handling
+            searchInput.addEventListener('input', () => {
+                if (searchInput.value.trim().length > 0) {
+                    searchClearBtn.style.display = 'block';
+                } else {
+                    searchClearBtn.style.display = 'none';
+                }
+                renderEntries();
+            });
+
+            searchClearBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                searchClearBtn.style.display = 'none';
+                searchInput.focus();
+                renderEntries();
+            });
+
+            emptyStateActionBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                searchClearBtn.style.display = 'none';
+                currentFilter = 'all';
+                filterButtons.forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
+                renderEntries();
+            });
+
+            // Ctrl+K & / shortcuts
+            window.addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                    e.preventDefault();
+                    searchInput.focus();
+                    searchInput.select();
+                } else if (e.key === '/' && document.activeElement !== searchInput) {
+                    e.preventDefault();
+                    searchInput.focus();
+                } else if (e.key === 'Escape' && document.activeElement === searchInput) {
+                    searchInput.blur();
+                }
+            });
+
+            // Filter button clicks
+            filterButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    filterButtons.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentFilter = btn.getAttribute('data-filter');
+                    renderEntries();
+                });
+            });
+
+            // Clear All History Button
+            clearBtn.addEventListener('click', async () => {
+                if (allEntries.length === 0) {
+                    window.showToast({ message: 'History is already empty', type: 'info' });
+                    return;
+                }
+                const confirmed = await window.showConfirmModal({
+                    title: 'Clear History',
+                    message: 'Clear all dictation history? This will permanently delete all records on this machine.',
+                    confirmText: 'Clear All',
+                    isDestructive: true
+                });
+                if (!confirmed) return;
+
+                try {
+                    await window.rift.clearHistory();
+                    allEntries = [];
+                    renderEntries();
+                    window.showToast({ message: 'All history cleared successfully', type: 'info' });
+                } catch (e) {
+                    window.showToast({ message: 'Failed to clear history', type: 'error' });
+                }
+            });
+
+            // Bridge readiness
+            window.rift.ready(async () => {
+                updateHotkeysAndEngine();
+                loadHistory();
+
+                // Live event listeners for real-time freshness
+                window.rift.on('transcriptionComplete', () => {
+                    loadHistory();
+                });
+                window.rift.on('transcriptionSuccess', () => {
+                    loadHistory();
+                });
+                window.rift.on('textInjected', () => {
+                    loadHistory();
+                });
+                window.rift.on('historyCleared', () => {
+                    loadHistory();
+                });
+                window.rift.on('settingsChanged', () => {
+                    updateHotkeysAndEngine();
+                });
+                window.rift.on('widgetConfigChanged', () => {
+                    updateHotkeysAndEngine();
+                });
+
+                // Instant Freshness on Window Focus & Tab Visibility
+                window.addEventListener('focus', () => {
+                    loadHistory();
+                    updateHotkeysAndEngine();
+                });
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') {
+                        loadHistory();
+                        updateHotkeysAndEngine();
+                    }
+                });
+
+                // Heartbeat live poll every 3 seconds
+                setInterval(loadHistory, 3000);
+            });
+        })();
+    </script>
+</body>
+</html>
