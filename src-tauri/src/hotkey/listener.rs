@@ -50,6 +50,8 @@ static IS_CAPTURING: AtomicBool = AtomicBool::new(false);
 static CAPTURE_MODE: Mutex<Option<String>> = Mutex::new(None);
 static CAPTURED_KEYS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 
+static ACTIVE_KEYS_MACOS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+
 fn send_event(event: HookEvent) {
     if let Ok(guard) = EVENT_SENDER.try_lock() {
         if let Some(tx) = &*guard {
@@ -79,16 +81,16 @@ pub fn name_to_vk(key_name: &str) -> u32 {
         "prev track" | "previous track" | "prevtrack" | "mediatrackprevious" => 0xB1,
         "stop" | "mediastop" => 0xB2,
         "play/pause" | "playpause" | "mediaplaypause" => 0xB3,
-        "right alt" | "ralt" | "alt_r" | "alt gr" | "altgr" => 0xA5,
-        "left alt" | "lalt" | "alt_l" => 0xA4,
-        "alt" => 0x12,
+        "right alt" | "ralt" | "alt_r" | "alt gr" | "altgr" | "right option" | "roption" => 0xA5,
+        "left alt" | "lalt" | "alt_l" | "left option" | "loption" => 0xA4,
+        "alt" | "option" => 0x12,
         "right ctrl" | "rctrl" => 0xA3,
         "left ctrl" | "lctrl" => 0xA2,
         "ctrl" | "control" => 0x11,
         "shift" => 0x10,
         "right shift" | "rshift" => 0xA1,
         "left shift" | "lshift" => 0xA0,
-        "windows" | "win" | "lwin" | "rwin" | "meta" => 0x5B,
+        "windows" | "win" | "lwin" | "rwin" | "meta" | "cmd" | "command" => 0x5B,
         "space" => 0x20,
         "tab" => 0x09,
         "enter" | "return" => 0x0D,
@@ -271,7 +273,15 @@ pub fn is_vk_down(vk: u32) -> bool {
             _ => GetAsyncKeyState(vk as i32) as u16 & 0x8000 != 0,
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(active) = ACTIVE_KEYS_MACOS.lock() {
+            active.iter().any(|&k| vk_matches(k, vk))
+        } else {
+            false
+        }
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = vk;
         false
@@ -545,6 +555,346 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
     CallNextHookEx(HOOK_HANDLE.unwrap_or_default(), code, wparam, lparam)
 }
 
+#[cfg(target_os = "macos")]
+fn rdev_key_to_vk(key: rdev::Key) -> Option<u32> {
+    match key {
+        rdev::Key::Alt => Some(0xA4),       // Left Option
+        rdev::Key::AltGr => Some(0xA5),     // Right Option
+        rdev::Key::ControlLeft => Some(0xA2),
+        rdev::Key::ControlRight => Some(0xA3),
+        rdev::Key::ShiftLeft => Some(0xA0),
+        rdev::Key::ShiftRight => Some(0xA1),
+        rdev::Key::MetaLeft => Some(0x5B),  // Left Command
+        rdev::Key::MetaRight => Some(0x5C), // Right Command
+        rdev::Key::Space => Some(0x20),
+        rdev::Key::Tab => Some(0x09),
+        rdev::Key::Return | rdev::Key::KpReturn => Some(0x0D),
+        rdev::Key::Backspace => Some(0x08),
+        rdev::Key::Escape => Some(0x1B),
+        rdev::Key::CapsLock => Some(0x14),
+        rdev::Key::Delete => Some(0x2E),
+        rdev::Key::Home => Some(0x24),
+        rdev::Key::End => Some(0x23),
+        rdev::Key::PageUp => Some(0x21),
+        rdev::Key::PageDown => Some(0x22),
+        rdev::Key::UpArrow => Some(0x26),
+        rdev::Key::DownArrow => Some(0x28),
+        rdev::Key::LeftArrow => Some(0x25),
+        rdev::Key::RightArrow => Some(0x27),
+        rdev::Key::Function => Some(0xFF),
+        rdev::Key::F1 => Some(0x70),
+        rdev::Key::F2 => Some(0x71),
+        rdev::Key::F3 => Some(0x72),
+        rdev::Key::F4 => Some(0x73),
+        rdev::Key::F5 => Some(0x74),
+        rdev::Key::F6 => Some(0x75),
+        rdev::Key::F7 => Some(0x76),
+        rdev::Key::F8 => Some(0x77),
+        rdev::Key::F9 => Some(0x78),
+        rdev::Key::F10 => Some(0x79),
+        rdev::Key::F11 => Some(0x7A),
+        rdev::Key::F12 => Some(0x7B),
+        rdev::Key::KeyA => Some(0x41),
+        rdev::Key::KeyB => Some(0x42),
+        rdev::Key::KeyC => Some(0x43),
+        rdev::Key::KeyD => Some(0x44),
+        rdev::Key::KeyE => Some(0x45),
+        rdev::Key::KeyF => Some(0x46),
+        rdev::Key::KeyG => Some(0x47),
+        rdev::Key::KeyH => Some(0x48),
+        rdev::Key::KeyI => Some(0x49),
+        rdev::Key::KeyJ => Some(0x4A),
+        rdev::Key::KeyK => Some(0x4B),
+        rdev::Key::KeyL => Some(0x4C),
+        rdev::Key::KeyM => Some(0x4D),
+        rdev::Key::KeyN => Some(0x4E),
+        rdev::Key::KeyO => Some(0x4F),
+        rdev::Key::KeyP => Some(0x50),
+        rdev::Key::KeyQ => Some(0x51),
+        rdev::Key::KeyR => Some(0x52),
+        rdev::Key::KeyS => Some(0x53),
+        rdev::Key::KeyT => Some(0x54),
+        rdev::Key::KeyU => Some(0x55),
+        rdev::Key::KeyV => Some(0x56),
+        rdev::Key::KeyW => Some(0x57),
+        rdev::Key::KeyX => Some(0x58),
+        rdev::Key::KeyY => Some(0x59),
+        rdev::Key::KeyZ => Some(0x5A),
+        rdev::Key::Num0 | rdev::Key::Kp0 => Some(0x30),
+        rdev::Key::Num1 | rdev::Key::Kp1 => Some(0x31),
+        rdev::Key::Num2 | rdev::Key::Kp2 => Some(0x32),
+        rdev::Key::Num3 | rdev::Key::Kp3 => Some(0x33),
+        rdev::Key::Num4 | rdev::Key::Kp4 => Some(0x34),
+        rdev::Key::Num5 | rdev::Key::Kp5 => Some(0x35),
+        rdev::Key::Num6 | rdev::Key::Kp6 => Some(0x36),
+        rdev::Key::Num7 | rdev::Key::Kp7 => Some(0x37),
+        rdev::Key::Num8 | rdev::Key::Kp8 => Some(0x38),
+        rdev::Key::Num9 | rdev::Key::Kp9 => Some(0x39),
+        rdev::Key::BackQuote => Some(0xC0),
+        rdev::Key::Minus | rdev::Key::KpMinus => Some(0xBD),
+        rdev::Key::Equal => Some(0xBB),
+        rdev::Key::LeftBracket => Some(0xDB),
+        rdev::Key::RightBracket => Some(0xDD),
+        rdev::Key::BackSlash | rdev::Key::IntlBackslash => Some(0xDC),
+        rdev::Key::SemiColon => Some(0xBA),
+        rdev::Key::Quote => Some(0xDE),
+        rdev::Key::Comma => Some(0xBC),
+        rdev::Key::Dot => Some(0xBE),
+        rdev::Key::Slash | rdev::Key::KpDivide => Some(0xBF),
+        rdev::Key::KpPlus => Some(0x6B),
+        rdev::Key::KpMultiply => Some(0x6A),
+        rdev::Key::KpDelete => Some(0x2E),
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn handle_macos_event(event: rdev::Event) {
+    let (is_press, key) = match event.event_type {
+        rdev::EventType::KeyPress(k) => (true, k),
+        rdev::EventType::KeyRelease(k) => (false, k),
+        _ => return,
+    };
+
+    let effective_vk = match rdev_key_to_vk(key) {
+        Some(vk) => vk,
+        None => return,
+    };
+
+    // Update active keys set
+    if let Ok(mut active) = ACTIVE_KEYS_MACOS.lock() {
+        if is_press {
+            if !active.contains(&effective_vk) {
+                active.push(effective_vk);
+            }
+        } else {
+            active.retain(|&k| k != effective_vk);
+        }
+    }
+
+    let is_key_down = |vk: u32| -> bool {
+        if let Ok(active) = ACTIVE_KEYS_MACOS.lock() {
+            active.iter().any(|&k| vk_matches(k, vk))
+        } else {
+            false
+        }
+    };
+
+    // 1. Interactive Capture Mode
+    if IS_CAPTURING.load(Ordering::Relaxed) {
+        if is_press {
+            if effective_vk == 0x1B && !is_key_down(0x11) && !is_key_down(0x12) && !is_key_down(0x10) && !is_key_down(0x5B) && !is_key_down(0x5C) {
+                if let Ok(mut keys) = CAPTURED_KEYS.try_lock() {
+                    keys.clear();
+                }
+                IS_CAPTURING.store(false, Ordering::SeqCst);
+                return;
+            }
+            if let Ok(mut keys) = CAPTURED_KEYS.try_lock() {
+                if !keys.contains(&effective_vk) {
+                    keys.push(effective_vk);
+                }
+            }
+        } else {
+            let captured_vks = if let Ok(mut keys) = CAPTURED_KEYS.try_lock() {
+                let res = keys.clone();
+                keys.clear();
+                res
+            } else {
+                Vec::new()
+            };
+            IS_CAPTURING.store(false, Ordering::SeqCst);
+
+            if !captured_vks.is_empty() {
+                let mut has_ctrl = false;
+                let mut has_alt = false;
+                let mut has_shift = false;
+                let mut has_win = false;
+                let mut others = Vec::new();
+
+                for &k in &captured_vks {
+                    match k {
+                        0x11 | 0xA2 | 0xA3 => has_ctrl = true,
+                        0x12 | 0xA4 | 0xA5 => {
+                            if captured_vks.len() == 1 && (k == 0xA5 || k == 0x12) {
+                                others.push(vk_to_name(k));
+                            } else {
+                                has_alt = true;
+                            }
+                        }
+                        0x10 | 0xA0 | 0xA1 => has_shift = true,
+                        0x5B | 0x5C => has_win = true,
+                        other_vk => {
+                            let name = vk_to_name(other_vk);
+                            if !others.contains(&name) {
+                                others.push(name);
+                            }
+                        }
+                    }
+                }
+
+                let mut parts = Vec::new();
+                if has_ctrl { parts.push("Ctrl".to_string()); }
+                if has_alt { parts.push("Alt".to_string()); }
+                if has_shift { parts.push("Shift".to_string()); }
+                if has_win { parts.push("Cmd".to_string()); }
+                for name in others {
+                    if !parts.contains(&name) {
+                        parts.push(name);
+                    }
+                }
+
+                if parts.is_empty() {
+                    parts.push(vk_to_name(effective_vk));
+                }
+
+                let combo_name = parts.join("+");
+                let key_name = parts.last().cloned().unwrap_or_else(|| vk_to_name(effective_vk));
+                let mode = if parts.len() > 1 { "combo" } else { "single" };
+
+                send_event(HookEvent::Captured {
+                    key_name,
+                    combo_name,
+                    mode: mode.to_string(),
+                });
+            }
+        }
+        return;
+    }
+
+    // 2. Push-to-Talk Handling
+    let ptt_keys = if let Ok(guard) = PTT_KEYS.try_read() {
+        guard.clone()
+    } else {
+        Vec::new()
+    };
+
+    if !ptt_keys.is_empty() {
+        let is_match = ptt_keys.iter().any(|&k| vk_matches(effective_vk, k));
+        if is_match {
+            if is_press {
+                let all_down = ptt_keys.iter().all(|&k| {
+                    if vk_matches(effective_vk, k) {
+                        true
+                    } else {
+                        is_key_down(k)
+                    }
+                });
+                if all_down {
+                    if !IS_PTT_PRESSED.swap(true, Ordering::SeqCst) {
+                        crate::log_status("macOS PTT Press -> sending HookEvent::PttPress");
+                        send_event(HookEvent::PttPress);
+                    }
+                }
+            } else {
+                let was_pressed = IS_PTT_PRESSED.swap(false, Ordering::SeqCst);
+                if was_pressed {
+                    crate::log_status("macOS PTT Release -> sending HookEvent::PttRelease");
+                    send_event(HookEvent::PttRelease);
+                }
+            }
+        }
+    }
+
+    // 3. Toggle Recording Handling
+    let toggle_keys = if let Ok(guard) = TOGGLE_KEYS.try_read() {
+        guard.clone()
+    } else {
+        Vec::new()
+    };
+
+    if !toggle_keys.is_empty() {
+        let is_match = toggle_keys.iter().any(|&k| vk_matches(effective_vk, k));
+        if is_match {
+            if is_press {
+                let all_down = toggle_keys.iter().all(|&k| {
+                    if vk_matches(effective_vk, k) {
+                        true
+                    } else {
+                        is_key_down(k)
+                    }
+                });
+                if all_down {
+                    let now = std::time::Instant::now();
+                    let mut can_toggle = false;
+                    if !IS_TOGGLE_KEY_DOWN.swap(true, Ordering::SeqCst) {
+                        if let Ok(mut last_t) = LAST_TOGGLE_TIME.try_lock() {
+                            if last_t.map(|t| now.duration_since(t).as_millis() > 300).unwrap_or(true) {
+                                *last_t = Some(now);
+                                can_toggle = true;
+                            }
+                        }
+                    }
+                    if can_toggle {
+                        crate::log_status("macOS Toggle Press -> sending HookEvent::TogglePress");
+                        send_event(HookEvent::TogglePress);
+                    }
+                }
+            } else {
+                let any_down = toggle_keys.iter().any(|&k| {
+                    if vk_matches(effective_vk, k) {
+                        false
+                    } else {
+                        is_key_down(k)
+                    }
+                });
+                if !any_down {
+                    IS_TOGGLE_KEY_DOWN.store(false, Ordering::SeqCst);
+                }
+            }
+        }
+    }
+
+    // 4. Show Widget Handling
+    let widget_keys = if let Ok(guard) = SHOW_WIDGET_KEYS.try_read() {
+        guard.clone()
+    } else {
+        Vec::new()
+    };
+
+    if !widget_keys.is_empty() {
+        let is_match = widget_keys.iter().any(|&k| vk_matches(effective_vk, k));
+        if is_match {
+            if is_press {
+                let all_down = widget_keys.iter().all(|&k| {
+                    if vk_matches(effective_vk, k) {
+                        true
+                    } else {
+                        is_key_down(k)
+                    }
+                });
+                if all_down {
+                    let now = std::time::Instant::now();
+                    let mut can_show = false;
+                    if !IS_WIDGET_KEY_DOWN.swap(true, Ordering::SeqCst) {
+                        if let Ok(mut last_t) = LAST_WIDGET_TIME.try_lock() {
+                            if last_t.map(|t| now.duration_since(t).as_millis() > 300).unwrap_or(true) {
+                                *last_t = Some(now);
+                                can_show = true;
+                            }
+                        }
+                    }
+                    if can_show {
+                        crate::log_status("macOS Show Widget -> sending HookEvent::ShowWidget");
+                        send_event(HookEvent::ShowWidget);
+                    }
+                }
+            } else {
+                let any_down = widget_keys.iter().any(|&k| {
+                    if vk_matches(effective_vk, k) {
+                        false
+                    } else {
+                        is_key_down(k)
+                    }
+                });
+                if !any_down {
+                    IS_WIDGET_KEY_DOWN.store(false, Ordering::SeqCst);
+                }
+            }
+        }
+    }
+}
+
 pub struct HotkeyListener {
     running: Arc<AtomicBool>,
 }
@@ -709,10 +1059,25 @@ impl HotkeyListener {
             }
         });
 
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
+        {
+            crate::log_status("Starting macOS rdev hotkey listener...");
+            std::thread::spawn(move || {
+                if let Err(error) = rdev::listen(move |event| {
+                    if !running.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    handle_macos_event(event);
+                }) {
+                    crate::log_status(&format!("rdev::listen error (check macOS Accessibility permissions): {:?}", error));
+                }
+            });
+        }
+
+        #[cfg(not(any(windows, target_os = "macos")))]
         {
             let _ = running;
-            crate::log_status("macOS hotkey listener initialized");
+            crate::log_status("Hotkey listener stub for other non-windows OS");
         }
     }
 

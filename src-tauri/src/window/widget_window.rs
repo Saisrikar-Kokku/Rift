@@ -43,6 +43,7 @@ pub fn setup_widget_window(window: &WebviewWindow) {
 #[cfg(not(windows))]
 pub fn setup_widget_window(window: &WebviewWindow) {
     let _ = window.set_always_on_top(true);
+    let _ = window.set_shadow(false);
     let _ = window.show();
 }
 
