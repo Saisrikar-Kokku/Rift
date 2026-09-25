@@ -1,4 +1,6 @@
+#[cfg(windows)]
 use windows::Win32::Foundation::HWND;
+#[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{GetWindowTextW, GetWindowThreadProcessId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,6 +91,7 @@ Format into polished, professional prose with clean paragraph breaks and appropr
     }
 }
 
+#[cfg(windows)]
 fn get_process_name(pid: u32) -> String {
     // 1. Ultra-fast direct Win32 process query (<0.05ms single syscall)
     unsafe {
@@ -228,6 +231,7 @@ fn classify_domain(proc_name: &str, title: &str) -> AppDomain {
     AppDomain::General
 }
 
+#[cfg(windows)]
 pub fn get_window_context(hwnd_val: Option<isize>) -> WindowContext {
     let Some(raw_hwnd) = hwnd_val else {
         return WindowContext::default();
@@ -263,4 +267,9 @@ pub fn get_window_context(hwnd_val: Option<isize>) -> WindowContext {
         window_title,
         domain,
     }
+}
+
+#[cfg(not(windows))]
+pub fn get_window_context(_hwnd_val: Option<isize>) -> WindowContext {
+    WindowContext::default()
 }

@@ -3,9 +3,13 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
+#[cfg(windows)]
 use windows::core::w;
+#[cfg(windows)]
 use windows::Win32::Foundation::HWND;
+#[cfg(windows)]
 use windows::Win32::System::DataExchange::{AddClipboardFormatListener, RemoveClipboardFormatListener};
+#[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DestroyWindow, DispatchMessageW, GetForegroundWindow,
     GetMessageW, GetWindowThreadProcessId, TranslateMessage,
@@ -148,6 +152,7 @@ fn is_code_content(text: &str) -> bool {
 
 /// Starts the Win32 message-driven clipboard listener in a background thread.
 /// Consumes 0.0% CPU when idle because it waits on GetMessageW notifications.
+#[cfg(windows)]
 pub fn start_clipboard_listener(
     store: Arc<ClipboardStore>,
     is_internal_pasting: Arc<AtomicBool>,
@@ -280,4 +285,12 @@ pub fn start_clipboard_listener(
             }
         })
         .expect("Failed to spawn clipboard listener thread");
+}
+
+#[cfg(not(windows))]
+pub fn start_clipboard_listener(
+    _store: Arc<ClipboardStore>,
+    _is_internal_pasting: Arc<AtomicBool>,
+    _app_handle: AppHandle,
+) {
 }
