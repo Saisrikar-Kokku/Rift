@@ -27,6 +27,8 @@ enum HookEvent {
 
 #[cfg(windows)]
 static mut HOOK_HANDLE: Option<HHOOK> = None;
+#[cfg(target_os = "macos")]
+static mut MACOS_RUN_LOOP: Option<macos_tap::CFRunLoopRef> = None;
 static mut KEY_CALLBACK_PRESS: Option<Box<dyn Fn() + Send + Sync>> = None;
 static mut KEY_CALLBACK_RELEASE: Option<Box<dyn Fn() + Send + Sync>> = None;
 static mut KEY_CALLBACK_TOGGLE: Option<Box<dyn Fn() + Send + Sync>> = None;
@@ -556,112 +558,167 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
 }
 
 #[cfg(target_os = "macos")]
-fn rdev_key_to_vk(key: rdev::Key) -> Option<u32> {
-    match key {
-        rdev::Key::Alt => Some(0xA4),       // Left Option
-        rdev::Key::AltGr => Some(0xA5),     // Right Option
-        rdev::Key::ControlLeft => Some(0xA2),
-        rdev::Key::ControlRight => Some(0xA3),
-        rdev::Key::ShiftLeft => Some(0xA0),
-        rdev::Key::ShiftRight => Some(0xA1),
-        rdev::Key::MetaLeft => Some(0x5B),  // Left Command
-        rdev::Key::MetaRight => Some(0x5C), // Right Command
-        rdev::Key::Space => Some(0x20),
-        rdev::Key::Tab => Some(0x09),
-        rdev::Key::Return | rdev::Key::KpReturn => Some(0x0D),
-        rdev::Key::Backspace => Some(0x08),
-        rdev::Key::Escape => Some(0x1B),
-        rdev::Key::CapsLock => Some(0x14),
-        rdev::Key::Delete => Some(0x2E),
-        rdev::Key::Home => Some(0x24),
-        rdev::Key::End => Some(0x23),
-        rdev::Key::PageUp => Some(0x21),
-        rdev::Key::PageDown => Some(0x22),
-        rdev::Key::UpArrow => Some(0x26),
-        rdev::Key::DownArrow => Some(0x28),
-        rdev::Key::LeftArrow => Some(0x25),
-        rdev::Key::RightArrow => Some(0x27),
-        rdev::Key::Function => Some(0xFF),
-        rdev::Key::F1 => Some(0x70),
-        rdev::Key::F2 => Some(0x71),
-        rdev::Key::F3 => Some(0x72),
-        rdev::Key::F4 => Some(0x73),
-        rdev::Key::F5 => Some(0x74),
-        rdev::Key::F6 => Some(0x75),
-        rdev::Key::F7 => Some(0x76),
-        rdev::Key::F8 => Some(0x77),
-        rdev::Key::F9 => Some(0x78),
-        rdev::Key::F10 => Some(0x79),
-        rdev::Key::F11 => Some(0x7A),
-        rdev::Key::F12 => Some(0x7B),
-        rdev::Key::KeyA => Some(0x41),
-        rdev::Key::KeyB => Some(0x42),
-        rdev::Key::KeyC => Some(0x43),
-        rdev::Key::KeyD => Some(0x44),
-        rdev::Key::KeyE => Some(0x45),
-        rdev::Key::KeyF => Some(0x46),
-        rdev::Key::KeyG => Some(0x47),
-        rdev::Key::KeyH => Some(0x48),
-        rdev::Key::KeyI => Some(0x49),
-        rdev::Key::KeyJ => Some(0x4A),
-        rdev::Key::KeyK => Some(0x4B),
-        rdev::Key::KeyL => Some(0x4C),
-        rdev::Key::KeyM => Some(0x4D),
-        rdev::Key::KeyN => Some(0x4E),
-        rdev::Key::KeyO => Some(0x4F),
-        rdev::Key::KeyP => Some(0x50),
-        rdev::Key::KeyQ => Some(0x51),
-        rdev::Key::KeyR => Some(0x52),
-        rdev::Key::KeyS => Some(0x53),
-        rdev::Key::KeyT => Some(0x54),
-        rdev::Key::KeyU => Some(0x55),
-        rdev::Key::KeyV => Some(0x56),
-        rdev::Key::KeyW => Some(0x57),
-        rdev::Key::KeyX => Some(0x58),
-        rdev::Key::KeyY => Some(0x59),
-        rdev::Key::KeyZ => Some(0x5A),
-        rdev::Key::Num0 | rdev::Key::Kp0 => Some(0x30),
-        rdev::Key::Num1 | rdev::Key::Kp1 => Some(0x31),
-        rdev::Key::Num2 | rdev::Key::Kp2 => Some(0x32),
-        rdev::Key::Num3 | rdev::Key::Kp3 => Some(0x33),
-        rdev::Key::Num4 | rdev::Key::Kp4 => Some(0x34),
-        rdev::Key::Num5 | rdev::Key::Kp5 => Some(0x35),
-        rdev::Key::Num6 | rdev::Key::Kp6 => Some(0x36),
-        rdev::Key::Num7 | rdev::Key::Kp7 => Some(0x37),
-        rdev::Key::Num8 | rdev::Key::Kp8 => Some(0x38),
-        rdev::Key::Num9 | rdev::Key::Kp9 => Some(0x39),
-        rdev::Key::BackQuote => Some(0xC0),
-        rdev::Key::Minus | rdev::Key::KpMinus => Some(0xBD),
-        rdev::Key::Equal => Some(0xBB),
-        rdev::Key::LeftBracket => Some(0xDB),
-        rdev::Key::RightBracket => Some(0xDD),
-        rdev::Key::BackSlash | rdev::Key::IntlBackslash => Some(0xDC),
-        rdev::Key::SemiColon => Some(0xBA),
-        rdev::Key::Quote => Some(0xDE),
-        rdev::Key::Comma => Some(0xBC),
-        rdev::Key::Dot => Some(0xBE),
-        rdev::Key::Slash | rdev::Key::KpDivide => Some(0xBF),
-        rdev::Key::KpPlus => Some(0x6B),
-        rdev::Key::KpMultiply => Some(0x6A),
-        rdev::Key::KpDelete => Some(0x2E),
-        _ => None,
+mod macos_tap {
+    use std::ffi::c_void;
+
+    pub type CGEventRef = *mut c_void;
+    pub type CGEventTapProxy = *mut c_void;
+    pub type CFMachPortRef = *mut c_void;
+    pub type CFRunLoopSourceRef = *mut c_void;
+    pub type CFRunLoopRef = *mut c_void;
+    pub type CFStringRef = *const c_void;
+
+    pub type CGEventTapCallBack = unsafe extern "C" fn(
+        proxy: CGEventTapProxy,
+        event_type: u32,
+        event: CGEventRef,
+        user_info: *mut c_void,
+    ) -> CGEventRef;
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        pub fn CGEventTapCreate(
+            tap: u32,
+            place: u32,
+            options: u32,
+            events_of_interest: u64,
+            callback: CGEventTapCallBack,
+            user_info: *mut c_void,
+        ) -> CFMachPortRef;
+
+        pub fn CGEventTapEnable(tap: CFMachPortRef, enable: bool);
+        pub fn CGEventGetIntegerValueField(event: CGEventRef, field: u32) -> i64;
+        pub fn CGEventGetFlags(event: CGEventRef) -> u64;
+
+        pub fn CFMachPortCreateRunLoopSource(
+            allocator: *const c_void,
+            port: CFMachPortRef,
+            order: isize,
+        ) -> CFRunLoopSourceRef;
+
+        pub fn CFRunLoopGetCurrent() -> CFRunLoopRef;
+        pub fn CFRunLoopAddSource(rl: CFRunLoopRef, source: CFRunLoopSourceRef, mode: CFStringRef);
+        pub fn CFRunLoopRun();
+        pub fn CFRunLoopStop(rl: CFRunLoopRef);
+        pub fn CFRelease(cf: *const c_void);
+
+        pub static kCFRunLoopCommonModes: CFStringRef;
+    }
+
+    pub const K_CG_SESSION_EVENT_TAP: u32 = 1;
+    pub const K_CG_HEAD_INSERT_EVENT_TAP: u32 = 0;
+    pub const K_CG_EVENT_TAP_OPTION_LISTEN_ONLY: u32 = 1;
+
+    pub const K_CG_EVENT_KEY_DOWN: u32 = 10;
+    pub const K_CG_EVENT_KEY_UP: u32 = 11;
+    pub const K_CG_EVENT_FLAGS_CHANGED: u32 = 12;
+
+    pub const K_CG_KEYBOARD_EVENT_KEYCODE: u32 = 14;
+
+    pub const K_CG_EVENT_FLAG_MASK_ALPHA_SHIFT: u64 = 0x00010000;
+    pub const K_CG_EVENT_FLAG_MASK_SHIFT: u64       = 0x00020000;
+    pub const K_CG_EVENT_FLAG_MASK_CONTROL: u64     = 0x00040000;
+    pub const K_CG_EVENT_FLAG_MASK_ALTERNATE: u64   = 0x00080000;
+    pub const K_CG_EVENT_FLAG_MASK_COMMAND: u64     = 0x00100000;
+    pub const K_CG_EVENT_FLAG_MASK_SECONDARY_FN: u64= 0x00800000;
+}
+
+#[cfg(target_os = "macos")]
+fn macos_keycode_to_vk(keycode: u32) -> u32 {
+    match keycode {
+        0x3D => 0xA5, // Right Option
+        0x3A => 0xA4, // Left Option
+        0x37 => 0x5B, // Left Command
+        0x36 => 0x5C, // Right Command
+        0x3B => 0xA2, // Left Control
+        0x3E => 0xA3, // Right Control
+        0x38 => 0xA0, // Left Shift
+        0x3C => 0xA1, // Right Shift
+        0x39 => 0x14, // Caps Lock
+        0x3F => 0xFF, // Function (fn)
+        0x31 => 0x20, // Space
+        0x24 => 0x0D, // Return
+        0x30 => 0x09, // Tab
+        0x33 => 0x08, // Delete / Backspace
+        0x35 => 0x1B, // Escape
+        0x7A => 0x70, // F1
+        0x78 => 0x71, // F2
+        0x63 => 0x72, // F3
+        0x76 => 0x73, // F4
+        0x60 => 0x74, // F5
+        0x61 => 0x75, // F6
+        0x62 => 0x76, // F7
+        0x64 => 0x77, // F8
+        0x65 => 0x78, // F9
+        0x6D => 0x79, // F10
+        0x67 => 0x7A, // F11
+        0x6F => 0x7B, // F12
+        0x7E => 0x26, // Up
+        0x7D => 0x28, // Down
+        0x7B => 0x25, // Left
+        0x7C => 0x27, // Right
+        0x73 => 0x24, // Home
+        0x77 => 0x23, // End
+        0x74 => 0x21, // Page Up
+        0x79 => 0x22, // Page Down
+        0x75 => 0x2E, // Forward Delete
+        // Letters
+        0x00 => 0x41, // A
+        0x0B => 0x42, // B
+        0x08 => 0x43, // C
+        0x02 => 0x44, // D
+        0x0E => 0x45, // E
+        0x03 => 0x46, // F
+        0x05 => 0x47, // G
+        0x04 => 0x48, // H
+        0x22 => 0x49, // I
+        0x26 => 0x4A, // J
+        0x28 => 0x4B, // K
+        0x25 => 0x4C, // L
+        0x2E => 0x4D, // M
+        0x2D => 0x4E, // N
+        0x1F => 0x4F, // O
+        0x23 => 0x50, // P
+        0x0C => 0x51, // Q
+        0x0F => 0x52, // R
+        0x01 => 0x53, // S
+        0x11 => 0x54, // T
+        0x20 => 0x55, // U
+        0x09 => 0x56, // V
+        0x0D => 0x57, // W
+        0x07 => 0x58, // X
+        0x10 => 0x59, // Y
+        0x06 => 0x5A, // Z
+        // Numbers
+        0x1D => 0x30, // 0
+        0x12 => 0x31, // 1
+        0x13 => 0x32, // 2
+        0x14 => 0x33, // 3
+        0x15 => 0x34, // 4
+        0x17 => 0x35, // 5
+        0x16 => 0x36, // 6
+        0x1A => 0x37, // 7
+        0x1C => 0x38, // 8
+        0x19 => 0x39, // 9
+        // Symbols
+        0x32 => 0xC0, // `
+        0x1B => 0xBD, // -
+        0x18 => 0xBB, // =
+        0x21 => 0xDB, // [
+        0x1E => 0xDD, // ]
+        0x2A => 0xDC, // \
+        0x29 => 0xBA, // ;
+        0x27 => 0xDE, // '
+        0x2B => 0xBC, // ,
+        0x2F => 0xBE, // .
+        0x2C => 0xBF, // /
+        other => other,
     }
 }
 
 #[cfg(target_os = "macos")]
-fn handle_macos_event(event: rdev::Event) {
-    let (is_press, key) = match event.event_type {
-        rdev::EventType::KeyPress(k) => (true, k),
-        rdev::EventType::KeyRelease(k) => (false, k),
-        _ => return,
-    };
-
-    let effective_vk = match rdev_key_to_vk(key) {
-        Some(vk) => vk,
-        None => return,
-    };
-
-    // Update active keys set
+fn dispatch_macos_key(effective_vk: u32, is_press: bool) {
     if let Ok(mut active) = ACTIVE_KEYS_MACOS.lock() {
         if is_press {
             if !active.contains(&effective_vk) {
@@ -735,7 +792,7 @@ fn handle_macos_event(event: rdev::Event) {
 
                 let mut parts = Vec::new();
                 if has_ctrl { parts.push("Ctrl".to_string()); }
-                if has_alt { parts.push("Alt".to_string()); }
+                if has_alt { parts.push("Option".to_string()); }
                 if has_shift { parts.push("Shift".to_string()); }
                 if has_win { parts.push("Cmd".to_string()); }
                 for name in others {
@@ -893,6 +950,46 @@ fn handle_macos_event(event: rdev::Event) {
             }
         }
     }
+}
+
+#[cfg(target_os = "macos")]
+unsafe extern "C" fn macos_event_tap_callback(
+    _proxy: macos_tap::CGEventTapProxy,
+    event_type: u32,
+    event: macos_tap::CGEventRef,
+    _user_info: *mut std::ffi::c_void,
+) -> macos_tap::CGEventRef {
+    if event.is_null() {
+        return event;
+    }
+
+    let raw_keycode = macos_tap::CGEventGetIntegerValueField(event, macos_tap::K_CG_KEYBOARD_EVENT_KEYCODE) as u32;
+    let effective_vk = macos_keycode_to_vk(raw_keycode);
+
+    match event_type {
+        macos_tap::K_CG_EVENT_KEY_DOWN => {
+            dispatch_macos_key(effective_vk, true);
+        }
+        macos_tap::K_CG_EVENT_KEY_UP => {
+            dispatch_macos_key(effective_vk, false);
+        }
+        macos_tap::K_CG_EVENT_FLAGS_CHANGED => {
+            let flags = macos_tap::CGEventGetFlags(event);
+            let is_down = match effective_vk {
+                0xA4 | 0xA5 | 0x12 => (flags & macos_tap::K_CG_EVENT_FLAG_MASK_ALTERNATE) != 0,
+                0x5B | 0x5C => (flags & macos_tap::K_CG_EVENT_FLAG_MASK_COMMAND) != 0,
+                0xA2 | 0xA3 | 0x11 => (flags & macos_tap::K_CG_EVENT_FLAG_MASK_CONTROL) != 0,
+                0xA0 | 0xA1 | 0x10 => (flags & macos_tap::K_CG_EVENT_FLAG_MASK_SHIFT) != 0,
+                0x14 => (flags & macos_tap::K_CG_EVENT_FLAG_MASK_ALPHA_SHIFT) != 0,
+                0xFF => (flags & macos_tap::K_CG_EVENT_FLAG_MASK_SECONDARY_FN) != 0,
+                _ => false,
+            };
+            dispatch_macos_key(effective_vk, is_down);
+        }
+        _ => {}
+    }
+
+    event
 }
 
 pub struct HotkeyListener {
@@ -1061,15 +1158,51 @@ impl HotkeyListener {
 
         #[cfg(target_os = "macos")]
         {
-            crate::log_status("Starting macOS rdev hotkey listener...");
-            std::thread::spawn(move || {
-                if let Err(error) = rdev::listen(move |event| {
-                    if !running.load(Ordering::Relaxed) {
-                        return;
+            crate::log_status("Starting macOS native CGEventTap hotkey listener...");
+            let running_thread = Arc::clone(&running);
+            std::thread::spawn(move || unsafe {
+                while running_thread.load(Ordering::Relaxed) {
+                    let tap = macos_tap::CGEventTapCreate(
+                        macos_tap::K_CG_SESSION_EVENT_TAP,
+                        macos_tap::K_CG_HEAD_INSERT_EVENT_TAP,
+                        macos_tap::K_CG_EVENT_TAP_OPTION_LISTEN_ONLY,
+                        (1u64 << macos_tap::K_CG_EVENT_KEY_DOWN)
+                            | (1u64 << macos_tap::K_CG_EVENT_KEY_UP)
+                            | (1u64 << macos_tap::K_CG_EVENT_FLAGS_CHANGED),
+                        macos_event_tap_callback,
+                        std::ptr::null_mut(),
+                    );
+
+                    if tap.is_null() {
+                        crate::log_status("CGEventTap waiting for macOS Accessibility permission...");
+                        std::thread::sleep(std::time::Duration::from_millis(1500));
+                        continue;
                     }
-                    handle_macos_event(event);
-                }) {
-                    crate::log_status(&format!("rdev::listen error (check macOS Accessibility permissions): {:?}", error));
+
+                    crate::log_status("CGEventTap created successfully! Attaching to RunLoop...");
+                    let source = macos_tap::CFMachPortCreateRunLoopSource(
+                        std::ptr::null(),
+                        tap,
+                        0,
+                    );
+                    if source.is_null() {
+                        crate::log_status("CFMachPortCreateRunLoopSource failed");
+                        macos_tap::CFRelease(tap);
+                        std::thread::sleep(std::time::Duration::from_millis(1500));
+                        continue;
+                    }
+
+                    let rl = macos_tap::CFRunLoopGetCurrent();
+                    MACOS_RUN_LOOP = Some(rl);
+                    macos_tap::CFRunLoopAddSource(rl, source, macos_tap::kCFRunLoopCommonModes);
+                    macos_tap::CGEventTapEnable(tap, true);
+                    crate::log_status("macOS native CGEventTap event loop running.");
+                    macos_tap::CFRunLoopRun();
+
+                    macos_tap::CFRelease(source);
+                    macos_tap::CFRelease(tap);
+                    MACOS_RUN_LOOP = None;
+                    break;
                 }
             });
         }
@@ -1087,6 +1220,12 @@ impl HotkeyListener {
         unsafe {
             if let Some(h) = HOOK_HANDLE.take() {
                 let _ = UnhookWindowsHookEx(h);
+            }
+        }
+        #[cfg(target_os = "macos")]
+        unsafe {
+            if let Some(rl) = MACOS_RUN_LOOP.take() {
+                macos_tap::CFRunLoopStop(rl);
             }
         }
     }
