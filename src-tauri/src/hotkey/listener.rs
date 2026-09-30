@@ -613,6 +613,8 @@ mod macos_tap {
     pub const K_CG_EVENT_KEY_DOWN: u32 = 10;
     pub const K_CG_EVENT_KEY_UP: u32 = 11;
     pub const K_CG_EVENT_FLAGS_CHANGED: u32 = 12;
+    pub const K_CG_EVENT_TAP_DISABLED_BY_TIMEOUT: u32 = 0xFFFFFFFE;
+    pub const K_CG_EVENT_TAP_DISABLED_BY_USER_INPUT: u32 = 0xFFFFFFFF;
 
     pub const K_CG_KEYBOARD_EVENT_KEYCODE: u32 = 9;
 
@@ -967,6 +969,27 @@ unsafe extern "C" fn macos_event_tap_callback(
     let effective_vk = macos_keycode_to_vk(raw_keycode);
 
     match event_type {
+        macos_tap::K_CG_EVENT_TAP_DISABLED_BY_TIMEOUT | macos_tap::K_CG_EVENT_TAP_DISABLED_BY_USER_INPUT => {
+            crate::log_status("macOS Event Tap disabled by system! Re-enabling and resetting state...");
+            
+            // 1. Re-enable the tap immediately using the callback proxy
+            macos_tap::CGEventTapEnable(_proxy as macos_tap::CFMachPortRef, true);
+            
+            // 2. Clear all active keys to prevent keys from getting "stuck" down
+            if let Ok(mut active) = ACTIVE_KEYS_MACOS.lock() {
+                active.clear();
+            }
+            
+            // 3. If Push-to-Talk was stuck in recording, force a release event
+            if IS_PTT_PRESSED.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                crate::log_status("macOS PTT Release (Forced due to Tap Timeout) -> sending HookEvent::PttRelease");
+                send_event(HookEvent::PttRelease);
+            }
+            
+            // 4. Reset toggle and widget debounce states
+            IS_TOGGLE_KEY_DOWN.store(false, std::sync::atomic::Ordering::SeqCst);
+            IS_WIDGET_KEY_DOWN.store(false, std::sync::atomic::Ordering::SeqCst);
+        }
         macos_tap::K_CG_EVENT_KEY_DOWN => {
             dispatch_macos_key(effective_vk, true);
         }
