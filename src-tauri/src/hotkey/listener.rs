@@ -606,7 +606,7 @@ mod macos_tap {
         pub static kCFRunLoopCommonModes: CFStringRef;
     }
 
-    pub const K_CG_SESSION_EVENT_TAP: u32 = 1;
+    pub const K_CG_HID_EVENT_TAP: u32 = 0;
     pub const K_CG_HEAD_INSERT_EVENT_TAP: u32 = 0;
     pub const K_CG_EVENT_TAP_OPTION_LISTEN_ONLY: u32 = 1;
 
@@ -614,7 +614,7 @@ mod macos_tap {
     pub const K_CG_EVENT_KEY_UP: u32 = 11;
     pub const K_CG_EVENT_FLAGS_CHANGED: u32 = 12;
 
-    pub const K_CG_KEYBOARD_EVENT_KEYCODE: u32 = 14;
+    pub const K_CG_KEYBOARD_EVENT_KEYCODE: u32 = 9;
 
     pub const K_CG_EVENT_FLAG_MASK_ALPHA_SHIFT: u64 = 0x00010000;
     pub const K_CG_EVENT_FLAG_MASK_SHIFT: u64       = 0x00020000;
@@ -1163,7 +1163,7 @@ impl HotkeyListener {
             std::thread::spawn(move || unsafe {
                 while running_thread.load(Ordering::Relaxed) {
                     let tap = macos_tap::CGEventTapCreate(
-                        macos_tap::K_CG_SESSION_EVENT_TAP,
+                        macos_tap::K_CG_HID_EVENT_TAP,
                         macos_tap::K_CG_HEAD_INSERT_EVENT_TAP,
                         macos_tap::K_CG_EVENT_TAP_OPTION_LISTEN_ONLY,
                         (1u64 << macos_tap::K_CG_EVENT_KEY_DOWN)
