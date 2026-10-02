@@ -82,6 +82,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signIn = async (email: string, password: string) => {
+    if (!isSupabaseConfigured) {
+      return { error: { message: 'Authentication service is not configured. This build was created without valid credentials. Please contact the developer or rebuild the application.' } };
+    }
     const res = await supabase.auth.signInWithPassword({ email, password });
     if (!res.error && res.data.user) {
       await fetchProfile(res.data.user.id);
@@ -90,6 +93,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signUp = async (email: string, password: string, fullName?: string) => {
+    if (!isSupabaseConfigured) {
+      return { error: { message: 'Authentication service is not configured. This build was created without valid credentials. Please contact the developer or rebuild the application.' }, data: undefined };
+    }
     const res = await supabase.auth.signUp({
       email,
       password,
@@ -131,6 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateProfile = async (updates: Partial<UserProfile>) => {
     if (!user) return { error: 'Not authenticated' };
+    if (!isSupabaseConfigured) return { error: 'Authentication service is not configured.' };
     const { error } = await supabase
       .from('profiles')
       .update(updates)

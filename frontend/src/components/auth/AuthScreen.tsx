@@ -3,7 +3,8 @@ import { useAuth } from '../../context/AuthContext';
 import { AuroraBackground } from '../ui/AuroraBackground';
 import { SpotlightCard } from '../ui/SpotlightCard';
 import { Badge } from '../ui/Badge';
-import { Mail, Lock, User, ArrowRight, Sparkles, AlertCircle, Eye, EyeOff, ShieldCheck, Zap } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, Sparkles, AlertCircle, Eye, EyeOff, ShieldCheck, Zap, WifiOff } from 'lucide-react';
+import { isSupabaseConfigured } from '../../lib/supabase';
 
 export const AuthScreen: React.FC = () => {
   const { signIn, signUp } = useAuth();
@@ -43,7 +44,12 @@ export const AuthScreen: React.FC = () => {
         }
       }
     } catch (err: any) {
-      setError(err?.message || 'An unexpected error occurred.');
+      const msg = err?.message || '';
+      if (msg.includes('Load failed') || msg.includes('fetch') || msg.includes('NetworkError') || msg.includes('Failed to fetch')) {
+        setError('Unable to connect to authentication service. Please check your internet connection or contact support.');
+      } else {
+        setError(msg || 'An unexpected error occurred.');
+      }
     } finally {
       setLoading(false);
     }
@@ -139,6 +145,12 @@ export const AuthScreen: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', borderRadius: '8px', backgroundColor: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.25)', color: '#f87171', fontSize: '12px', marginBottom: '16px' }}>
             <AlertCircle style={{ width: '15px', height: '15px', flexShrink: 0 }} />
             <span>{error}</span>
+          </div>
+        )}
+        {!isSupabaseConfigured && (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '10px 12px', borderRadius: '8px', backgroundColor: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)', color: '#fbbf24', fontSize: '11.5px', marginBottom: '16px', lineHeight: '1.5' }}>
+            <WifiOff style={{ width: '15px', height: '15px', flexShrink: 0, marginTop: '1px' }} />
+            <span>Authentication service is not configured in this build. Please ensure the application was built with valid Supabase credentials, or contact the developer.</span>
           </div>
         )}
         {successMessage && (
