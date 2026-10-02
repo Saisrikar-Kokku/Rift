@@ -113,10 +113,7 @@ pub struct LocalModelInfo {
 }
 
 pub fn get_rift_data_dir() -> PathBuf {
-    let app_data = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
-    let path = PathBuf::from(app_data).join("Rift");
-    let _ = fs::create_dir_all(&path);
-    path
+    crate::storage::settings::get_app_data_dir()
 }
 
 pub fn get_models_dir() -> PathBuf {

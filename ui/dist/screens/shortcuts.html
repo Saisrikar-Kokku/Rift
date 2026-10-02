@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Shortcuts - Rift</title>
+    <link href="../shared/fonts.css" rel="stylesheet">
+    <link href="../shared/tailwind.css" rel="stylesheet">
+    <link href="../shared/modal.css" rel="stylesheet">
+    <style>
+        .rift-sidebar {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            bottom: 0 !important;
+            width: 220px !important;
+            background-color: #111117 !important;
+            border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+            z-index: 50 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            padding: 24px 14px !important;
+            box-sizing: border-box !important;
+        }
+    </style>
+</head>
+<body class="bg-surface-container-lowest font-body-md text-body-md text-on-surface antialiased select-none">
+    <!-- Standardized Fixed Sidebar -->
+    <aside class="rift-sidebar">
+        <div style="display: flex; flex-direction: column; gap: 24px;">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 4px 8px;">
+                <img alt="Rift Logo" style="height: 32px; width: auto; object-fit: contain;" src="../assets/logo.svg">
+                <span style="font-size: 18px; font-weight: 700; color: #e4e1ea; letter-spacing: -0.02em;">Rift</span>
+            </div>
+            <nav style="display: flex; flex-direction: column; gap: 4px;">
+                <a href="home.html"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; color: #938ea1; font-size: 14px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#1a1a24'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#938ea1';">
+                    <span class="material-symbols-outlined text-[19px]">home</span>
+                    <span>Home</span>
+                </a>
+                <a href="history.html"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; color: #938ea1; font-size: 14px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#1a1a24'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#938ea1';">
+                    <span class="material-symbols-outlined text-[19px]">schedule</span>
+                    <span>History</span>
+                </a>
+                <a href="dictionary.html"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; color: #938ea1; font-size: 14px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#1a1a24'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#938ea1';">
+                    <span class="material-symbols-outlined text-[19px]">book_2</span>
+                    <span>Dictionary</span>
+                </a>
+                <a href="shortcuts.html" aria-current="page"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; background-color: #1f1f28; color: #e4e1ea; font-size: 14px; font-weight: 600; text-decoration: none;">
+                    <span class="material-symbols-outlined text-[19px] text-primary" style="color: #cabeff;">keyboard</span>
+                    <span>Shortcuts</span>
+                </a>
+                <a href="settings.html"
+                    style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; color: #938ea1; font-size: 14px; font-weight: 500; text-decoration: none; transition: color 0.15s, background 0.15s;"
+                    onmouseover="this.style.backgroundColor='#1a1a24'; this.style.color='#e4e1ea';"
+                    onmouseout="this.style.backgroundColor='transparent'; this.style.color='#938ea1';">
+                    <span class="material-symbols-outlined text-[19px]">settings</span>
+                    <span>Settings</span>
+                </a>
+            </nav>
+        </div>
+        <div style="padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08); padding-left: 8px; padding-right: 8px; display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #938ea1;">v1.0.0</span>
+            <div style="display: flex; align-items: center; gap: 6px;" title="Engine Ready">
+                <span style="height: 8px; width: 8px; border-radius: 50%; background-color: #45dfa9; box-shadow: 0 0 8px rgba(69,223,169,0.8);"></span>
+                <span style="font-size: 11px; color: #938ea1; font-family: 'JetBrains Mono', monospace;">Ready</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Content Area -->
+    <div class="pl-[220px] min-h-screen flex flex-col bg-surface-container-lowest">
+        <!-- Top App Bar Header -->
+        <header class="fixed top-0 left-[220px] right-0 h-14 bg-surface-container-lowest/80 backdrop-blur-xl border-b border-white/[0.08] z-40 flex items-center justify-between px-space-24">
+            <div class="flex items-center gap-space-12">
+                <div class="flex items-center gap-space-6 px-space-8 py-space-4 rounded-full bg-surface-container border border-white/[0.08]">
+                    <span class="material-symbols-outlined text-tertiary text-[14px]">mic</span>
+                    <span class="font-mono-code text-mono-code text-on-surface-variant">Whisper-Large-v3 • 42ms</span>
+                </div>
+                <div class="flex items-center gap-space-6 px-space-8 py-space-4 rounded bg-surface-container border border-white/[0.08]">
+                    <span id="headerShortcutBadge" class="font-kbd-shortcut text-kbd-shortcut text-outline font-mono-code">Right Alt</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-space-12">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container border border-white/[0.08]">
+                    <span class="relative flex h-2 w-2">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-tertiary"></span>
+                    </span>
+                    <span class="font-mono-code text-caption text-on-surface-variant font-medium">Online</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Body -->
+        <main class="w-full pt-14 px-space-24 pb-space-32 flex-1 bg-surface-container-lowest relative">
+            <div class="max-w-[760px] mx-auto w-full flex flex-col gap-space-24 py-space-12">
+                <!-- Top Header Row -->
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-space-12">
+                        <div class="w-10 h-10 rounded-xl bg-surface-container border border-white/[0.08] flex items-center justify-center text-primary">
+                            <span class="material-symbols-outlined text-[20px]">keyboard</span>
+                        </div>
+                        <div class="flex flex-col">
+                            <h1 class="font-headline-lg text-headline-lg text-on-surface font-semibold tracking-tight">Shortcuts</h1>
+                            <p class="font-body-sm text-body-sm text-on-surface-variant">Set the keys that control recording and overlay focus</p>
+                        </div>
+                    </div>
+                    <button id="refreshShortcuts"
+                        class="group flex items-center gap-space-6 px-space-10 py-space-6 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all cursor-pointer border border-white/[0.06]">
+                        <span class="material-symbols-outlined text-[16px] text-outline group-hover:text-on-surface transition-transform duration-500 group-active:rotate-180" id="refreshIcon">sync</span>
+                        <span class="font-mono-code text-mono-code">Refresh</span>
+                    </button>
+                </div>
+
+                <!-- Main Shortcut Cards Stack -->
+                <div class="flex flex-col gap-space-12">
+                    <!-- Row 1: Push-to-Talk -->
+                    <div class="group relative rounded-xl bg-surface-container border border-white/[0.08] p-space-16 transition-all hover:bg-surface-container-high">
+                        <div class="flex items-center justify-between gap-space-16">
+                            <div class="flex items-center gap-space-12 min-w-0">
+                                <div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-on-surface shrink-0">
+                                    <span class="material-symbols-outlined text-[18px]">mic</span>
+                                </div>
+                                <div class="flex flex-col min-w-0">
+                                    <span class="font-headline-sm text-headline-sm text-on-surface truncate">Push-to-Talk</span>
+                                    <span class="font-body-sm text-body-sm text-on-surface-variant truncate">Hold to record. Release to insert your words.</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-space-12 shrink-0">
+                                <!-- Hotkey Badge / Inline Capture Target -->
+                                <div id="pttKeyContainer" class="flex items-center gap-space-8 pl-space-8 pr-space-10 py-space-4 rounded-full bg-surface-container-lowest border border-white/[0.06]">
+                                    <div class="px-space-8 py-space-2 rounded bg-surface-container">
+                                        <span id="pttKeyLabel" class="font-kbd-shortcut text-kbd-shortcut text-on-surface tracking-wider font-semibold font-mono-code">Right Alt</span>
+                                    </div>
+                                    <div class="flex items-center gap-space-4">
+                                        <span id="pttStatusDot" class="h-1.5 w-1.5 rounded-full bg-tertiary shadow-[0_0_6px_rgba(69,223,169,0.7)]"></span>
+                                        <span id="pttStatusText" class="font-mono-code text-[11px] text-tertiary font-medium">Active</span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-space-4">
+                                    <button id="pttChangeBtn" class="px-space-10 py-space-6 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-on-surface font-body-sm text-body-sm font-medium transition-colors cursor-pointer border border-white/[0.06]">
+                                        Change
+                                    </button>
+                                    <button id="pttClearBtn" class="px-space-8 py-space-6 rounded-lg text-outline hover:text-error font-body-sm text-body-sm transition-colors cursor-pointer">
+                                        Clear
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Quick Assign Bar for Push-to-Talk -->
+                        <div class="mt-space-12 pt-space-10 border-t border-white/[0.04] flex flex-wrap items-center gap-space-8">
+                            <span class="font-mono-code text-[11px] text-outline uppercase tracking-wider">Quick Assign:</span>
+                            <button type="button" class="quick-assign-ptt px-space-8 py-space-2 rounded bg-surface-container-low hover:bg-primary/20 hover:text-primary hover:border-primary/40 border border-white/[0.06] font-mono-code text-xs text-on-surface font-medium transition-all cursor-pointer" data-key="Fn">Fn</button>
+                            <button type="button" class="quick-assign-ptt px-space-8 py-space-2 rounded bg-surface-container-low hover:bg-primary/20 hover:text-primary hover:border-primary/40 border border-white/[0.06] font-mono-code text-xs text-on-surface font-medium transition-all cursor-pointer" data-key="Right Alt">Right Alt</button>
+                            <button type="button" class="quick-assign-ptt px-space-8 py-space-2 rounded bg-surface-container-low hover:bg-primary/20 hover:text-primary hover:border-primary/40 border border-white/[0.06] font-mono-code text-xs text-on-surface font-medium transition-all cursor-pointer" data-key="Left Ctrl">Left Ctrl</button>
+                            <button type="button" class="quick-assign-ptt px-space-8 py-space-2 rounded bg-surface-container-low hover:bg-primary/20 hover:text-primary hover:border-primary/40 border border-white/[0.06] font-mono-code text-xs text-on-surface font-medium transition-all cursor-pointer" data-key="Space">Space</button>
+                            <button type="button" class="quick-assign-ptt px-space-8 py-space-2 rounded bg-surface-container-low hover:bg-primary/20 hover:text-primary hover:border-primary/40 border border-white/[0.06] font-mono-code text-xs text-on-surface font-medium transition-all cursor-pointer" data-key="Caps Lock">Caps Lock</button>
+                            <div class="relative inline-flex items-center">
+                                <select id="pttFKeySelect" class="bg-surface-container-low hover:bg-surface-container-high border border-white/[0.06] rounded px-space-8 py-space-2 font-mono-code text-xs text-on-surface cursor-pointer focus:outline-none focus:border-primary">
+                                    <option value="" disabled selected>Function Keys (F1-F12)...</option>
+                                    <option value="F1">F1</option>
+                                    <option value="F2">F2</option>
+                                    <option value="F3">F3</option>
+                                    <option value="F4">F4</option>
+                                    <option value="F5">F5</option>
+                                    <option value="F6">F6</option>
+                                    <option value="F7">F7</option>
+                                    <option value="F8">F8</option>
+                                    <option value="F9">F9</option>
+                                    <option value="F10">F10</option>
+                                    <option value="F11">F11</option>
+                                    <option value="F12">F12</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Row 2: Toggle Recording -->
+                    <div class="group relative rounded-xl bg-surface-container border border-white/[0.08] p-space-16 transition-all hover:bg-surface-container-high">
+                        <div class="flex items-center justify-between gap-space-16">
+                            <div class="flex items-center gap-space-12 min-w-0">
+                                <div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-on-surface-variant shrink-0">
+                                    <span class="material-symbols-outlined text-[18px]">graphic_eq</span>
+                                </div>
+                                <div class="flex flex-col min-w-0">
+                                    <span class="font-headline-sm text-headline-sm text-on-surface truncate">Toggle Recording</span>
+                                    <span class="font-body-sm text-body-sm text-on-surface-variant truncate">Press once to start hands-free. Press again to stop and insert.</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-space-12 shrink-0">
+                                <div id="toggleKeyContainer" class="flex items-center">
+                                    <span id="toggleKeyLabel" class="font-mono-code text-mono-code text-outline italic pr-space-4">Not set</span>
+                                </div>
+                                <div class="flex items-center gap-space-4">
+                                    <button id="toggleChangeBtn" class="px-space-10 py-space-6 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-on-surface font-body-sm text-body-sm font-medium transition-colors cursor-pointer border border-white/[0.06]">
+                                        Change
+                                    </button>
+                                    <button id="toggleClearBtn" class="px-space-8 py-space-6 rounded-lg text-outline hover:text-error font-body-sm text-body-sm transition-colors cursor-pointer">
+                                        Clear
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Quick Assign Bar for Toggle Recording -->
+                        <div class="mt-space-12 pt-space-10 border-t border-white/[0.04] flex flex-wrap items-center gap-space-8">
+                            <span class="font-mono-code text-[11px] text-outline uppercase tracking-wider">Quick Assign:</span>
+                            <button type="button" class="quick-assign-toggle px-space-8 py-space-2 rounded bg-surface-container-low hover:bg-primary/20 hover:text-primary hover:border-primary/40 border border-white/[0.06] font-mono-code text-xs text-on-surface font-medium transition-all cursor-pointer" data-key="Fn">Fn</button>
+                            <button type="button" class="quick-assign-toggle px-space-8 py-space-2 rounded bg-surface-container-low hover:bg-primary/20 hover:text-primary hover:border-primary/40 border border-white/[0.06] font-mono-code text-xs text-on-surface font-medium transition-all cursor-pointer" data-key="F8">F8</button>
+                            <button type="button" class="quick-assign-toggle px-space-8 py-space-2 rounded bg-surface-container-low hover:bg-primary/20 hover:text-primary hover:border-primary/40 border border-white/[0.06] font-mono-code text-xs text-on-surface font-medium transition-all cursor-pointer" data-key="F2">F2</button>
+                            <button type="button" class="quick-assign-toggle px-space-8 py-space-2 rounded bg-surface-container-low hover:bg-primary/20 hover:text-primary hover:border-primary/40 border border-white/[0.06] font-mono-code text-xs text-on-surface font-medium transition-all cursor-pointer" data-key="Right Alt">Right Alt</button>
+                            <button type="button" class="quick-assign-toggle px-space-8 py-space-2 rounded bg-surface-container-low hover:bg-primary/20 hover:text-primary hover:border-primary/40 border border-white/[0.06] font-mono-code text-xs text-on-surface font-medium transition-all cursor-pointer" data-key="Ctrl+Shift+R">Ctrl+Shift+R</button>
+                            <div class="relative inline-flex items-center">
+                                <select id="toggleFKeySelect" class="bg-surface-container-low hover:bg-surface-container-high border border-white/[0.06] rounded px-space-8 py-space-2 font-mono-code text-xs text-on-surface cursor-pointer focus:outline-none focus:border-primary">
+                                    <option value="" disabled selected>Function Keys (F1-F12)...</option>
+                                    <option value="F1">F1</option>
+                                    <option value="F2">F2</option>
+                                    <option value="F3">F3</option>
+                                    <option value="F4">F4</option>
+                                    <option value="F5">F5</option>
+                                    <option value="F6">F6</option>
+                                    <option value="F7">F7</option>
+                                    <option value="F8">F8</option>
+                                    <option value="F9">F9</option>
+                                    <option value="F10">F10</option>
+                                    <option value="F11">F11</option>
+                                    <option value="F12">F12</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Row 3: Show Widget -->
+                    <div class="group relative rounded-xl bg-surface-container border border-white/[0.08] p-space-16 transition-all hover:bg-surface-container-high">
+                        <div class="flex items-center justify-between gap-space-16">
+                            <div class="flex items-center gap-space-12 min-w-0">
+                                <div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-on-surface-variant shrink-0">
+                                    <span class="material-symbols-outlined text-[18px]">picture_in_picture_alt</span>
+                                </div>
+                                <div class="flex flex-col min-w-0">
+                                    <span class="font-headline-sm text-headline-sm text-on-surface truncate">Show Widget</span>
+                                    <span class="font-body-sm text-body-sm text-on-surface-variant truncate">Brings the floating pill to the front. Doesn't start recording.</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-space-10 shrink-0">
+                                <div class="px-space-10 py-space-4 rounded-full bg-surface-container-lowest border border-white/[0.06] flex items-center gap-space-6">
+                                    <span class="font-kbd-shortcut text-kbd-shortcut text-on-surface tracking-wider font-mono-code">Ctrl+Shift+Space</span>
+                                </div>
+                                <span class="font-mono-code text-[11px] text-outline uppercase tracking-wider px-space-6 py-space-2 rounded bg-surface-container-low border border-white/[0.04]">Fixed</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Push-to-talk Mode Segmented Control Row -->
+                <div class="flex items-center justify-between rounded-xl bg-surface-container border border-white/[0.08] px-space-16 py-space-12 mt-space-4">
+                    <div class="flex items-center gap-space-8">
+                        <span class="material-symbols-outlined text-[16px] text-outline">tune</span>
+                        <span class="font-body-md text-body-md text-on-surface font-medium">Push-to-talk mode:</span>
+                    </div>
+                    <div id="modeGroup" role="radiogroup" aria-label="Push-to-talk mode" class="flex items-center p-space-2 rounded-full bg-surface-container-lowest border border-white/[0.06]">
+                        <button id="btnSingleMode" type="button" data-mode="single"
+                            class="px-space-12 py-space-4 rounded-full bg-gradient-to-r from-primary-container to-secondary-container text-on-primary font-body-sm text-body-sm font-semibold shadow-[0_0_12px_rgba(149,125,255,0.35)] transition-all cursor-pointer">
+                            One key
+                        </button>
+                        <button id="btnComboMode" type="button" data-mode="combo"
+                            class="px-space-12 py-space-4 rounded-full text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-all cursor-pointer">
+                            Combo
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Expandable Troubleshooting Accordion -->
+                <div class="rounded-xl bg-surface-container border border-white/[0.08] overflow-hidden transition-all duration-300">
+                    <button id="troubleshootToggle" aria-expanded="false" type="button"
+                        class="w-full flex items-center justify-between p-space-16 text-left hover:bg-surface-container-high transition-colors cursor-pointer">
+                        <div class="flex items-center gap-space-10">
+                            <span id="troubleshootChevron" class="material-symbols-outlined text-[18px] text-outline transition-transform duration-200">chevron_right</span>
+                            <span class="font-headline-sm text-headline-sm text-on-surface font-semibold">Troubleshooting & Diagnostics</span>
+                        </div>
+                        <div class="flex items-center gap-space-8">
+                            <span class="font-mono-code text-caption text-outline">Hook: Active (WASAPI / Low-Level)</span>
+                            <span class="h-1.5 w-1.5 rounded-full bg-tertiary"></span>
+                        </div>
+                    </button>
+                    <div id="troubleshootContent" class="hidden px-space-16 pb-space-16 flex-col gap-space-12 bg-surface-container-lowest border-t border-white/[0.04]">
+                        <div class="pt-space-12 flex flex-col gap-space-10">
+                            <div class="flex items-start gap-space-8 text-on-surface-variant font-body-sm text-body-sm">
+                                <span class="material-symbols-outlined text-[16px] text-primary shrink-0 mt-space-2">info</span>
+                                <span>If shortcuts conflict with Windows system shortcuts (e.g. Windows Start Menu, Game Bar, or Alt+Tab), choose single dedicated modifier keys like Right Alt or configure combo keys like Ctrl+Win.</span>
+                            </div>
+                            <div class="p-space-12 rounded-lg bg-surface-container border border-white/[0.06] flex items-center justify-between">
+                                <div class="flex flex-col">
+                                    <span class="font-mono-code text-mono-code text-on-surface">Windows Global Low-Level Hook (WH_KEYBOARD_LL)</span>
+                                    <span class="font-caption text-caption text-outline">Phantom debounce threshold: 130ms • Left/Right Alt isolation active</span>
+                                </div>
+                                <span class="font-mono-code text-kbd-shortcut text-tertiary bg-surface-container-high px-space-8 py-space-2 rounded border border-tertiary/20">READY</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="../shared/qwebchannel.js"></script>
+    <script src="../shared/bridge.js"></script>
+    <script src="../shared/toast.js"></script>
+    <script>
+        (function () {
+            const headerShortcutBadge = document.getElementById('headerShortcutBadge');
+            const pttKeyContainer = document.getElementById('pttKeyContainer');
+            const pttChangeBtn = document.getElementById('pttChangeBtn');
+            const pttClearBtn = document.getElementById('pttClearBtn');
+
+            const toggleKeyContainer = document.getElementById('toggleKeyContainer');
+            const toggleChangeBtn = document.getElementById('toggleChangeBtn');
+            const toggleClearBtn = document.getElementById('toggleClearBtn');
+
+            const refreshBtn = document.getElementById('refreshShortcuts');
+            const refreshIcon = document.getElementById('refreshIcon');
+
+            const btnSingleMode = document.getElementById('btnSingleMode');
+            const btnComboMode = document.getElementById('btnComboMode');
+
+            let currentPttKey = 'Right Alt';
+            let currentToggleKey = null;
+            let currentMode = 'single';
+            let capturingAction = null; // 'push_to_talk' | 'toggle_recording' | null
+
+            function renderPttKey(key, isCapturing = false) {
+                if (isCapturing) {
+                    pttKeyContainer.innerHTML = `
+                        <div class="px-space-12 py-space-2 rounded-lg border-2 border-dashed border-primary bg-surface-container-high flex items-center gap-2 animate-pulse">
+                            <span class="material-symbols-outlined text-primary text-[14px]">touch_app</span>
+                            <span class="font-mono-code text-xs text-primary font-medium">Press key or combo...</span>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const isUnset = !key || key === 'Not set';
+                pttKeyContainer.innerHTML = `
+                    <div class="px-space-8 py-space-2 rounded bg-surface-container">
+                        <span class="font-kbd-shortcut text-kbd-shortcut text-on-surface tracking-wider font-semibold font-mono-code">${isUnset ? 'Not set' : key}</span>
+                    </div>
+                    <div class="flex items-center gap-space-4">
+                        <span class="h-1.5 w-1.5 rounded-full ${isUnset ? 'bg-outline' : 'bg-tertiary shadow-[0_0_6px_rgba(69,223,169,0.7)]'}"></span>
+                        <span class="font-mono-code text-[11px] ${isUnset ? 'text-outline' : 'text-tertiary font-medium'}">${isUnset ? 'Unset' : 'Active'}</span>
+                    </div>
+                `;
+            }
+
+            function renderToggleKey(key, isCapturing = false) {
+                if (isCapturing) {
+                    toggleKeyContainer.innerHTML = `
+                        <span class="px-space-10 py-space-2 rounded-lg border-2 border-dashed border-primary text-primary font-mono-code text-xs animate-pulse">
+                            Press key or combo...
+                        </span>
+                    `;
+                    return;
+                }
+
+                if (!key || key === 'Not set') {
+                    toggleKeyContainer.innerHTML = `
+                        <span class="font-mono-code text-mono-code text-outline italic pr-space-4">Not set</span>
+                    `;
+                } else {
+                    toggleKeyContainer.innerHTML = `
+                        <div class="flex items-center gap-space-8 pl-space-8 pr-space-10 py-space-4 rounded-full bg-surface-container-lowest border border-white/[0.06]">
+                            <div class="px-space-8 py-space-2 rounded bg-surface-container">
+                                <span class="font-kbd-shortcut text-kbd-shortcut text-on-surface tracking-wider font-semibold font-mono-code">${key}</span>
+                            </div>
+                            <div class="flex items-center gap-space-4">
+                                <span class="h-1.5 w-1.5 rounded-full bg-tertiary shadow-[0_0_6px_rgba(69,223,169,0.7)]"></span>
+                                <span class="font-mono-code text-[11px] text-tertiary font-medium">Active</span>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+
+            async function loadHotkeys() {
+                try {
+                    const hkRaw = await window.rift.getHotkeys();
+                    const hk = typeof hkRaw === 'string' ? JSON.parse(hkRaw) : hkRaw;
+                    if (hk) {
+                        currentPttKey = hk.pushToTalk || 'Not set';
+                        currentToggleKey = hk.toggleRecording || null;
+
+                        renderPttKey(currentPttKey, false);
+                        renderToggleKey(currentToggleKey, false);
+
+                        headerShortcutBadge.textContent = (currentPttKey === 'Not set' || !currentPttKey) ? 'None' : currentPttKey;
+
+                        if (hk.mode === 'combo') {
+                            selectMode('combo', false);
+                        } else {
+                            selectMode('single', false);
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error loading hotkeys:', e);
+                }
+            }
+
+            function selectMode(mode, save = true) {
+                currentMode = mode;
+                if (mode === 'single') {
+                    btnSingleMode.className = 'px-space-12 py-space-4 rounded-full bg-gradient-to-r from-primary-container to-secondary-container text-on-primary font-body-sm text-body-sm font-semibold shadow-[0_0_12px_rgba(149,125,255,0.35)] transition-all cursor-pointer';
+                    btnComboMode.className = 'px-space-12 py-space-4 rounded-full text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-all cursor-pointer';
+                } else {
+                    btnComboMode.className = 'px-space-12 py-space-4 rounded-full bg-gradient-to-r from-primary-container to-secondary-container text-on-primary font-body-sm text-body-sm font-semibold shadow-[0_0_12px_rgba(149,125,255,0.35)] transition-all cursor-pointer';
+                    btnSingleMode.className = 'px-space-12 py-space-4 rounded-full text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-all cursor-pointer';
+                }
+                if (save) {
+                    window.rift.saveSettings({ pushToTalkMode: mode })
+                        .then(() => window.showToast({ message: `Push-to-talk mode set to ${mode}`, type: 'info' }))
+                        .catch(err => console.error(err));
+                }
+            }
+
+            btnSingleMode.addEventListener('click', () => selectMode('single', true));
+            btnComboMode.addEventListener('click', () => selectMode('combo', true));
+
+            // Refresh
+            refreshBtn.addEventListener('click', async () => {
+                refreshIcon.classList.add('animate-spin');
+                await loadHotkeys();
+                setTimeout(() => refreshIcon.classList.remove('animate-spin'), 600);
+                window.showToast({ message: 'Shortcuts refreshed from backend', type: 'info' });
+            });
+
+            let pressedChord = new Set();
+            let maxChord = [];
+            let nonModifierPressed = false;
+            let isSaving = false;
+
+            function getModifierName(e) {
+                if (e.code === 'AltRight' || e.key === 'AltGraph' || (e.key === 'Alt' && e.location === 2)) return 'Right Alt';
+                if (e.code === 'AltLeft' || (e.key === 'Alt' && e.location === 1)) return 'Left Alt';
+                if (e.code === 'ControlRight' || (e.key === 'Control' && e.location === 2)) return 'Right Ctrl';
+                if (e.code === 'ControlLeft' || (e.key === 'Control' && e.location === 1)) return 'Left Ctrl';
+                if (e.code === 'ShiftRight' || (e.key === 'Shift' && e.location === 2)) return 'Right Shift';
+                if (e.code === 'ShiftLeft' || (e.key === 'Shift' && e.location === 1)) return 'Left Shift';
+                if (e.key === 'Meta' || e.key === 'OS' || e.code === 'MetaLeft' || e.code === 'MetaRight') return 'Win';
+                return null;
+            }
+
+            function getNonModifierName(e) {
+                // Fn Key & Fn Lock
+                if (e.key === 'Fn' || e.code === 'Fn' || e.key === 'FnLock' || e.code === 'FnLock' || e.keyCode === 255 || e.which === 255 || e.key === 'WakeUp') {
+                    return 'Fn';
+                }
+                // Media Keys
+                if (e.code === 'AudioVolumeMute' || e.key === 'AudioVolumeMute') return 'Mute';
+                if (e.code === 'AudioVolumeDown' || e.key === 'AudioVolumeDown') return 'Volume Down';
+                if (e.code === 'AudioVolumeUp' || e.key === 'AudioVolumeUp') return 'Volume Up';
+                if (e.code === 'MediaPlayPause' || e.key === 'MediaPlayPause') return 'Play/Pause';
+                if (e.code === 'MediaTrackNext' || e.key === 'MediaTrackNext') return 'Next Track';
+                if (e.code === 'MediaTrackPrevious' || e.key === 'MediaTrackPrevious') return 'Prev Track';
+                if (e.code === 'MediaStop' || e.key === 'MediaStop') return 'Media Stop';
+
+                // Standard Keys
+                if (e.code && e.code.startsWith('Key') && e.code.length === 4) return e.code.slice(3).toUpperCase();
+                if (e.code && e.code.startsWith('Digit') && e.code.length === 6) return e.code.slice(5);
+                if (e.code && /^F\d{1,2}$/i.test(e.code)) return e.code.toUpperCase();
+                if (e.key && /^F\d{1,2}$/i.test(e.key)) return e.key.toUpperCase();
+                if (e.code === 'Space' || e.key === ' ') return 'Space';
+                if (e.code === 'Tab' || e.key === 'Tab') return 'Tab';
+                if (e.code === 'Enter' || e.key === 'Enter') return 'Enter';
+                if (e.code === 'Backspace' || e.key === 'Backspace') return 'Backspace';
+                if (e.code === 'Delete' || e.key === 'Delete') return 'Delete';
+                if (e.code === 'Insert' || e.key === 'Insert') return 'Insert';
+                if (e.code === 'Home' || e.key === 'Home') return 'Home';
+                if (e.code === 'End' || e.key === 'End') return 'End';
+                if (e.code === 'PageUp') return 'Page Up';
+                if (e.code === 'PageDown') return 'Page Down';
+                if (e.code === 'ArrowUp') return 'Up';
+                if (e.code === 'ArrowDown') return 'Down';
+                if (e.code === 'ArrowLeft') return 'Left';
+                if (e.code === 'ArrowRight') return 'Right';
+                if (e.code === 'Backquote') return '`';
+                if (e.code === 'Minus') return '-';
+                if (e.code === 'Equal') return '=';
+                if (e.code === 'BracketLeft') return '[';
+                if (e.code === 'BracketRight') return ']';
+                if (e.code === 'Backslash') return '\\';
+                if (e.code === 'Semicolon') return ';';
+                if (e.code === 'Quote') return "'";
+                if (e.code === 'Comma') return ',';
+                if (e.code === 'Period') return '.';
+                if (e.code === 'Slash') return '/';
+                if (e.code === 'Pause') return 'Pause';
+                if (e.code === 'ScrollLock') return 'Scroll Lock';
+                if (e.code === 'NumLock') return 'Num Lock';
+                if (e.code && e.code.startsWith('Numpad')) {
+                    const num = e.code.replace('Numpad', '');
+                    return `Num ${num}`;
+                }
+                if (e.key && e.key.length === 1) return e.key.toUpperCase();
+                return e.key || 'Custom';
+            }
+
+            function formatChord(keys) {
+                if (!keys || keys.length === 0) return '';
+                if (keys.length === 1) {
+                    return keys[0];
+                }
+
+                // If multiple keys, normalize left/right modifiers into canonical Ctrl, Alt, Shift, Win
+                const hasCtrl = keys.some(k => k === 'Ctrl' || k === 'Left Ctrl' || k === 'Right Ctrl');
+                const hasAlt = keys.some(k => k === 'Alt' || k === 'Left Alt' || k === 'Right Alt');
+                const hasShift = keys.some(k => k === 'Shift' || k === 'Left Shift' || k === 'Right Shift');
+                const hasWin = keys.some(k => k === 'Win');
+
+                const parts = [];
+                if (hasCtrl) parts.push('Ctrl');
+                if (hasAlt) parts.push('Alt');
+                if (hasShift) parts.push('Shift');
+                if (hasWin) parts.push('Win');
+
+                for (const k of keys) {
+                    if (['Ctrl', 'Left Ctrl', 'Right Ctrl', 'Alt', 'Left Alt', 'Right Alt', 'Shift', 'Left Shift', 'Right Shift', 'Win'].includes(k)) {
+                        continue;
+                    }
+                    if (!parts.includes(k)) {
+                        parts.push(k);
+                    }
+                }
+
+                return parts.join('+');
+            }
+
+            function updateLivePreview() {
+                const preview = formatChord(maxChord);
+                if (capturingAction === 'push_to_talk') {
+                    const label = document.getElementById('pttKeyLabel');
+                    if (label) label.textContent = preview || 'Press keys...';
+                } else if (capturingAction === 'toggle_recording') {
+                    const label = document.getElementById('toggleKeyLabel');
+                    if (label) label.textContent = preview || 'Press keys...';
+                }
+            }
+
+            async function startCapture(action) {
+                capturingAction = action;
+                pressedChord.clear();
+                maxChord = [];
+                nonModifierPressed = false;
+                if (action === 'push_to_talk') {
+                    renderPttKey(null, true);
+                    renderToggleKey(currentToggleKey, false);
+                } else {
+                    renderToggleKey(null, true);
+                    renderPttKey(currentPttKey, false);
+                }
+                try {
+                    await window.rift.startHotkeyCapture(currentMode);
+                } catch (e) {
+                    console.error('startHotkeyCapture error:', e);
+                }
+            }
+
+            async function cancelCapture() {
+                if (!capturingAction) return;
+                capturingAction = null;
+                pressedChord.clear();
+                maxChord = [];
+                nonModifierPressed = false;
+                try {
+                    await window.rift.cancelHotkeyCapture();
+                } catch (err) {}
+                renderPttKey(currentPttKey, false);
+                renderToggleKey(currentToggleKey, false);
+                window.showToast({ message: 'Hotkey capture cancelled', type: 'info' });
+            }
+
+            async function applyCapturedHotkey(combo) {
+                if (!capturingAction || isSaving) return;
+                isSaving = true;
+                const action = capturingAction;
+                capturingAction = null;
+                pressedChord.clear();
+                maxChord = [];
+                nonModifierPressed = false;
+
+                try {
+                    await window.rift.cancelHotkeyCapture();
+                } catch (e) {}
+
+                try {
+                    const res = await window.rift.saveHotkey(action, combo);
+                    window.showToast({ message: `Shortcut updated to ${combo}`, type: 'success' });
+                } catch (err) {
+                    console.error('Failed to save hotkey:', err);
+                    window.showToast({ message: `Failed to save shortcut: ${err.message || err}`, type: 'error' });
+                } finally {
+                    isSaving = false;
+                    await loadHotkeys();
+                }
+            }
+
+            async function applyDirectHotkey(action, combo) {
+                if (!combo || isSaving) return;
+                isSaving = true;
+                if (capturingAction) {
+                    try {
+                        await window.rift.cancelHotkeyCapture();
+                    } catch (e) {}
+                    capturingAction = null;
+                }
+                try {
+                    const res = await window.rift.saveHotkey(action, combo);
+                    window.showToast({ message: `Shortcut updated to ${combo}`, type: 'success' });
+                } catch (err) {
+                    console.error('Failed to set hotkey:', err);
+                    window.showToast({ message: `Failed to set shortcut: ${err.message || err}`, type: 'error' });
+                } finally {
+                    isSaving = false;
+                    await loadHotkeys();
+                }
+            }
+
+            // Quick Assign buttons for Push-to-Talk
+            document.querySelectorAll('.quick-assign-ptt').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const key = btn.getAttribute('data-key');
+                    if (key) applyDirectHotkey('push_to_talk', key);
+                });
+            });
+
+            const pttFKeySelect = document.getElementById('pttFKeySelect');
+            if (pttFKeySelect) {
+                pttFKeySelect.addEventListener('change', (e) => {
+                    const val = e.target.value;
+                    if (val) {
+                        applyDirectHotkey('push_to_talk', val);
+                        e.target.value = '';
+                    }
+                });
+            }
+
+            // Quick Assign buttons for Toggle Recording
+            document.querySelectorAll('.quick-assign-toggle').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const key = btn.getAttribute('data-key');
+                    if (key) applyDirectHotkey('toggle_recording', key);
+                });
+            });
+
+            const toggleFKeySelect = document.getElementById('toggleFKeySelect');
+            if (toggleFKeySelect) {
+                toggleFKeySelect.addEventListener('change', (e) => {
+                    const val = e.target.value;
+                    if (val) {
+                        applyDirectHotkey('toggle_recording', val);
+                        e.target.value = '';
+                    }
+                });
+            }
+
+            // Inline capture for Push-to-Talk
+            pttChangeBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (capturingAction === 'push_to_talk') {
+                    await cancelCapture();
+                    return;
+                }
+                await startCapture('push_to_talk');
+            });
+
+            // Inline capture for Toggle Recording
+            toggleChangeBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (capturingAction === 'toggle_recording') {
+                    await cancelCapture();
+                    return;
+                }
+                await startCapture('toggle_recording');
+            });
+
+            // Clear PTT
+            pttClearBtn.addEventListener('click', async () => {
+                try {
+                    await window.rift.clearHotkey('push_to_talk');
+                    currentPttKey = 'Not set';
+                    renderPttKey('Not set', false);
+                    headerShortcutBadge.textContent = 'None';
+                    window.showToast({ message: 'Push-to-talk hotkey cleared', type: 'info' });
+                } catch (e) {
+                    console.error('Failed to clear hotkey:', e);
+                }
+            });
+
+            // Clear Toggle Recording
+            if (toggleClearBtn) {
+                toggleClearBtn.addEventListener('click', async () => {
+                    try {
+                        await window.rift.clearHotkey('toggle_recording');
+                        currentToggleKey = null;
+                        renderToggleKey(null, false);
+                        window.showToast({ message: 'Toggle recording hotkey cleared', type: 'info' });
+                    } catch (e) {
+                        console.error('Failed to clear toggle hotkey:', e);
+                    }
+                });
+            }
+
+            // Accordion toggle
+            const toggleBtn = document.getElementById('troubleshootToggle');
+            const content = document.getElementById('troubleshootContent');
+            const chevron = document.getElementById('troubleshootChevron');
+            toggleBtn.addEventListener('click', () => {
+                const isExpanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+                toggleBtn.setAttribute('aria-expanded', !isExpanded);
+                if (isExpanded) {
+                    content.classList.add('hidden');
+                    chevron.classList.remove('rotate-90');
+                } else {
+                    content.classList.remove('hidden');
+                    chevron.classList.add('rotate-90');
+                }
+            });
+
+            // Interactive in-window key capture listener
+            window.addEventListener('keydown', async (e) => {
+                if (!capturingAction) return;
+
+                // 1. Escape key cancels capture if no other keys were held
+                if (e.key === 'Escape' && maxChord.length === 0) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    await cancelCapture();
+                    return;
+                }
+
+                // Prevent default navigation / scrolling keys during capture
+                e.preventDefault();
+                e.stopPropagation();
+
+                const mod = getModifierName(e);
+                if (mod) {
+                    pressedChord.add(mod);
+                    if (!maxChord.includes(mod)) {
+                        maxChord.push(mod);
+                    }
+                    updateLivePreview();
+                    return;
+                }
+
+                // Non-modifier key pressed
+                const primaryKey = getNonModifierName(e);
+                if (!primaryKey) return;
+
+                // Auto-include standard held modifiers from event state if not captured yet
+                if (e.ctrlKey && !maxChord.some(k => k === 'Ctrl' || k === 'Left Ctrl' || k === 'Right Ctrl')) maxChord.push('Ctrl');
+                if (e.altKey && !maxChord.some(k => k === 'Alt' || k === 'Left Alt' || k === 'Right Alt')) maxChord.push('Alt');
+                if (e.shiftKey && !maxChord.some(k => k === 'Shift' || k === 'Left Shift' || k === 'Right Shift')) maxChord.push('Shift');
+                if (e.metaKey && !maxChord.includes('Win')) maxChord.push('Win');
+
+                pressedChord.add(primaryKey);
+                if (!maxChord.includes(primaryKey)) {
+                    maxChord.push(primaryKey);
+                }
+                nonModifierPressed = true;
+                updateLivePreview();
+
+                // Non-modifier completes the shortcut combination
+                const combo = formatChord(maxChord);
+                if (combo) {
+                    await applyCapturedHotkey(combo);
+                }
+            }, true);
+
+            window.addEventListener('keyup', async (e) => {
+                if (!capturingAction) return;
+                e.preventDefault();
+                e.stopPropagation();
+
+                const mod = getModifierName(e);
+                if (mod) {
+                    pressedChord.delete(mod);
+                }
+                const nonMod = getNonModifierName(e);
+                if (nonMod) {
+                    pressedChord.delete(nonMod);
+                }
+
+                // If only modifiers were pressed (e.g. Ctrl+Win, Ctrl+Alt, or single Right Alt)
+                // When user releases all keys, commit the gesture
+                if (!nonModifierPressed && pressedChord.size === 0 && maxChord.length > 0) {
+                    const combo = formatChord(maxChord);
+                    if (combo) {
+                        await applyCapturedHotkey(combo);
+                    }
+                }
+            }, true);
+
+            // Bridge readiness
+            window.rift.ready(async () => {
+                loadHotkeys();
+
+                // Listen for captured hotkey event from backend global hook
+                window.rift.on('hotkeyCaptured', async (dataRaw) => {
+                    try {
+                        const data = typeof dataRaw === 'string' ? JSON.parse(dataRaw) : dataRaw;
+                        const combo = data.combo || data.key;
+                        if (combo) {
+                            await applyCapturedHotkey(combo);
+                        }
+                    } catch (err) {
+                        console.error('Error handling hotkeyCaptured in shortcuts:', err);
+                    }
+                });
+            });
+        })();
+    </script>
+</body>
+</html>

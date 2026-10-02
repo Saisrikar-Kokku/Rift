@@ -516,11 +516,9 @@ pub fn execute_quick_action(
 
         QuickAction::RiftOpenScratchpad => {
             if let Some(app_handle) = app {
-                if let Some(sp_win) = app_handle.get_webview_window("scratchpad") {
-                    crate::show_and_focus_window(&sp_win);
-                    "Opened Rift Scratchpad".to_string()
-                } else {
-                    "Rift Scratchpad not available".to_string()
+                match crate::window::auxiliary::get_or_create_scratchpad(app_handle) {
+                    Ok(_) => "Opened Rift Scratchpad".to_string(),
+                    Err(e) => format!("Failed to open Scratchpad: {}", e),
                 }
             } else {
                 "Scratchpad handle unavailable".to_string()
@@ -529,12 +527,9 @@ pub fn execute_quick_action(
 
         QuickAction::RiftOpenSpotlight => {
             if let Some(app_handle) = app {
-                if let Some(spot_win) = app_handle.get_webview_window("spotlight") {
-                    let _ = spot_win.center();
-                    crate::show_and_focus_window(&spot_win);
-                    "Opened Rift Spotlight".to_string()
-                } else {
-                    "Rift Spotlight not available".to_string()
+                match crate::window::auxiliary::get_or_create_spotlight(app_handle) {
+                    Ok(_) => "Opened Rift Spotlight".to_string(),
+                    Err(e) => format!("Failed to open Spotlight: {}", e),
                 }
             } else {
                 "Spotlight handle unavailable".to_string()
@@ -648,19 +643,13 @@ pub fn execute_quick_action(
         }
         QuickAction::RiftOpenScratchpad => {
             if let Some(app_handle) = app {
-                if let Some(w) = app_handle.get_webview_window("scratchpad") {
-                    let _ = w.show();
-                    let _ = w.set_focus();
-                }
+                let _ = crate::window::auxiliary::get_or_create_scratchpad(app_handle);
             }
             "Opened Scratchpad".to_string()
         }
         QuickAction::RiftOpenSpotlight => {
             if let Some(app_handle) = app {
-                if let Some(w) = app_handle.get_webview_window("spotlight") {
-                    let _ = w.show();
-                    let _ = w.set_focus();
-                }
+                let _ = crate::window::auxiliary::get_or_create_spotlight(app_handle);
             }
             "Opened Ask Rift Spotlight".to_string()
         }

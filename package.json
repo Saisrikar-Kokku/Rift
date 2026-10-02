@@ -5,8 +5,9 @@
   "private": true,
   "scripts": {
     "tauri": "tauri",
+    "build:frontend": "npm --prefix frontend install && npm --prefix frontend run build",
     "dev": "tauri dev",
-    "build": "tauri build"
+    "build": "npm run build:frontend && tauri build"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0"

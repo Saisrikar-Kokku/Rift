@@ -23,6 +23,7 @@ enum HookEvent {
         combo_name: String,
         mode: String,
     },
+    AmbientMemoryTrigger,
 }
 
 #[cfg(windows)]
@@ -33,6 +34,7 @@ static mut KEY_CALLBACK_PRESS: Option<Box<dyn Fn() + Send + Sync>> = None;
 static mut KEY_CALLBACK_RELEASE: Option<Box<dyn Fn() + Send + Sync>> = None;
 static mut KEY_CALLBACK_TOGGLE: Option<Box<dyn Fn() + Send + Sync>> = None;
 static mut KEY_CALLBACK_SHOW_WIDGET: Option<Box<dyn Fn() + Send + Sync>> = None;
+static mut KEY_CALLBACK_AMBIENT: Option<Box<dyn Fn() + Send + Sync>> = None;
 static mut KEY_CALLBACK_CAPTURED: Option<Box<dyn Fn(String, String, String) + Send + Sync>> = None;
 
 static EVENT_SENDER: Mutex<Option<Sender<HookEvent>>> = Mutex::new(None);
@@ -40,6 +42,7 @@ static EVENT_SENDER: Mutex<Option<Sender<HookEvent>>> = Mutex::new(None);
 static PTT_KEYS: RwLock<Vec<u32>> = RwLock::new(Vec::new());
 static TOGGLE_KEYS: RwLock<Vec<u32>> = RwLock::new(Vec::new());
 static SHOW_WIDGET_KEYS: RwLock<Vec<u32>> = RwLock::new(Vec::new());
+static AMBIENT_KEYS: RwLock<Vec<u32>> = RwLock::new(Vec::new());
 
 static IS_PTT_PRESSED: AtomicBool = AtomicBool::new(false);
 static IS_TOGGLE_KEY_DOWN: AtomicBool = AtomicBool::new(false);
@@ -47,6 +50,9 @@ static LAST_TOGGLE_TIME: Mutex<Option<std::time::Instant>> = Mutex::new(None);
 
 static IS_WIDGET_KEY_DOWN: AtomicBool = AtomicBool::new(false);
 static LAST_WIDGET_TIME: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+
+static IS_AMBIENT_KEY_DOWN: AtomicBool = AtomicBool::new(false);
+static LAST_AMBIENT_TIME: Mutex<Option<std::time::Instant>> = Mutex::new(None);
 
 static IS_CAPTURING: AtomicBool = AtomicBool::new(false);
 static CAPTURE_MODE: Mutex<Option<String>> = Mutex::new(None);
@@ -361,16 +367,34 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
 
                     for &k in &captured_vks {
                         match k {
-                            0x11 | 0xA2 | 0xA3 => has_ctrl = true,
+                            0x11 | 0xA2 | 0xA3 => {
+                                if captured_vks.len() == 1 {
+                                    others.push(vk_to_name(k));
+                                } else {
+                                    has_ctrl = true;
+                                }
+                            }
                             0x12 | 0xA4 | 0xA5 => {
-                                if captured_vks.len() == 1 && (k == 0xA5 || k == 0x12) {
+                                if captured_vks.len() == 1 {
                                     others.push(vk_to_name(k));
                                 } else {
                                     has_alt = true;
                                 }
                             }
-                            0x10 | 0xA0 | 0xA1 => has_shift = true,
-                            0x5B | 0x5C => has_win = true,
+                            0x10 | 0xA0 | 0xA1 => {
+                                if captured_vks.len() == 1 {
+                                    others.push(vk_to_name(k));
+                                } else {
+                                    has_shift = true;
+                                }
+                            }
+                            0x5B | 0x5C => {
+                                if captured_vks.len() == 1 {
+                                    others.push(vk_to_name(k));
+                                } else {
+                                    has_win = true;
+                                }
+                            }
                             other_vk => {
                                 let name = vk_to_name(other_vk);
                                 if !others.contains(&name) {
@@ -439,9 +463,9 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
                     let was_pressed = IS_PTT_PRESSED.swap(false, Ordering::SeqCst);
                     if was_pressed {
                         send_event(HookEvent::PttRelease);
-                        // Consume key release ONLY for single dedicated key (e.g. Right Alt) to prevent SC_KEYMENU
-                        // Never consume modifier release for combo keys so modifiers never get stuck!
-                        if ptt_keys.len() == 1 {
+                        // Consume key release ONLY for single dedicated key (Right Alt: 0xA5) to prevent SC_KEYMENU
+                        // Never consume modifier release for other keys or combos so modifiers never get stuck!
+                        if ptt_keys.len() == 1 && ptt_keys[0] == 0xA5 {
                             return LRESULT(1);
                         }
                     }
@@ -1047,6 +1071,13 @@ impl HotkeyListener {
         }
     }
 
+    pub fn set_ambient_key(&self, key_name: &str) {
+        let keys = parse_key_combination(key_name);
+        if let Ok(mut guard) = AMBIENT_KEYS.write() {
+            *guard = keys;
+        }
+    }
+
     pub fn start_capture<F>(&self, mode: &str, on_captured: F)
     where
         F: Fn(String, String, String) + Send + Sync + 'static,
@@ -1074,7 +1105,7 @@ impl HotkeyListener {
         }
     }
 
-    pub fn start<FP, FR, FT, FW>(
+    pub fn start<FP, FR, FT, FW, FA>(
         &self,
         target_key: &str,
         toggle_key: Option<&str>,
@@ -1083,21 +1114,26 @@ impl HotkeyListener {
         on_release: FR,
         on_toggle: FT,
         on_show_widget: FW,
+        on_ambient: FA,
     ) where
         FP: Fn() + Send + Sync + 'static,
         FR: Fn() + Send + Sync + 'static,
         FT: Fn() + Send + Sync + 'static,
         FW: Fn() + Send + Sync + 'static,
+        FA: Fn() + Send + Sync + 'static,
     {
         self.set_ptt_key(target_key);
         self.set_toggle_key(toggle_key);
         self.set_show_widget_key(show_widget_key.unwrap_or("Ctrl+Shift+Space"));
+        // Temporarily hardcode ambient hotkey for now or allow None. For now we will set it to Ctrl+Shift+M if needed.
+        self.set_ambient_key("Ctrl+Shift+M");
 
         unsafe {
             KEY_CALLBACK_PRESS = Some(Box::new(on_press));
             KEY_CALLBACK_RELEASE = Some(Box::new(on_release));
             KEY_CALLBACK_TOGGLE = Some(Box::new(on_toggle));
             KEY_CALLBACK_SHOW_WIDGET = Some(Box::new(on_show_widget));
+            KEY_CALLBACK_AMBIENT = Some(Box::new(on_ambient));
         }
 
         // Set up communication channel for off-hook execution
@@ -1134,6 +1170,13 @@ impl HotkeyListener {
                     HookEvent::ShowWidget => {
                         unsafe {
                             if let Some(cb) = &*std::ptr::addr_of!(KEY_CALLBACK_SHOW_WIDGET) {
+                                cb();
+                            }
+                        }
+                    }
+                    HookEvent::AmbientMemoryTrigger => {
+                        unsafe {
+                            if let Some(cb) = &*std::ptr::addr_of!(KEY_CALLBACK_AMBIENT) {
                                 cb();
                             }
                         }

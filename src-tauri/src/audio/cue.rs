@@ -4,7 +4,7 @@ use std::sync::Mutex;
 #[cfg(windows)]
 #[link(name = "winmm")]
 extern "system" {
-    fn PlaySoundW(pszSound: *const u16, hmod: *mut std::ffi::c_void, fdwSound: u32) -> i32;
+    fn PlaySoundA(pszSound: *const u8, hmod: *mut std::ffi::c_void, fdwSound: u32) -> i32;
 }
 
 #[cfg(windows)]
@@ -59,28 +59,35 @@ fn make_wav(samples: &[f32], sample_rate: u32) -> Vec<u8> {
 
 fn synth_start_tone(volume: f32) -> Vec<u8> {
     let sr = 44100u32;
-    let duration = 0.075f32; // 75ms
+    let duration = 0.120f32; // 120ms - warm, sleek, rising above keyclick and DAC buffer latency
     let num_samples = (sr as f32 * duration) as usize;
     let mut samples = Vec::with_capacity(num_samples);
-    let f_start = 520.0f32;
-    let f_end = 760.0f32;
-    let mut phase = 0.0f32;
+    
+    // Elegant musical ascent: C5 (523.25 Hz) -> G5 (783.99 Hz) (Pure harmonic 5th)
+    let f_start = 523.25f32;
+    let f_end = 783.99f32;
+    let mut phase1 = 0.0f32;
+    let mut phase2 = 0.0f32;
 
     for i in 0..num_samples {
         let t = i as f32 / sr as f32;
         let progress = t / duration;
-        let freq = f_start + (f_end - f_start) * progress;
-        phase += 2.0 * PI * freq / sr as f32;
+        // Smooth S-curve pitch transition
+        let freq = f_start + (f_end - f_start) * (1.0 - (progress * PI).cos()) * 0.5;
+        phase1 += 2.0 * PI * freq / sr as f32;
+        phase2 += 2.0 * PI * (freq * 2.0) / sr as f32;
 
-        let env = if progress < 0.15 {
-            progress / 0.15
-        } else if progress > 0.60 {
-            (1.0 - progress) / 0.40
+        // Smooth 12ms cosine attack to completely eliminate any digital clicks/pops
+        let attack_time = 0.012f32;
+        let env = if t < attack_time {
+            0.5 * (1.0 - (PI * t / attack_time).cos())
         } else {
-            1.0
+            let decay_progress = (t - attack_time) / (duration - attack_time);
+            (-decay_progress * 2.5).exp()
         };
 
-        let sample = phase.sin() * env * volume * 0.45;
+        // 80% fundamental + 20% 2nd harmonic for rich glass-bell warmth
+        let sample = (phase1.sin() * 0.80 + phase2.sin() * 0.20) * env * volume * 0.65;
         samples.push(sample);
     }
 
@@ -89,7 +96,7 @@ fn synth_start_tone(volume: f32) -> Vec<u8> {
 
 fn synth_success_tone(volume: f32) -> Vec<u8> {
     let sr = 44100u32;
-    let duration = 0.110f32; // 110ms
+    let duration = 0.130f32; // 130ms - satisfying double-chime resolution
     let num_samples = (sr as f32 * duration) as usize;
     let mut samples = Vec::with_capacity(num_samples);
 
@@ -97,20 +104,22 @@ fn synth_success_tone(volume: f32) -> Vec<u8> {
         let t = i as f32 / sr as f32;
         let mut s = 0.0f32;
 
-        // Note 1: 659.25Hz (E5)
-        if t < 0.070 {
-            let env1 = (-t * 35.0).exp();
-            s += (2.0 * PI * 659.25 * t).sin() * env1 * 0.6;
+        // Bell 1: E5 (659.25 Hz)
+        if t < 0.080 {
+            let att1 = (t / 0.006).min(1.0);
+            let env1 = att1 * (-t * 30.0).exp();
+            s += ((2.0 * PI * 659.25 * t).sin() * 0.82 + (2.0 * PI * 1318.5 * t).sin() * 0.18) * env1 * 0.55;
         }
 
-        // Note 2: 987.77Hz (B5) starting at 35ms
-        if t >= 0.035 {
-            let t2 = t - 0.035;
-            let env2 = (-t2 * 30.0).exp();
-            s += (2.0 * PI * 987.77 * t2).sin() * env2 * 0.7;
+        // Bell 2: B5 (987.77 Hz) entering at 32ms
+        if t >= 0.032 {
+            let t2 = t - 0.032;
+            let att2 = (t2 / 0.006).min(1.0);
+            let env2 = att2 * (-t2 * 26.0).exp();
+            s += ((2.0 * PI * 987.77 * t2).sin() * 0.85 + (2.0 * PI * 1975.54 * t2).sin() * 0.15) * env2 * 0.70;
         }
 
-        let sample = s * volume * 0.40;
+        let sample = s * volume * 0.62;
         samples.push(sample);
     }
 
@@ -126,13 +135,18 @@ fn synth_cancel_tone(volume: f32) -> Vec<u8> {
     for i in 0..num_samples {
         let t = i as f32 / sr as f32;
         let progress = t / duration;
-        let freq = 320.0 - 140.0 * progress;
-        let env = 1.0 - progress;
-        let sample = (2.0 * PI * freq * t).sin() * env * volume * 0.35;
+        let freq = 340.0 - 140.0 * progress;
+        let att = (t / 0.005).min(1.0);
+        let env = att * (1.0 - progress).max(0.0);
+        let sample = (2.0 * PI * freq * t).sin() * env * volume * 0.32;
         samples.push(sample);
     }
 
     make_wav(&samples, sr)
+}
+
+pub fn prewarm(volume: f32) {
+    ensure_cache(volume);
 }
 
 fn ensure_cache(volume: f32) {
@@ -177,7 +191,8 @@ pub fn play_start(volume: f32) {
     if let Ok(lock) = CUE_CACHE.lock() {
         if let Some(cues) = &*lock {
             unsafe {
-                PlaySoundW(cues.start.as_ptr() as *const u16, std::ptr::null_mut(), PLAY_FLAGS);
+                let res = PlaySoundA(cues.start.as_ptr(), std::ptr::null_mut(), PLAY_FLAGS);
+                crate::log_status(&format!("cue::play_start executed (vol={}, res={})", volume, res));
             }
         }
     }
@@ -198,7 +213,8 @@ pub fn play_success(volume: f32) {
     if let Ok(lock) = CUE_CACHE.lock() {
         if let Some(cues) = &*lock {
             unsafe {
-                PlaySoundW(cues.success.as_ptr() as *const u16, std::ptr::null_mut(), PLAY_FLAGS);
+                let res = PlaySoundA(cues.success.as_ptr(), std::ptr::null_mut(), PLAY_FLAGS);
+                crate::log_status(&format!("cue::play_success executed (vol={}, res={})", volume, res));
             }
         }
     }
@@ -219,7 +235,8 @@ pub fn play_cancel(volume: f32) {
     if let Ok(lock) = CUE_CACHE.lock() {
         if let Some(cues) = &*lock {
             unsafe {
-                PlaySoundW(cues.cancel.as_ptr() as *const u16, std::ptr::null_mut(), PLAY_FLAGS);
+                let res = PlaySoundA(cues.cancel.as_ptr(), std::ptr::null_mut(), PLAY_FLAGS);
+                crate::log_status(&format!("cue::play_cancel executed (vol={}, res={})", volume, res));
             }
         }
     }

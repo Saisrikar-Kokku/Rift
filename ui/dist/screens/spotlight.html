@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Ask Rift - Spotlight Voice AI</title>
+    <link href="../shared/fonts.css" rel="stylesheet">
+    <link href="../shared/tailwind.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: rgba(13, 13, 20, 0.94);
+            --bg-card: rgba(22, 22, 34, 0.7);
+            --border-subtle: rgba(255, 255, 255, 0.09);
+            --border-glow: rgba(168, 85, 247, 0.4);
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --accent-purple: #c084fc;
+            --accent-glow: #9333ea;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            background: transparent !important;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .spotlight-container {
+            width: 620px;
+            max-height: 420px;
+            height: 420px;
+            background: var(--bg-base);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 20px rgba(168, 85, 247, 0.15);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            animation: popIn 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes popIn {
+            from {
+                opacity: 0;
+                transform: scale(0.97) translateY(-6px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .spotlight-drag-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.02);
+            cursor: move;
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #d8b4fe;
+            letter-spacing: 0.02em;
+        }
+
+        .groq-badge {
+            font-size: 9.5px;
+            padding: 1px 6px;
+            background: rgba(192, 132, 252, 0.12);
+            border: 1px solid rgba(192, 132, 252, 0.25);
+            border-radius: 999px;
+            color: #e9d5ff;
+            font-family: ui-monospace, SFMono-Regular, monospace;
+        }
+
+        .close-btn {
+            background: transparent;
+            border: none;
+            color: #6b7280;
+            cursor: pointer;
+            padding: 2px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.12s ease;
+        }
+
+        .close-btn:hover {
+            color: #f3f4f6;
+        }
+
+        .search-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-subtle);
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .search-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #ffffff;
+            font-size: 15px;
+            font-weight: 500;
+            outline: none;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        .search-input::placeholder {
+            color: #6b7280;
+            font-weight: 400;
+        }
+
+        .mic-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #c084fc;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.14s ease;
+            flex-shrink: 0;
+        }
+
+        .mic-btn:hover {
+            background: rgba(192, 132, 252, 0.2);
+            border-color: rgba(192, 132, 252, 0.4);
+            color: #ffffff;
+        }
+
+        .mic-btn.active {
+            background: #ef4444;
+            border-color: #f87171;
+            color: #ffffff;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .submit-btn {
+            background: linear-gradient(135deg, #7c3aed, #9333ea);
+            border: none;
+            color: #ffffff;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 7px;
+            cursor: pointer;
+            transition: opacity 0.14s ease;
+            flex-shrink: 0;
+        }
+
+        .submit-btn:hover {
+            opacity: 0.9;
+        }
+
+        .context-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 16px;
+            font-size: 11px;
+            color: #9ca3af;
+            background: rgba(0, 0, 0, 0.15);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .context-chip {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-family: ui-monospace, SFMono-Regular, monospace;
+            font-size: 10.5px;
+            color: #a78bfa;
+        }
+
+        .response-container {
+            flex: 1;
+            padding: 14px 16px;
+            overflow-y: auto;
+            user-select: text;
+            -webkit-user-select: text;
+            font-size: 13px;
+            line-height: 1.55;
+            color: #e5e7eb;
+        }
+
+        .response-container::-webkit-scrollbar {
+            width: 5px;
+        }
+        .response-container::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        .response-empty {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: #6b7280;
+            text-align: center;
+            user-select: none;
+        }
+
+        .response-text {
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .action-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 14px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            background: rgba(10, 10, 16, 0.6);
+        }
+
+        .action-btn {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11.5px;
+            font-weight: 500;
+            padding: 5px 10px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #d1d5db;
+            cursor: pointer;
+            transition: all 0.12s ease;
+        }
+
+        .action-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .action-btn-primary {
+            background: #2563eb;
+            border-color: #3b82f6;
+            color: #ffffff;
+        }
+
+        .action-btn-primary:hover {
+            background: #1d4ed8;
+        }
+
+        .keyboard-hint {
+            font-size: 10px;
+            color: #6b7280;
+            font-family: ui-monospace, SFMono-Regular, monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="spotlight-container">
+        <!-- Draggable Header -->
+        <div class="spotlight-drag-header" data-tauri-drag-region>
+            <div class="header-brand" data-tauri-drag-region>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M12 8v8"></path>
+                    <path d="M8 12h8"></path>
+                </svg>
+                <span>Ask Rift Spotlight</span>
+                <span class="groq-badge">Groq Llama 3.3</span>
+            </div>
+            <button id="btnClose" class="close-btn" title="Close (Esc)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Search / Prompt Input Row -->
+        <div class="search-row">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input id="promptInput" class="search-input" type="text" placeholder="Ask anything, write code, draft an email..." autofocus>
+            <button id="btnMic" class="mic-btn" title="Dictate prompt">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="22"></line>
+                </svg>
+            </button>
+            <button id="btnSubmit" class="submit-btn" type="button">Ask</button>
+        </div>
+
+        <!-- Context Bar -->
+        <div class="context-bar">
+            <div id="contextStatus" class="context-chip">
+                <span>Active app context included</span>
+            </div>
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                <input id="chkIncludeContext" type="checkbox" checked style="accent-color: #a855f7;">
+                <span>Include screen context</span>
+            </label>
+        </div>
+
+        <!-- Response Body -->
+        <div id="responseContainer" class="response-container">
+            <div id="emptyState" class="response-empty">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4b5563" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+                <p style="margin: 0; font-size: 12.5px;">Type a prompt or speak your question.<br>Answers are generated instantly via free Groq AI.</p>
+            </div>
+            <div id="responseText" class="response-text" style="display: none;"></div>
+        </div>
+
+        <!-- Action Footer -->
+        <div class="action-bar">
+            <div class="keyboard-hint">
+                <span>Esc: Close &bull; Enter: Ask &bull; Ctrl+Enter: Insert</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button id="btnCopy" class="action-btn" type="button" style="display: none;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    <span>Copy</span>
+                </button>
+                <button id="btnScratch" class="action-btn" type="button" style="display: none;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    <span>To Scratch Pad</span>
+                </button>
+                <button id="btnInsert" class="action-btn action-btn-primary" type="button" style="display: none;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="9 11 12 14 22 4"></polyline>
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                    </svg>
+                    <span>Insert into App</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const promptInput = document.getElementById('promptInput');
+            const btnSubmit = document.getElementById('btnSubmit');
+            const btnClose = document.getElementById('btnClose');
+            const btnMic = document.getElementById('btnMic');
+            const btnCopy = document.getElementById('btnCopy');
+            const btnScratch = document.getElementById('btnScratch');
+            const btnInsert = document.getElementById('btnInsert');
+            const chkIncludeContext = document.getElementById('chkIncludeContext');
+            const emptyState = document.getElementById('emptyState');
+            const responseText = document.getElementById('responseText');
+
+            let currentAnswer = '';
+            let isRecording = false;
+
+            async function invokeTauri(cmd, args = {}) {
+                if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
+                    return await window.__TAURI__.core.invoke(cmd, args);
+                }
+                return null;
+            }
+
+            function showResponse(text) {
+                currentAnswer = text;
+                emptyState.style.display = 'none';
+                responseText.style.display = 'block';
+                responseText.textContent = text;
+                btnCopy.style.display = 'flex';
+                btnScratch.style.display = 'flex';
+                btnInsert.style.display = 'flex';
+            }
+
+            async function handleAsk() {
+                const query = promptInput.value.trim();
+                if (!query) return;
+
+                emptyState.style.display = 'none';
+                responseText.style.display = 'block';
+                responseText.textContent = 'Thinking with Groq Llama 3.3...';
+                btnSubmit.disabled = true;
+                btnSubmit.textContent = '...';
+
+                try {
+                    const res = await invokeTauri('askSpotlightAi', {
+                        prompt: query,
+                        includeContext: chkIncludeContext.checked
+                    });
+
+                    if (res && res.success && res.answer) {
+                        showResponse(res.answer);
+                    } else if (res && res.error) {
+                        showResponse('Error: ' + res.error);
+                    } else {
+                        showResponse('No answer received from Groq AI.');
+                    }
+                } catch (e) {
+                    showResponse('Failed to query Groq AI: ' + e);
+                } finally {
+                    btnSubmit.disabled = false;
+                    btnSubmit.textContent = 'Ask';
+                }
+            }
+
+            btnSubmit.addEventListener('click', handleAsk);
+
+            promptInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    if (e.ctrlKey) {
+                        if (currentAnswer) {
+                            btnInsert.click();
+                        }
+                    } else {
+                        handleAsk();
+                    }
+                } else if (e.key === 'Escape') {
+                    invokeTauri('closeSpotlightWindow');
+                }
+            });
+
+            btnClose.addEventListener('click', () => {
+                invokeTauri('closeSpotlightWindow');
+            });
+
+            btnCopy.addEventListener('click', () => {
+                if (!currentAnswer) return;
+                navigator.clipboard.writeText(currentAnswer);
+                btnCopy.querySelector('span').textContent = 'Copied!';
+                setTimeout(() => {
+                    btnCopy.querySelector('span').textContent = 'Copy';
+                }, 1500);
+            });
+
+            btnScratch.addEventListener('click', async () => {
+                if (!currentAnswer) return;
+                await invokeTauri('insertScratchpadText', { text: currentAnswer });
+                btnScratch.querySelector('span').textContent = 'Added!';
+                setTimeout(() => {
+                    btnScratch.querySelector('span').textContent = 'To Scratch Pad';
+                }, 1500);
+            });
+
+            btnInsert.addEventListener('click', async () => {
+                if (!currentAnswer) return;
+                await invokeTauri('insertSpotlightText', { text: currentAnswer });
+            });
+
+            // Mic toggle
+            btnMic.addEventListener('click', async () => {
+                if (!isRecording) {
+                    isRecording = true;
+                    btnMic.classList.add('active');
+                    await invokeTauri('startRecording');
+                } else {
+                    isRecording = false;
+                    btnMic.classList.remove('active');
+                    await invokeTauri('stopRecording');
+                }
+            });
+
+            // Listen for transcription result to fill the prompt input
+            if (window.__TAURI__ && window.__TAURI__.event) {
+                window.__TAURI__.event.listen('transcriptionSuccess', (event) => {
+                    if (event.payload && event.payload.text) {
+                        promptInput.value = event.payload.text;
+                        isRecording = false;
+                        btnMic.classList.remove('active');
+                        handleAsk();
+                    }
+                });
+            }
+
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    invokeTauri('closeSpotlightWindow');
+                }
+            });
+
+            // Auto-focus input when shown
+            window.addEventListener('focus', () => {
+                promptInput.focus();
+            });
+        })();
+    </script>
+</body>
+</html>

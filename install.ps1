@@ -136,17 +136,11 @@ Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explo
 Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Rift" -Value "`"$targetExe`"" -Force
 Write-Host "  Registry Run key configured: HKCU:\Software\Microsoft\Windows\CurrentVersion\Run\Rift" -ForegroundColor Green
 
-# 6. Launch Rift detached in user interactive shell session
+# 6. Launch Rift in user interactive desktop session
 Write-Host "[6/6] Launching Rift..." -ForegroundColor Yellow
 try {
-    $procClass = [wmiclass]"Win32_Process"
-    $res = $procClass.Create($targetExe, $targetDir, $null)
-    if ($res.ReturnValue -eq 0) {
-        Write-Host "  Rift launched successfully in interactive session (PID $($res.ProcessId))." -ForegroundColor Green
-    } else {
-        Start-Process -FilePath $targetExe -WorkingDirectory $targetDir
-        Write-Host "  Rift launched via fallback process starter." -ForegroundColor Green
-    }
+    Start-Process "explorer.exe" -ArgumentList "`"$targetExe`""
+    Write-Host "  Rift launched successfully via Windows Explorer." -ForegroundColor Green
 } catch {
     Start-Process -FilePath $targetExe -WorkingDirectory $targetDir
     Write-Host "  Rift launched via fallback process starter." -ForegroundColor Green

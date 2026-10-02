@@ -11,7 +11,33 @@ use std::f32::consts::PI;
 const FFT_SIZE: usize = 256;
 const HOP_SIZE: usize = 128; // 50% overlap
 
-/// In-place Radix-2 Cooley-Tukey FFT (Decimation-in-Time)
+// Precomputed (cos, sin) for forward FFT steps: step = 2, 4, 8, 16, 32, 64, 128, 256
+// angle = -2.0 * PI / step
+const FORWARD_W_STEP: [(f32, f32); 8] = [
+    (-1.0, 0.0),                  // step = 2:  angle = -PI
+    (0.0, -1.0),                  // step = 4:  angle = -PI/2
+    (0.70710677, -0.70710677),    // step = 8:  angle = -PI/4
+    (0.9238795, -0.38268343),     // step = 16: angle = -PI/8
+    (0.9807853, -0.19509032),     // step = 32: angle = -PI/16
+    (0.9951847, -0.09801714),     // step = 64: angle = -PI/32
+    (0.99879546, -0.049067674),   // step = 128: angle = -PI/64
+    (0.9996988, -0.024541229),    // step = 256: angle = -PI/128
+];
+
+// Precomputed Hann window to eliminate runtime trigonometric recomputation
+static HANN_WINDOW: std::sync::OnceLock<[f32; FFT_SIZE]> = std::sync::OnceLock::new();
+
+fn get_hann_window() -> &'static [f32; FFT_SIZE] {
+    HANN_WINDOW.get_or_init(|| {
+        let mut w = [0.0f32; FFT_SIZE];
+        for n in 0..FFT_SIZE {
+            w[n] = 0.5 * (1.0 - (2.0 * PI * (n as f32) / (FFT_SIZE as f32)).cos());
+        }
+        w
+    })
+}
+
+/// In-place Radix-2 Cooley-Tukey FFT (Decimation-in-Time) with precomputed twiddle LUT
 fn fft(re: &mut [f32; FFT_SIZE], im: &mut [f32; FFT_SIZE], inverse: bool) {
     let mut j = 0;
     for i in 0..FFT_SIZE {
@@ -28,12 +54,10 @@ fn fft(re: &mut [f32; FFT_SIZE], im: &mut [f32; FFT_SIZE], inverse: bool) {
     }
 
     let mut step = 2;
-    while step <= FFT_SIZE {
+    for stage in 0..8 {
         let half = step >> 1;
-        let angle_sign = if inverse { 1.0 } else { -1.0 };
-        let angle = angle_sign * 2.0 * PI / (step as f32);
-        let w_step_re = angle.cos();
-        let w_step_im = angle.sin();
+        let (w_step_re, base_im) = FORWARD_W_STEP[stage];
+        let w_step_im = if inverse { -base_im } else { base_im };
 
         let mut i = 0;
         while i < FFT_SIZE {
@@ -67,15 +91,6 @@ fn fft(re: &mut [f32; FFT_SIZE], im: &mut [f32; FFT_SIZE], inverse: bool) {
             im[i] *= scale;
         }
     }
-}
-
-/// Periodic Hann window generator
-fn make_hann_window() -> [f32; FFT_SIZE] {
-    let mut w = [0.0f32; FFT_SIZE];
-    for n in 0..FFT_SIZE {
-        w[n] = 0.5 * (1.0 - (2.0 * PI * (n as f32) / (FFT_SIZE as f32)).cos());
-    }
-    w
 }
 
 /// Attenuates sharp mechanical keyboard clicks and mouse switch taps
@@ -131,7 +146,7 @@ pub fn spectral_subtraction_denoise(samples: &mut [i16]) {
         return;
     }
 
-    let hann = make_hann_window();
+    let hann = get_hann_window();
     let num_frames = (samples.len() - FFT_SIZE) / HOP_SIZE + 1;
     if num_frames == 0 {
         return;

@@ -1,0 +1,61 @@
+/* Rift Modal Component Styles - Bulletproof Scoped CSS */
+.rift-modal-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9999 !important;
+  background: rgba(10, 10, 16, 0.78) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
+  box-sizing: border-box !important;
+  opacity: 0;
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.rift-modal-overlay.active {
+  opacity: 1 !important;
+}
+
+.rift-modal-card {
+  position: relative !important;
+  width: 100% !important;
+  max-width: 520px !important;
+  max-height: 85vh !important;
+  overflow-y: auto !important;
+  box-sizing: border-box !important;
+  background: #1c1b22 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 16px !important;
+  padding: 24px !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 20px rgba(124, 92, 250, 0.15) !important;
+  transform: scale(0.95);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 16px !important;
+}
+
+.rift-modal-card.confirm-card {
+  max-width: 440px !important;
+}
+
+.rift-modal-overlay.active .rift-modal-card {
+  transform: scale(1) !important;
+}
+
+.rift-modal-card::-webkit-scrollbar {
+  width: 6px;
+}
+.rift-modal-card::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+}

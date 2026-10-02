@@ -19,6 +19,14 @@ $sdkIncludeShared = "C:\Program Files\Microsoft Visual Studio\2022\Community\SDK
 $sdkIncludeUcrt = "C:\Program Files\Microsoft Visual Studio\2022\Community\SDK\ScopeCppSDK\vc15\SDK\include\ucrt"
 $env:INCLUDE = "$vcInclude;$sdkIncludeUm;$sdkIncludeShared;$sdkIncludeUcrt;" + $env:INCLUDE
 
+Write-Host "Building React frontend..." -ForegroundColor Cyan
+Set-Location "$PSScriptRoot\frontend"
+& npm run build
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Frontend build failed"
+    exit 1
+}
+
 Write-Host "Building Rift release binary (-j 1)..." -ForegroundColor Cyan
 Set-Location "$PSScriptRoot\src-tauri"
 

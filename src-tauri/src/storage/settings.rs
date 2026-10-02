@@ -46,6 +46,7 @@ pub struct AppSettings {
     pub tenglish_stt_tier: String,
     pub tenglish_translit_engine: String,
     pub noise_cancellation_enabled: bool,
+    pub ambient_memory_enabled: bool,
 }
 
 
@@ -85,8 +86,8 @@ impl Default for AppSettings {
             launch_on_startup: true,
             launch_at_login: true,
             transcription_mode: "cloud".to_string(),
-            stt_provider: "openrouter".to_string(),
-            inference_model: "microsoft/mai-transcribe-2".to_string(),
+            stt_provider: "groq".to_string(),
+            inference_model: "whisper-large-v3-turbo".to_string(),
             local_inference_profile: "balanced".to_string(),
             recording_sounds: true,
             sound_volume: 0.6,
@@ -106,6 +107,7 @@ impl Default for AppSettings {
             tenglish_stt_tier: "auto".to_string(),
             tenglish_translit_engine: "auto".to_string(),
             noise_cancellation_enabled: true,
+            ambient_memory_enabled: false,
         }
     }
 }
@@ -167,14 +169,15 @@ fn load_settings_from_disk() -> AppSettings {
                     modified = true;
                 }
                 if settings.stt_provider.is_empty() {
-                    settings.stt_provider = "openrouter".to_string();
+                    settings.stt_provider = "groq".to_string();
                     modified = true;
                 }
-                if settings.inference_model.is_empty()
-                    || settings.inference_model == "whisper-large-v3-turbo"
-                    || settings.inference_model == "openai/whisper-large-v3-turbo"
-                {
-                    settings.inference_model = "microsoft/mai-transcribe-2".to_string();
+                if settings.inference_model.is_empty() {
+                    if settings.stt_provider == "groq" {
+                        settings.inference_model = "whisper-large-v3-turbo".to_string();
+                    } else {
+                        settings.inference_model = "microsoft/mai-transcribe-2".to_string();
+                    }
                     modified = true;
                 }
                 if modified {

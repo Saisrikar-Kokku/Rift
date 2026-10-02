@@ -26,6 +26,10 @@ yarn-error.log*
 *.wav
 recordings/
 backups/
+scratch/
+reports/
+.freebuff/
+release-mac/
 
 # Operating System files
 .DS_Store

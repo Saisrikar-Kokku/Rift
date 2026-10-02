@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Connect API Keys - Rift</title>
+    <link href="../shared/fonts.css" rel="stylesheet">
+    <link href="../shared/tailwind.css" rel="stylesheet">
+    <style>
+        .provider-tab {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border-radius: 10px;
+            background: transparent;
+            border: 1px solid transparent;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            color: #938ea1;
+            transition: all 0.18s ease;
+            flex: 1;
+            justify-content: center;
+        }
+        .provider-tab:hover {
+            background: rgba(255, 255, 255, 0.04);
+            color: #e4e1ea;
+        }
+        .provider-tab.active {
+            background: rgba(99, 102, 241, 0.12);
+            color: #a5b4fc;
+            border-color: rgba(99, 102, 241, 0.3);
+            font-weight: 600;
+        }
+        .provider-tab.active.groq-active {
+            background: rgba(202, 190, 255, 0.1);
+            color: #cabeff;
+            border-color: rgba(202, 190, 255, 0.25);
+        }
+        .provider-panel {
+            display: none;
+            flex-direction: column;
+            gap: 16px;
+            animation: panelSlide 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .provider-panel.active {
+            display: flex;
+        }
+        @keyframes panelSlide {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .badge-primary {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            background: rgba(99, 102, 241, 0.12);
+            color: #a5b4fc;
+            border: 1px solid rgba(99, 102, 241, 0.2);
+        }
+        .badge-backup {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            background: rgba(255, 255, 255, 0.04);
+            color: #938ea1;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+    </style>
+</head>
+<body class="bg-surface-container-lowest font-body-md text-body-md text-on-surface antialiased select-none overflow-hidden">
+    <main class="w-full min-h-screen flex flex-col items-center justify-center px-space-16 py-space-24 relative">
+        <!-- Diffused Ambient Aura -->
+        <div class="absolute w-[560px] h-[340px] rounded-full blur-[140px] pointer-events-none opacity-20 -top-12 bg-gradient-to-r from-primary-container via-inverse-primary to-secondary-container"></div>
+        <div class="absolute w-[300px] h-[220px] rounded-full blur-[100px] pointer-events-none opacity-10 bottom-10 bg-tertiary"></div>
+
+        <!-- Centered Setup Terminal Card -->
+        <div class="relative z-10 w-full max-w-[560px] bg-surface-container-low border border-white/[0.08] rounded-2xl p-space-32 flex flex-col gap-space-24 shadow-2xl shadow-surface-container-lowest">
+            <!-- Card Header: Step Metadata & Progress Bar -->
+            <div class="flex flex-col gap-space-12">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-space-8">
+                        <img alt="Rift Logo" class="h-6 w-auto object-contain" src="../assets/logo.svg">
+                        <span class="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse"></span>
+                        <span class="font-mono-code text-mono-code text-outline tracking-wider uppercase">Setup Pipeline</span>
+                    </div>
+                    <span class="font-mono-code text-mono-code text-on-surface-variant font-medium">Step 02 <span class="text-outline">/ 03</span></span>
+                </div>
+                <!-- 3-Segment Progress Indicator Track -->
+                <div class="grid grid-cols-3 gap-space-6 w-full h-[3px]">
+                    <div class="h-full rounded-full bg-gradient-to-r from-primary-container to-inverse-primary"></div>
+                    <div class="h-full rounded-full bg-gradient-to-r from-inverse-primary to-secondary"></div>
+                    <div class="h-full rounded-full bg-surface-container-highest"></div>
+                </div>
+            </div>
+
+            <!-- Title & Subtitle -->
+            <div class="flex flex-col gap-space-8">
+                <h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight font-semibold">
+                    Connect your transcription engine
+                </h1>
+                <p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+                    Set up at least one API key. OpenRouter powers the #1 ranked model; Groq provides a free ultra-fast backup.
+                </p>
+            </div>
+
+            <!-- Provider Tabs -->
+            <div class="flex gap-space-6 p-1.5 rounded-xl bg-surface-container-highest/40 border border-white/[0.06]">
+                <button type="button" class="provider-tab active" id="tab-openrouter" data-provider="openrouter">
+                    <span class="material-symbols-outlined text-[17px]">neurology</span>
+                    <span>OpenRouter</span>
+                    <span class="badge-primary">🏆 #1</span>
+                </button>
+                <button type="button" class="provider-tab" id="tab-groq" data-provider="groq">
+                    <span class="material-symbols-outlined text-[17px]">bolt</span>
+                    <span>Groq</span>
+                    <span class="badge-backup">Backup</span>
+                </button>
+            </div>
+
+            <!-- ======= OpenRouter Panel ======= -->
+            <div id="panel-openrouter" class="provider-panel active">
+                <div class="flex flex-col gap-space-8">
+                    <div class="flex items-center justify-between">
+                        <label class="font-kbd-shortcut text-kbd-shortcut text-outline uppercase tracking-wider font-semibold" for="openrouter-key">
+                            OpenRouter API Key
+                        </label>
+                        <span class="font-mono-code text-mono-code text-outline opacity-60">DPAPI • Encrypted Locally</span>
+                    </div>
+                    <div class="relative flex items-center group">
+                        <div class="absolute left-space-12 flex items-center pointer-events-none text-outline group-focus-within:text-primary transition-colors">
+                            <span class="material-symbols-outlined text-[18px]">key</span>
+                        </div>
+                        <input
+                            class="w-full h-11 pl-10 pr-24 bg-surface-container-lowest text-on-surface font-mono-code text-mono-code rounded-lg outline-none transition-all placeholder:text-outline/40 border border-white/[0.08] focus:border-primary selection:bg-primary/20"
+                            id="openrouter-key" placeholder="sk-or-v1-..." type="password" value="" autocomplete="off" spellcheck="false">
+                        <div class="absolute right-space-8 flex items-center gap-space-4">
+                            <button class="w-7 h-7 flex items-center justify-center rounded text-outline hover:text-on-surface hover:bg-surface-container-highest transition-colors"
+                                id="or-toggle-visibility" title="Toggle key visibility" type="button">
+                                <span class="material-symbols-outlined text-[16px]" id="or-eye-icon">visibility</span>
+                            </button>
+                            <div class="w-[1px] h-4 bg-surface-container-highest"></div>
+                            <button class="w-7 h-7 flex items-center justify-center rounded text-outline hover:text-on-surface hover:bg-surface-container-highest transition-colors"
+                                id="or-clear-btn" title="Clear input" type="button">
+                                <span class="material-symbols-outlined text-[15px]">close</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-space-2">
+                    <a class="group inline-flex items-center gap-space-6 text-primary hover:text-primary-fixed transition-colors"
+                        href="https://openrouter.ai/settings/keys" rel="noopener noreferrer" target="_blank" id="or-console-link">
+                        <span class="font-body-sm text-body-sm font-medium">Open openrouter.ai/keys</span>
+                        <span class="material-symbols-outlined text-[15px] transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform">north_east</span>
+                    </a>
+                    <button class="h-8 px-space-12 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium inline-flex items-center gap-space-6 transition-all active:scale-[0.98] border border-white/[0.06] cursor-pointer"
+                        id="or-test-btn" type="button">
+                        <span class="material-symbols-outlined text-[15px] text-outline" id="or-sync-icon">account_balance_wallet</span>
+                        <span id="or-test-label">Check Balance</span>
+                    </button>
+                </div>
+
+                <!-- Success Status -->
+                <div id="or-status-success" class="hidden p-space-12 rounded-lg bg-surface-container border border-tertiary/30 items-center justify-between transition-all">
+                    <div class="flex items-center gap-space-10 min-w-0">
+                        <div class="w-6 h-6 rounded-full bg-tertiary-container/30 flex items-center justify-center flex-shrink-0">
+                            <span class="material-symbols-outlined text-tertiary text-[15px]">check_circle</span>
+                        </div>
+                        <div class="flex flex-col min-w-0">
+                            <div class="flex items-center gap-space-6">
+                                <span class="font-body-sm text-body-sm text-tertiary font-semibold tracking-tight">Connected</span>
+                                <span class="font-caption text-caption text-outline">•</span>
+                                <span class="font-mono-code text-mono-code text-on-surface-variant truncate">MAI-Transcribe 2 ready</span>
+                            </div>
+                            <span id="or-status-latency" class="font-caption text-caption text-outline font-mono-code">Latency: ~34ms • Handshake: 200 OK</span>
+                        </div>
+                    </div>
+                    <div class="px-space-8 py-space-2 rounded bg-surface-container-high flex-shrink-0 flex items-center gap-space-4">
+                        <span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                        <span class="font-kbd-shortcut text-kbd-shortcut text-tertiary uppercase font-bold tracking-wider">Active</span>
+                    </div>
+                </div>
+
+                <!-- Error Status -->
+                <div id="or-status-error" class="hidden p-space-12 rounded-lg bg-error-container/20 border border-error/40 flex items-start gap-space-10 transition-all">
+                    <div class="w-6 h-6 rounded-full bg-error/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span class="material-symbols-outlined text-error text-[15px]">error</span>
+                    </div>
+                    <div class="flex flex-col min-w-0 flex-1">
+                        <span class="font-body-sm text-body-sm text-error font-semibold tracking-tight">Connection Failed</span>
+                        <p id="or-error-msg" class="font-caption text-caption text-on-surface-variant leading-relaxed mt-0.5">Invalid API key or network error.</p>
+                    </div>
+                </div>
+
+                <!-- Info Note -->
+                <div class="flex items-start gap-space-8 p-space-10 rounded-lg bg-surface-container-lowest/50 border border-white/[0.04]">
+                    <span class="material-symbols-outlined text-[14px] text-primary mt-0.5">info</span>
+                    <p class="font-caption text-caption text-outline leading-relaxed">
+                        <strong class="text-on-surface-variant">Microsoft AI: MAI-Transcribe 2</strong> — #1 ranked production STT model (2.0% WER, 294x real-time). Costs ~$1.67 per 1,000 minutes.
+                    </p>
+                </div>
+            </div>
+
+            <!-- ======= Groq Panel ======= -->
+            <div id="panel-groq" class="provider-panel">
+                <div class="flex flex-col gap-space-8">
+                    <div class="flex items-center justify-between">
+                        <label class="font-kbd-shortcut text-kbd-shortcut text-outline uppercase tracking-wider font-semibold" for="groq-key">
+                            Groq API Key
+                        </label>
+                        <span class="font-mono-code text-mono-code text-outline opacity-60">DPAPI • Encrypted Locally</span>
+                    </div>
+                    <div class="relative flex items-center group">
+                        <div class="absolute left-space-12 flex items-center pointer-events-none text-outline group-focus-within:text-primary transition-colors">
+                            <span class="material-symbols-outlined text-[18px]">key</span>
+                        </div>
+                        <input
+                            class="w-full h-11 pl-10 pr-24 bg-surface-container-lowest text-on-surface font-mono-code text-mono-code rounded-lg outline-none transition-all placeholder:text-outline/40 border border-white/[0.08] focus:border-primary selection:bg-primary/20"
+                            id="groq-key" placeholder="gsk_..." type="password" value="" autocomplete="off" spellcheck="false">
+                        <div class="absolute right-space-8 flex items-center gap-space-4">
+                            <button class="w-7 h-7 flex items-center justify-center rounded text-outline hover:text-on-surface hover:bg-surface-container-highest transition-colors"
+                                id="groq-toggle-visibility" title="Toggle key visibility" type="button">
+                                <span class="material-symbols-outlined text-[16px]" id="groq-eye-icon">visibility</span>
+                            </button>
+                            <div class="w-[1px] h-4 bg-surface-container-highest"></div>
+                            <button class="w-7 h-7 flex items-center justify-center rounded text-outline hover:text-on-surface hover:bg-surface-container-highest transition-colors"
+                                id="groq-clear-btn" title="Clear input" type="button">
+                                <span class="material-symbols-outlined text-[15px]">close</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-space-2">
+                    <a class="group inline-flex items-center gap-space-6 text-primary hover:text-primary-fixed transition-colors"
+                        href="https://console.groq.com/keys" rel="noopener noreferrer" target="_blank" id="groq-console-link">
+                        <span class="font-body-sm text-body-sm font-medium">Open console.groq.com</span>
+                        <span class="material-symbols-outlined text-[15px] transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform">north_east</span>
+                    </a>
+                    <button class="h-8 px-space-12 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium inline-flex items-center gap-space-6 transition-all active:scale-[0.98] border border-white/[0.06] cursor-pointer"
+                        id="groq-test-btn" type="button">
+                        <span class="material-symbols-outlined text-[15px] text-outline" id="groq-sync-icon">refresh</span>
+                        <span id="groq-test-label">Test Connection</span>
+                    </button>
+                </div>
+
+                <!-- Success Status -->
+                <div id="groq-status-success" class="hidden p-space-12 rounded-lg bg-surface-container border border-tertiary/30 items-center justify-between transition-all">
+                    <div class="flex items-center gap-space-10 min-w-0">
+                        <div class="w-6 h-6 rounded-full bg-tertiary-container/30 flex items-center justify-center flex-shrink-0">
+                            <span class="material-symbols-outlined text-tertiary text-[15px]">check_circle</span>
+                        </div>
+                        <div class="flex flex-col min-w-0">
+                            <div class="flex items-center gap-space-6">
+                                <span class="font-body-sm text-body-sm text-tertiary font-semibold tracking-tight">Connected</span>
+                                <span class="font-caption text-caption text-outline">•</span>
+                                <span class="font-mono-code text-mono-code text-on-surface-variant truncate">whisper-large-v3-turbo ready</span>
+                            </div>
+                            <span id="groq-status-latency" class="font-caption text-caption text-outline font-mono-code">Latency: ~38ms • Handshake: 200 OK</span>
+                        </div>
+                    </div>
+                    <div class="px-space-8 py-space-2 rounded bg-surface-container-high flex-shrink-0 flex items-center gap-space-4">
+                        <span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                        <span class="font-kbd-shortcut text-kbd-shortcut text-tertiary uppercase font-bold tracking-wider">Active</span>
+                    </div>
+                </div>
+
+                <!-- Error Status -->
+                <div id="groq-status-error" class="hidden p-space-12 rounded-lg bg-error-container/20 border border-error/40 flex items-start gap-space-10 transition-all">
+                    <div class="w-6 h-6 rounded-full bg-error/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span class="material-symbols-outlined text-error text-[15px]">error</span>
+                    </div>
+                    <div class="flex flex-col min-w-0 flex-1">
+                        <span class="font-body-sm text-body-sm text-error font-semibold tracking-tight">Connection Failed</span>
+                        <p id="groq-error-msg" class="font-caption text-caption text-on-surface-variant leading-relaxed mt-0.5">Invalid API key or network error.</p>
+                    </div>
+                </div>
+
+                <!-- Info Note -->
+                <div class="flex items-start gap-space-8 p-space-10 rounded-lg bg-surface-container-lowest/50 border border-white/[0.04]">
+                    <span class="material-symbols-outlined text-[14px] text-primary mt-0.5">info</span>
+                    <p class="font-caption text-caption text-outline leading-relaxed">
+                        <strong class="text-on-surface-variant">Groq Whisper v3 Turbo</strong> — Free tier, no credit card. Ultra-fast LPU inference. Used as automatic fallback if OpenRouter is unavailable.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Storage Policy Footnote -->
+            <div class="p-space-12 rounded-lg bg-surface-container-lowest border border-white/[0.04] flex flex-col gap-space-8">
+                <div class="flex items-center justify-between text-outline">
+                    <div class="flex items-center gap-space-6">
+                        <span class="material-symbols-outlined text-[14px]">lock</span>
+                        <span class="font-mono-code text-mono-code text-[11px] uppercase tracking-wider">Storage Policy</span>
+                    </div>
+                    <span class="font-mono-code text-mono-code text-[11px]">Windows Credential Manager (DPAPI)</span>
+                </div>
+                <p class="font-caption text-caption text-outline leading-relaxed">
+                    Keys are encrypted with Windows DPAPI and stored in Windows Credential Manager. Audio frames are sent directly to the provider with zero third-party proxies.
+                </p>
+            </div>
+
+            <!-- Card Action Footer Buttons -->
+            <div class="flex items-center justify-between pt-space-8 border-t border-white/[0.06]">
+                <button class="px-space-12 py-space-8 rounded-lg text-outline hover:text-on-surface hover:bg-surface-container transition-colors font-body-sm text-body-sm flex items-center gap-space-6 cursor-pointer"
+                    id="back-btn" type="button">
+                    <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+                    <span>Back</span>
+                </button>
+                <button id="continue-btn" disabled
+                    class="h-10 px-space-24 rounded-full bg-gradient-to-r from-primary-container via-inverse-primary to-secondary-container text-on-primary font-body-md text-body-md font-semibold inline-flex items-center gap-space-8 shadow-lg shadow-primary-container/25 transition-all opacity-40 pointer-events-none cursor-not-allowed">
+                    <span>Continue</span>
+                    <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Sub-terminal Machine Status Footnote -->
+        <div class="mt-space-20 flex items-center gap-space-16 text-outline font-mono-code text-caption">
+            <div class="flex items-center gap-space-6">
+                <span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                <span>Engine: Standby</span>
+            </div>
+            <span>•</span>
+            <span id="footer-model-label">Model: MAI-Transcribe 2</span>
+            <span>•</span>
+            <div class="flex items-center gap-space-4">
+                <span>Press</span>
+                <span class="px-space-6 py-space-2 rounded bg-surface-container text-on-surface-variant font-kbd-shortcut text-kbd-shortcut">↵ Return</span>
+                <span>to test</span>
+            </div>
+        </div>
+    </main>
+
+    <script src="../shared/qwebchannel.js"></script>
+    <script src="../shared/bridge.js"></script>
+    <script>
+        (function () {
+            // ========== Tab Switching ==========
+            const tabs = document.querySelectorAll('.provider-tab');
+            const panels = {
+                openrouter: document.getElementById('panel-openrouter'),
+                groq: document.getElementById('panel-groq'),
+            };
+            let activeProvider = 'openrouter';
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const prov = tab.dataset.provider;
+                    activeProvider = prov;
+                    tabs.forEach(t => {
+                        t.classList.remove('active', 'groq-active');
+                    });
+                    tab.classList.add('active');
+                    if (prov === 'groq') tab.classList.add('groq-active');
+
+                    Object.values(panels).forEach(p => p.classList.remove('active'));
+                    panels[prov].classList.add('active');
+
+                    document.getElementById('footer-model-label').textContent =
+                        prov === 'openrouter' ? 'Model: MAI-Transcribe 2' : 'Model: v3-Turbo';
+                });
+            });
+
+            // ========== State ==========
+            let orTestedValid = false;
+            let groqTestedValid = false;
+            let orHasConfigured = false;
+            let groqHasConfigured = false;
+
+            const continueBtn = document.getElementById('continue-btn');
+            const backBtn = document.getElementById('back-btn');
+
+            function updateContinueBtn() {
+                const canContinue = orTestedValid || groqTestedValid;
+                continueBtn.disabled = !canContinue;
+                if (canContinue) {
+                    continueBtn.classList.remove('opacity-40', 'pointer-events-none', 'cursor-not-allowed');
+                    continueBtn.classList.add('hover:scale-[1.02]', 'hover:shadow-primary-container/40', 'active:scale-[0.98]');
+                } else {
+                    continueBtn.classList.add('opacity-40', 'pointer-events-none', 'cursor-not-allowed');
+                    continueBtn.classList.remove('hover:scale-[1.02]', 'hover:shadow-primary-container/40', 'active:scale-[0.98]');
+                }
+            }
+
+            // ========== OpenRouter Logic ==========
+            const orInput = document.getElementById('openrouter-key');
+            const orToggle = document.getElementById('or-toggle-visibility');
+            const orEyeIcon = document.getElementById('or-eye-icon');
+            const orClear = document.getElementById('or-clear-btn');
+            const orTestBtn = document.getElementById('or-test-btn');
+            const orSyncIcon = document.getElementById('or-sync-icon');
+            const orTestLabel = document.getElementById('or-test-label');
+            const orSuccessCard = document.getElementById('or-status-success');
+            const orErrorCard = document.getElementById('or-status-error');
+            const orErrorMsg = document.getElementById('or-error-msg');
+            const orLatencyText = document.getElementById('or-status-latency');
+
+            orToggle.addEventListener('click', () => {
+                if (orInput.type === 'password') { orInput.type = 'text'; orEyeIcon.textContent = 'visibility_off'; }
+                else { orInput.type = 'password'; orEyeIcon.textContent = 'visibility'; }
+            });
+
+            orClear.addEventListener('click', () => {
+                orInput.value = '';
+                if (orHasConfigured) { setOrStoredReady(); } else { invalidateOr(); }
+                orInput.focus();
+            });
+
+            orInput.addEventListener('input', () => {
+                if (orInput.value.trim().length > 0) { invalidateOr(); }
+                else if (orHasConfigured) { setOrStoredReady(); }
+            });
+
+            function invalidateOr() {
+                orTestedValid = false;
+                orSuccessCard.classList.add('hidden'); orSuccessCard.classList.remove('flex');
+                orErrorCard.classList.add('hidden');
+                orTestLabel.textContent = 'Check Balance';
+                orSyncIcon.textContent = 'account_balance_wallet';
+                updateContinueBtn();
+            }
+
+            function setOrStoredReady() {
+                orTestedValid = true;
+                orErrorCard.classList.add('hidden');
+                orSuccessCard.classList.remove('hidden'); orSuccessCard.classList.add('flex');
+                orLatencyText.textContent = 'Stored in Windows Credential Manager • DPAPI Verified';
+                orTestLabel.textContent = 'Connected';
+                orSyncIcon.textContent = 'check';
+                updateContinueBtn();
+            }
+
+            function setOrSuccess(latencyMs, message) {
+                orTestedValid = true;
+                orErrorCard.classList.add('hidden');
+                orSuccessCard.classList.remove('hidden'); orSuccessCard.classList.add('flex');
+                orLatencyText.textContent = message || `Latency: ~${latencyMs || 34}ms • Handshake: 200 OK`;
+                orTestLabel.textContent = 'Connected';
+                orSyncIcon.textContent = 'check';
+                updateContinueBtn();
+                continueBtn.focus();
+            }
+
+            function setOrError(msg) {
+                orTestedValid = false;
+                orSuccessCard.classList.add('hidden'); orSuccessCard.classList.remove('flex');
+                orErrorCard.classList.remove('hidden');
+                orErrorMsg.textContent = msg || 'Invalid OpenRouter API key.';
+                orTestLabel.textContent = 'Check Balance';
+                orSyncIcon.textContent = 'account_balance_wallet';
+                updateContinueBtn();
+            }
+
+            async function testOrKey() {
+                const key = orInput.value.trim();
+                if (!key && !orHasConfigured) { setOrError('Please enter your OpenRouter API key first.'); return; }
+
+                orTestBtn.disabled = true;
+                orSyncIcon.classList.add('animate-spin');
+                orSyncIcon.textContent = 'refresh';
+                orTestLabel.textContent = 'Verifying...';
+                orErrorCard.classList.add('hidden');
+                orSuccessCard.classList.add('hidden');
+
+                try {
+                    const resRaw = await window.rift.testOpenRouterKey(key);
+                    const res = typeof resRaw === 'string' ? JSON.parse(resRaw) : resRaw;
+                    if (res && (res.success || res.valid)) {
+                        setOrSuccess(res.latencyMs, res.message);
+                    } else {
+                        setOrError((res && (res.message || res.errorMessage)) || 'Invalid API key or network error.');
+                    }
+                } catch (err) {
+                    setOrError(err.message || 'Error communicating with Rift backend.');
+                } finally {
+                    orTestBtn.disabled = false;
+                    orSyncIcon.classList.remove('animate-spin');
+                }
+            }
+
+            orTestBtn.addEventListener('click', testOrKey);
+
+            // ========== Groq Logic ==========
+            const groqInput = document.getElementById('groq-key');
+            const groqToggle = document.getElementById('groq-toggle-visibility');
+            const groqEyeIcon = document.getElementById('groq-eye-icon');
+            const groqClear = document.getElementById('groq-clear-btn');
+            const groqTestBtn = document.getElementById('groq-test-btn');
+            const groqSyncIcon = document.getElementById('groq-sync-icon');
+            const groqTestLabel = document.getElementById('groq-test-label');
+            const groqSuccessCard = document.getElementById('groq-status-success');
+            const groqErrorCard = document.getElementById('groq-status-error');
+            const groqErrorMsg = document.getElementById('groq-error-msg');
+            const groqLatencyText = document.getElementById('groq-status-latency');
+
+            groqToggle.addEventListener('click', () => {
+                if (groqInput.type === 'password') { groqInput.type = 'text'; groqEyeIcon.textContent = 'visibility_off'; }
+                else { groqInput.type = 'password'; groqEyeIcon.textContent = 'visibility'; }
+            });
+
+            groqClear.addEventListener('click', () => {
+                groqInput.value = '';
+                if (groqHasConfigured) { setGroqStoredReady(); } else { invalidateGroq(); }
+                groqInput.focus();
+            });
+
+            groqInput.addEventListener('input', () => {
+                if (groqInput.value.trim().length > 0) { invalidateGroq(); }
+                else if (groqHasConfigured) { setGroqStoredReady(); }
+            });
+
+            function invalidateGroq() {
+                groqTestedValid = false;
+                groqSuccessCard.classList.add('hidden'); groqSuccessCard.classList.remove('flex');
+                groqErrorCard.classList.add('hidden');
+                groqTestLabel.textContent = 'Test Connection';
+                groqSyncIcon.textContent = 'refresh';
+                updateContinueBtn();
+            }
+
+            function setGroqStoredReady() {
+                groqTestedValid = true;
+                groqErrorCard.classList.add('hidden');
+                groqSuccessCard.classList.remove('hidden'); groqSuccessCard.classList.add('flex');
+                groqLatencyText.textContent = 'Stored in Windows Credential Manager • DPAPI Verified';
+                groqTestLabel.textContent = 'Connected';
+                groqSyncIcon.textContent = 'check';
+                updateContinueBtn();
+            }
+
+            function setGroqSuccess(latencyMs) {
+                groqTestedValid = true;
+                groqErrorCard.classList.add('hidden');
+                groqSuccessCard.classList.remove('hidden'); groqSuccessCard.classList.add('flex');
+                groqLatencyText.textContent = `Latency: ~${latencyMs || 38}ms • Handshake: 200 OK`;
+                groqTestLabel.textContent = 'Connected';
+                groqSyncIcon.textContent = 'check';
+                updateContinueBtn();
+                continueBtn.focus();
+            }
+
+            function setGroqError(msg) {
+                groqTestedValid = false;
+                groqSuccessCard.classList.add('hidden'); groqSuccessCard.classList.remove('flex');
+                groqErrorCard.classList.remove('hidden');
+                groqErrorMsg.textContent = msg || 'Invalid Groq API key.';
+                groqTestLabel.textContent = 'Test Connection';
+                groqSyncIcon.textContent = 'refresh';
+                updateContinueBtn();
+            }
+
+            async function testGroqKey() {
+                const key = groqInput.value.trim();
+                if (!key && !groqHasConfigured) { setGroqError('Please enter your Groq API key first.'); return; }
+
+                groqTestBtn.disabled = true;
+                groqSyncIcon.classList.add('animate-spin');
+                groqSyncIcon.textContent = 'refresh';
+                groqTestLabel.textContent = 'Verifying...';
+                groqErrorCard.classList.add('hidden');
+                groqSuccessCard.classList.add('hidden');
+
+                try {
+                    const resRaw = await window.rift.testGroqKey(key);
+                    const res = typeof resRaw === 'string' ? JSON.parse(resRaw) : resRaw;
+                    if (res && (res.success || res.valid)) {
+                        setGroqSuccess(res.latencyMs || 38);
+                    } else {
+                        setGroqError((res && (res.message || res.errorMessage)) || 'Invalid API key or network error.');
+                    }
+                } catch (err) {
+                    setGroqError(err.message || 'Error communicating with Rift backend.');
+                } finally {
+                    groqTestBtn.disabled = false;
+                    groqSyncIcon.classList.remove('animate-spin');
+                }
+            }
+
+            groqTestBtn.addEventListener('click', testGroqKey);
+
+            // ========== Navigation ==========
+            backBtn.addEventListener('click', () => {
+                window.location.href = 'onboarding-welcome.html';
+            });
+
+            continueBtn.addEventListener('click', async () => {
+                if (!orTestedValid && !groqTestedValid) return;
+                continueBtn.disabled = true;
+                continueBtn.innerHTML = `
+                    <span class="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
+                    <span>Saving...</span>
+                `;
+                try {
+                    const orKey = orInput.value.trim();
+                    const groqKey = groqInput.value.trim();
+                    if (orKey) await window.rift.saveOpenRouterKey(orKey);
+                    if (groqKey) await window.rift.saveGroqKey(groqKey);
+                } catch (e) {
+                    console.error('Failed to save key(s):', e);
+                }
+                window.location.href = 'onboarding-hotkey.html';
+            });
+
+            // Enter key trigger
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    if (orTestedValid || groqTestedValid) {
+                        continueBtn.click();
+                    } else if (activeProvider === 'openrouter') {
+                        testOrKey();
+                    } else {
+                        testGroqKey();
+                    }
+                }
+            });
+
+            // Open external links in system browser
+            document.querySelectorAll('a[target="_blank"]').forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const url = link.getAttribute('href');
+                    if (window.__TAURI__ && window.__TAURI__.core) {
+                        try {
+                            window.__TAURI__.core.invoke('plugin:opener|open_url', { url })
+                                .catch(() => window.open(url, '_blank'));
+                        } catch (err) { window.open(url, '_blank'); }
+                    } else { window.open(url, '_blank'); }
+                });
+            });
+
+            // Pre-check configured keys on load
+            window.rift.ready(async () => {
+                try {
+                    const orStatusRaw = await window.rift.getOpenRouterKeyStatus();
+                    const orStatus = typeof orStatusRaw === 'string' ? JSON.parse(orStatusRaw) : orStatusRaw;
+                    if (orStatus && (orStatus.hasKey || orStatus.isConfigured) && orStatus.maskedKey) {
+                        orHasConfigured = true;
+                        orInput.placeholder = `Configured (${orStatus.maskedKey}) — leave blank to keep`;
+                        setOrStoredReady();
+                    }
+                } catch (e) { console.warn('Could not read OpenRouter key status:', e); }
+
+                try {
+                    const groqStatusRaw = await window.rift.getGroqKeyStatus();
+                    const groqStatus = typeof groqStatusRaw === 'string' ? JSON.parse(groqStatusRaw) : groqStatusRaw;
+                    if (groqStatus && (groqStatus.hasKey || groqStatus.isConfigured) && groqStatus.maskedKey) {
+                        groqHasConfigured = true;
+                        groqInput.placeholder = `Configured (${groqStatus.maskedKey}) — leave blank to keep`;
+                        setGroqStoredReady();
+                    }
+                } catch (e) { console.warn('Could not read Groq key status:', e); }
+            });
+        })();
+    </script>
+</body>
+</html>

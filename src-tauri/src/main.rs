@@ -52,9 +52,34 @@ fn stop_dynamic_focus_tracker() {
     IS_RECORDING_SESSION.store(false, std::sync::atomic::Ordering::SeqCst);
 }
 
+fn ensure_widget_on_top(app: &AppHandle) {
+    if let Some(widget_win) = app.get_webview_window("widget") {
+        let _ = widget_win.unminimize();
+        let _ = widget_win.show();
+        let _ = widget_win.set_always_on_top(true);
+        #[cfg(windows)]
+        if let Ok(hwnd_ptr) = widget_win.hwnd() {
+            let hwnd = windows::Win32::Foundation::HWND(hwnd_ptr.0 as *mut _);
+            unsafe {
+                use windows::Win32::UI::WindowsAndMessaging::*;
+                let _ = SetWindowPos(
+                    hwnd,
+                    HWND_TOPMOST,
+                    0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                );
+            }
+        }
+    }
+}
+
 fn emit_to_frontend(app: &AppHandle, event_name: &str, payload: Option<Value>) {
     use tauri::Emitter;
     let _ = app.emit(event_name, &payload);
+
+    if event_name == "recordingStarted" {
+        ensure_widget_on_top(app);
+    }
 
     let js = match &payload {
         Some(p) => format!("if (window.__rift_emit) window.__rift_emit({:?}, {});", event_name, p),
@@ -72,7 +97,6 @@ fn emit_to_frontend(app: &AppHandle, event_name: &str, payload: Option<Value>) {
             }
         }
     }
-
 }
 
 fn get_usage_stats_val(state: &AppState) -> Value {
@@ -329,8 +353,8 @@ fn resetWidgetPosition(app: AppHandle) -> Value {
         if let Ok(Some(monitor)) = w.primary_monitor() {
             let size = monitor.size();
             let scale = monitor.scale_factor();
-            let widget_phys_w = (260.0 * scale) as i32;
-            let widget_phys_h = (76.0 * scale) as i32;
+            let widget_phys_w = (190.0 * scale) as i32;
+            let widget_phys_h = (60.0 * scale) as i32;
             let def_x = ((size.width as i32) - widget_phys_w) / 2;
             let def_y = (size.height as i32) - widget_phys_h - (40.0 * scale) as i32;
             let _ = w.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x: def_x, y: def_y }));
@@ -359,9 +383,9 @@ fn triggerWidgetTestState(app: AppHandle, state: String) -> Value {
 fn setWidgetDropdownOpen(app: AppHandle, open: bool) {
     if let Some(w) = app.get_webview_window("widget") {
         let size = if open {
-            tauri::Size::Logical(tauri::LogicalSize::new(260.0, 216.0))
+            tauri::Size::Logical(tauri::LogicalSize::new(190.0, 195.0))
         } else {
-            tauri::Size::Logical(tauri::LogicalSize::new(260.0, 76.0))
+            tauri::Size::Logical(tauri::LogicalSize::new(190.0, 60.0))
         };
         let _ = w.set_size(size);
     }
@@ -369,9 +393,7 @@ fn setWidgetDropdownOpen(app: AppHandle, open: bool) {
 
 #[tauri::command]
 fn openScratchpadWindow(app: AppHandle) {
-    if let Some(sp) = app.get_webview_window("scratchpad") {
-        show_and_focus_window(&sp);
-    }
+    let _ = crate::window::auxiliary::get_or_create_scratchpad(&app);
 }
 
 #[tauri::command]
@@ -381,6 +403,7 @@ fn closeScratchpadWindow(app: AppHandle, state: State<'_, Arc<AppState>>) {
     }
     if let Some(sp) = app.get_webview_window("scratchpad") {
         let _ = sp.hide();
+        crate::window::auxiliary::trim_application_working_set_async();
     }
 }
 
@@ -520,16 +543,14 @@ async fn polishSelectedText(app: AppHandle, state: State<'_, Arc<AppState>>) -> 
 // -------------------------------------------------------------
 #[tauri::command]
 fn openSpotlightWindow(app: AppHandle) {
-    if let Some(sp) = app.get_webview_window("spotlight") {
-        let _ = sp.center();
-        show_and_focus_window(&sp);
-    }
+    let _ = crate::window::auxiliary::get_or_create_spotlight(&app);
 }
 
 #[tauri::command]
 fn closeSpotlightWindow(app: AppHandle) {
     if let Some(sp) = app.get_webview_window("spotlight") {
         let _ = sp.hide();
+        crate::window::auxiliary::trim_application_working_set_async();
     }
 }
 
@@ -656,7 +677,7 @@ fn getSettings() -> Value {
 
 
 #[tauri::command]
-fn saveSettings(app: AppHandle, patch: Value) -> Value {
+fn saveSettings(app: AppHandle, state: State<'_, Arc<AppState>>, patch: Value) -> Value {
     let mut settings = load_settings();
     if let Some(obj) = patch.as_object() {
         if let Some(v) = obj.get("tenglishModeEnabled").and_then(|x| x.as_bool()).or_else(|| obj.get("tenglish_mode_enabled").and_then(|x| x.as_bool())) {
@@ -682,6 +703,18 @@ fn saveSettings(app: AppHandle, patch: Value) -> Value {
         }
         if let Some(v) = obj.get("pushToTalkCombo").and_then(|x| x.as_str()) {
             settings.push_to_talk_combo = v.to_string();
+        }
+        if let Some(v) = obj.get("toggleRecordingKey").or_else(|| obj.get("toggle_recording_key")) {
+            if v.is_null() {
+                settings.toggle_recording_key = None;
+            } else if let Some(s) = v.as_str() {
+                let trimmed = s.trim();
+                if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("disabled") || trimmed.eq_ignore_ascii_case("none") {
+                    settings.toggle_recording_key = None;
+                } else {
+                    settings.toggle_recording_key = Some(trimmed.to_string());
+                }
+            }
         }
         if let Some(v) = obj.get("widgetVisibility").and_then(|x| x.as_str()) {
             settings.widget_visibility = v.to_string();
@@ -724,7 +757,7 @@ fn saveSettings(app: AppHandle, patch: Value) -> Value {
             settings.inference_model = v.to_string();
             if v.starts_with("groq/") || v == "whisper-large-v3-turbo" || v == "whisper-large-v3" {
                 settings.stt_provider = "groq".to_string();
-            } else if v.contains('/') {
+            } else if v.contains('/') || v.contains("mai-transcribe") {
                 settings.stt_provider = "openrouter".to_string();
             } else {
                 settings.stt_provider = "groq".to_string();
@@ -734,14 +767,24 @@ fn saveSettings(app: AppHandle, patch: Value) -> Value {
             settings.inference_model = v.to_string();
             if v.starts_with("groq/") || v == "whisper-large-v3-turbo" || v == "whisper-large-v3" {
                 settings.stt_provider = "groq".to_string();
-            } else if v.contains('/') {
+            } else if v.contains('/') || v.contains("mai-transcribe") {
                 settings.stt_provider = "openrouter".to_string();
             } else {
                 settings.stt_provider = "groq".to_string();
             }
         }
         if let Some(v) = obj.get("sttProvider").and_then(|x| x.as_str()) {
-            settings.stt_provider = v.to_string();
+            let is_openrouter_model = settings.inference_model.starts_with("microsoft/")
+                || settings.inference_model.starts_with("openai/")
+                || settings.inference_model.contains("mai-transcribe");
+            let is_groq_model = settings.inference_model.starts_with("groq/");
+            if is_openrouter_model {
+                settings.stt_provider = "openrouter".to_string();
+            } else if is_groq_model {
+                settings.stt_provider = "groq".to_string();
+            } else {
+                settings.stt_provider = v.to_string();
+            }
         }
         if let Some(v) = obj.get("transcriptionMode").and_then(|x| x.as_str()) {
             settings.transcription_mode = v.to_string();
@@ -784,15 +827,30 @@ fn saveSettings(app: AppHandle, patch: Value) -> Value {
         }
     }
     save_settings(&settings);
+
+    // Re-arm low-level keyboard hook with active keys dynamically
+    let ptt_target = if settings.push_to_talk_mode == "combo" {
+        &settings.push_to_talk_combo
+    } else {
+        &settings.push_to_talk_key
+    };
+    state.as_ref().hotkey.set_ptt_key(ptt_target);
+    state.as_ref().hotkey.set_toggle_key(settings.toggle_recording_key.as_deref());
+
     let cfg = getWidgetConfig();
     emit_to_frontend(&app, "widgetConfigChanged", Some(cfg));
     emit_to_frontend(&app, "settingsChanged", Some(json!({
         "inferenceModel": settings.inference_model,
         "cloudModel": settings.inference_model,
+        "sttProvider": settings.stt_provider,
         "transcriptionMode": settings.transcription_mode,
         "inferenceProfile": settings.local_inference_profile,
         "localModelProfile": settings.local_inference_profile,
         "tenglishModeEnabled": settings.tenglish_mode_enabled,
+        "pushToTalkKey": settings.push_to_talk_key,
+        "pushToTalkMode": settings.push_to_talk_mode,
+        "pushToTalkCombo": settings.push_to_talk_combo,
+        "toggleRecordingKey": settings.toggle_recording_key,
     })));
     json!({ "success": true })
 }
@@ -1276,9 +1334,16 @@ fn getClipboardCounts(state: State<'_, Arc<AppState>>) -> Result<Value, String> 
 
 fn compute_remaining_usage(state: &AppState, settings: &crate::storage::settings::AppSettings) -> Value {
     let mode = settings.transcription_mode.to_lowercase();
-    let primary_is_groq = settings.stt_provider == "groq"
+    let is_openrouter = settings.inference_model.starts_with("microsoft/")
+        || settings.inference_model.starts_with("openai/")
+        || settings.inference_model.contains("mai-transcribe")
+        || (settings.stt_provider == "openrouter" && !settings.inference_model.starts_with("groq/"));
+
+    let primary_is_groq = !is_openrouter && (
+        settings.stt_provider == "groq"
         || settings.inference_model.starts_with("groq/")
-        || (mode == "auto" && !settings.inference_model.contains('/'));
+        || (mode == "auto" && !settings.inference_model.contains('/'))
+    );
 
     if mode == "local" {
         return json!({
@@ -1448,6 +1513,8 @@ fn getDashboardStats(state: State<'_, Arc<AppState>>) -> Result<Value, String> {
         "dailyLimit": 2000,
         "currentModel": settings.inference_model,
         "transcriptionMode": settings.transcription_mode,
+        "sttProvider": settings.stt_provider,
+        "localInferenceProfile": settings.local_inference_profile,
         "remainingUsage": remaining_usage,
     }))
 }
@@ -1740,6 +1807,7 @@ fn openOnboardingWindow(app: AppHandle) {
 fn closeSettingsWindow(app: AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.hide();
+        crate::window::auxiliary::trim_application_working_set_async();
     }
 }
 
@@ -1765,18 +1833,29 @@ fn cancelRecording(app: AppHandle, state: State<'_, Arc<AppState>>) {
 }
 
 #[tauri::command]
+fn toggleAmbientMemory(app: AppHandle, state: State<'_, Arc<AppState>>, enable: bool) {
+    let mut recorder = state.ambient_recorder.lock().unwrap();
+    if enable {
+        let _ = recorder.start();
+        log_status("Ambient Memory started.");
+    } else {
+        recorder.stop();
+        log_status("Ambient Memory stopped.");
+    }
+}
+
+#[tauri::command]
 fn startRecording(app: AppHandle, state: State<'_, Arc<AppState>>) {
     let is_rec = state.is_toggle_recording.load(std::sync::atomic::Ordering::SeqCst);
     if is_rec {
         return;
     }
-    crate::audio::mute::mute_system_audio();
-    state.is_toggle_recording.store(true, std::sync::atomic::Ordering::SeqCst);
-
     let s = load_settings();
     if s.recording_sounds {
         crate::audio::cue::play_start(s.sound_volume);
     }
+    crate::audio::mute::mute_system_audio_delayed(180);
+    state.is_toggle_recording.store(true, std::sync::atomic::Ordering::SeqCst);
 
     let target_hwnd = TextInjector::get_foreground_window();
     {
@@ -1822,6 +1901,7 @@ fn startRecording(app: AppHandle, state: State<'_, Arc<AppState>>) {
 fn stopRecording(app: AppHandle, state: State<'_, Arc<AppState>>) {
     crate::audio::mute::unmute_system_audio();
     state.is_toggle_recording.store(false, std::sync::atomic::Ordering::SeqCst);
+    emit_to_frontend(&app, "recordingStopped", None);
     let result = {
         let mut recorder = state.recorder.lock().unwrap();
         recorder.stop()
@@ -1936,6 +2016,95 @@ fn hasSavedRecording(state: State<'_, Arc<AppState>>) -> Value {
 }
 
 // -------------------------------------------------------------
+// Ambient Memory Logic
+// -------------------------------------------------------------
+async fn process_ambient_memory(
+    app: AppHandle,
+    state: Arc<AppState>,
+    wav_bytes: Vec<u8>,
+) {
+    emit_to_frontend(&app, "transcriptionProgress", Some(json!({ "progress": 20 })));
+    
+    // 1. Transcribe the audio
+    let transcript = {
+        let groq_api_key = CredentialsProvider::get_api_key().unwrap_or_default();
+        let s = load_settings();
+        let lang = "en".to_string();
+        
+        let client = reqwest::Client::new();
+        let part = reqwest::multipart::Part::bytes(wav_bytes)
+            .file_name("ambient.wav")
+            .mime_str("audio/wav")
+            .unwrap();
+            
+        let mut form = reqwest::multipart::Form::new()
+            .text("model", "whisper-large-v3-turbo")
+            .part("file", part)
+            .text("response_format", "text");
+            
+        if lang != "auto" {
+            form = form.text("language", lang);
+        }
+
+        let resp = client
+            .post("https://api.groq.com/openai/v1/audio/transcriptions")
+            .bearer_auth(groq_api_key)
+            .multipart(form)
+            .send()
+            .await;
+
+        match resp {
+            Ok(r) if r.status().is_success() => {
+                r.text().await.unwrap_or_default()
+            }
+            _ => String::new(),
+        }
+    };
+
+    if is_silence_or_hallucination(&transcript) {
+        emit_to_frontend(&app, "ambientMemoryResult", Some(json!({ "error": "No speech detected in the last 3 minutes." })));
+        return;
+    }
+
+    emit_to_frontend(&app, "transcriptionProgress", Some(json!({ "progress": 60 })));
+
+    // 2. Send to LLM for summary
+    let system_prompt = "You are an ambient memory assistant. Read the following transcript of the user's recent environment/meeting from the last 3 minutes. Provide a concise, bulleted summary of the key points, action items, or implicitly answer any question the user just asked. Do not include any preamble, just the summary.";
+    
+    let result = if let Some(or_key) = CredentialsProvider::get_openrouter_api_key().filter(|k| !k.trim().is_empty()) {
+        state.openrouter.enhance_text(&or_key, &transcript, system_prompt, None).await.unwrap_or_default()
+    } else if let Some(api_key) = CredentialsProvider::get_api_key().filter(|k| !k.trim().is_empty()) {
+        let client = reqwest::Client::new();
+        let req_body = json!({
+            "model": "llama-3.3-70b-versatile",
+            "messages": [
+                { "role": "system", "content": system_prompt },
+                { "role": "user", "content": transcript }
+            ],
+            "temperature": 0.0
+        });
+        
+        let mut final_text = String::new();
+        if let Ok(r) = client.post("https://api.groq.com/openai/v1/chat/completions").bearer_auth(&api_key).json(&req_body).send().await {
+            if let Ok(data) = r.json::<Value>().await {
+                if let Some(content) = data["choices"][0]["message"]["content"].as_str() {
+                    final_text = content.trim().to_string();
+                }
+            }
+        }
+        final_text
+    } else {
+        transcript.clone()
+    };
+
+    if !result.is_empty() {
+        emit_to_frontend(&app, "ambientMemoryResult", Some(json!({ "text": result, "transcript": transcript })));
+    } else {
+        emit_to_frontend(&app, "ambientMemoryResult", Some(json!({ "error": "Failed to process ambient memory." })));
+    }
+}
+
+// -------------------------------------------------------------
 // Shared Audio Capture & Transcription Routine
 // -------------------------------------------------------------
 fn process_and_transcribe(
@@ -2036,7 +2205,13 @@ fn process_and_transcribe(
             let (primary_is_groq, gmodel_str, or_model_str) = if settings.tenglish_mode_enabled {
                 (false, "whisper-large-v3-turbo".to_string(), "microsoft/mai-transcribe-2".to_string())
             } else {
-                let is_groq = provider == "groq" || settings.inference_model.starts_with("groq/");
+                let is_openrouter = settings.inference_model.starts_with("microsoft/")
+                    || settings.inference_model.starts_with("openai/")
+                    || settings.inference_model.contains("mai-transcribe")
+                    || (provider == "openrouter" && !settings.inference_model.starts_with("groq/"));
+
+                let is_groq = !is_openrouter && (provider == "groq" || settings.inference_model.starts_with("groq/") || settings.inference_model.contains("whisper"));
+
                 let gm = if let Some(m) = settings.inference_model.strip_prefix("groq/") {
                     m.to_string()
                 } else if settings.inference_model.contains('/') {
@@ -2275,7 +2450,13 @@ fn process_and_transcribe(
             let (primary_is_groq, gmodel_str, or_model_str) = if settings.tenglish_mode_enabled {
                 (false, "whisper-large-v3-turbo".to_string(), "microsoft/mai-transcribe-2".to_string())
             } else {
-                let is_groq = settings.stt_provider == "groq" || settings.inference_model.starts_with("groq/");
+                let is_openrouter = settings.inference_model.starts_with("microsoft/")
+                    || settings.inference_model.starts_with("openai/")
+                    || settings.inference_model.contains("mai-transcribe")
+                    || (settings.stt_provider == "openrouter" && !settings.inference_model.starts_with("groq/"));
+
+                let is_groq = !is_openrouter && (settings.stt_provider == "groq" || settings.inference_model.starts_with("groq/") || settings.inference_model.contains("whisper"));
+
                 let gm = if let Some(m) = settings.inference_model.strip_prefix("groq/") {
                     m.to_string()
                 } else if settings.inference_model.contains('/') {
@@ -2537,8 +2718,10 @@ fn process_and_transcribe(
                 }
 
                 // AI Auto-Enhancement & Context-Aware Smart Formatting (Skip if already formatted by Tenglish)
-                // Fast-Path: Normal transcribing / prompt writing pastes immediately without the second sequential API call!
+                // Fast-Path: Normal transcribing pastes immediately (<0.1ms) without the blocking secondary LLM call!
+                // Only invoke LLM when user explicitly enabled auto_enhance_prompt or provided custom instructions.
                 let should_enhance = !settings.tenglish_mode_enabled
+                    && (settings.auto_enhance_prompt || !settings.formatting_instructions.trim().is_empty())
                     && settings.context_aware_formatting
                     && (window_ctx.domain == crate::ambient::context::AppDomain::Coding
                         || window_ctx.domain == crate::ambient::context::AppDomain::Terminal
@@ -2553,17 +2736,6 @@ fn process_and_transcribe(
                         crate::ambient::context::AppDomain::Document => "Doc Mode",
                         _ => "AI Polish",
                     };
-                    emit_to_frontend(
-                        &app,
-                        "transcriptionProcessing",
-                        Some(json!({
-                            "stage": "enhancing",
-                            "model": "Formatting...",
-                            "submodel": submodel_label,
-                            "provider": "openrouter",
-                            "rawModel": "mistral-small-24b"
-                        })),
-                    );
 
                     let ctx_addon = if settings.context_aware_formatting {
                         window_ctx.get_system_prompt_addon()
@@ -2571,20 +2743,93 @@ fn process_and_transcribe(
                         None
                     };
 
-                    if let Some(or_key) = CredentialsProvider::get_openrouter_api_key() {
-                        if !or_key.trim().is_empty() {
-                            match state.openrouter.enhance_text(&or_key, &final_text, &settings.formatting_instructions, ctx_addon.as_deref()).await {
-                                Ok(enhanced) => {
-                                    if !enhanced.trim().is_empty() && !is_silence_or_hallucination(&enhanced) {
-                                        // Re-apply dictionary as a strict guarantee for custom user terms
-                                        final_text = apply_dictionary(&enhanced, &entries);
+                    let groq_key = CredentialsProvider::get_api_key();
+                    let or_key = CredentialsProvider::get_openrouter_api_key();
+                    let mut enhanced_text: Option<String> = None;
+
+                    // Tier 1: Try Groq LPU (llama-3.1-8b-instant) for ~100ms ultra-fast polish if Groq key exists
+                    if let Some(ref gkey) = groq_key {
+                        if !gkey.trim().is_empty() {
+                            emit_to_frontend(
+                                &app,
+                                "transcriptionProcessing",
+                                Some(json!({
+                                    "stage": "enhancing",
+                                    "model": "Formatting...",
+                                    "submodel": submodel_label,
+                                    "provider": "groq",
+                                    "rawModel": "llama-3.1-8b-instant"
+                                })),
+                            );
+
+                            let custom_part = if !settings.formatting_instructions.trim().is_empty() {
+                                format!("\nCustom formatting: {}", settings.formatting_instructions.trim())
+                            } else {
+                                String::new()
+                            };
+                            let prompt_system = format!(
+                                "You are an AI speech-to-text post-processor for direct input dictation. Clean up the spoken transcript for direct typing into {}. Remove verbal fillers ('um', 'uh', 'you know'). Punctuate and capitalize naturally. Output ONLY the polished text. Never explain, never add quotes, never answer questions.{}\n{}",
+                                submodel_label,
+                                custom_part,
+                                ctx_addon.as_deref().unwrap_or("")
+                            );
+
+                            let client = reqwest::Client::new();
+                            let req_body = json!({
+                                "model": "llama-3.1-8b-instant",
+                                "messages": [
+                                    { "role": "system", "content": prompt_system },
+                                    { "role": "user", "content": &final_text }
+                                ],
+                                "temperature": 0.0,
+                                "max_tokens": 1024
+                            });
+
+                            if let Ok(resp) = client.post("https://api.groq.com/openai/v1/chat/completions")
+                                .bearer_auth(gkey.trim())
+                                .json(&req_body)
+                                .send()
+                                .await
+                            {
+                                if let Ok(v) = resp.json::<serde_json::Value>().await {
+                                    if let Some(content) = v["choices"][0]["message"]["content"].as_str() {
+                                        let trimmed = content.trim().trim_matches('"').trim_matches('\'').trim();
+                                        if !trimmed.is_empty() && !is_silence_or_hallucination(trimmed) {
+                                            enhanced_text = Some(trimmed.to_string());
+                                        }
                                     }
-                                }
-                                Err(err) => {
-                                    log::warn!("Auto-enhance failed, using raw transcript: {}", err);
                                 }
                             }
                         }
+                    }
+
+                    // Tier 2: Fallback to OpenRouter if Groq was not available or failed
+                    if enhanced_text.is_none() {
+                        if let Some(ref okey) = or_key {
+                            if !okey.trim().is_empty() {
+                                emit_to_frontend(
+                                    &app,
+                                    "transcriptionProcessing",
+                                    Some(json!({
+                                        "stage": "enhancing",
+                                        "model": "Formatting...",
+                                        "submodel": submodel_label,
+                                        "provider": "openrouter",
+                                        "rawModel": "mistral-small-24b"
+                                    })),
+                                );
+                                if let Ok(enhanced) = state.openrouter.enhance_text(okey, &final_text, &settings.formatting_instructions, ctx_addon.as_deref()).await {
+                                    if !enhanced.trim().is_empty() && !is_silence_or_hallucination(&enhanced) {
+                                        enhanced_text = Some(enhanced);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some(enhanced) = enhanced_text {
+                        // Re-apply dictionary as a strict guarantee for custom user terms
+                        final_text = apply_dictionary(&enhanced, &entries);
                     }
                 }
 
@@ -2779,59 +3024,77 @@ fn process_and_transcribe(
 
 
                 let target_app_title = actual_hwnd.or(target_hwnd).and_then(TextInjector::get_window_title);
-
-                // Save in history with model and engine
-                let _ = state.history.insert_entry(
-                    &final_text,
-                    duration_seconds,
-                    target_app_title.as_deref(),
-                    Some(&used_model),
-                    Some(engine_used),
-                );
-
-                // Deduct OpenRouter credits locally in real-time if OpenRouter was used
-                if engine_used == "openrouter" {
-                    let price_per_min = if used_model.contains("mai-transcribe") { 0.00523 } else { 0.006 };
-                    state.openrouter.deduct_credits_local(duration_seconds, price_per_min);
-                    if let Some(ref okey) = CredentialsProvider::get_openrouter_api_key() {
-                        let or_client = state.openrouter.clone();
-                        let okey = okey.clone();
-                        tauri::async_runtime::spawn(async move {
-                            let _ = or_client.fetch_credits(&okey).await;
-                        });
-                    }
-                }
-
-                // Increment usage quota
-                state.whisper_requests_today.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                let stats = get_usage_stats_val(&state);
-                emit_to_frontend(&app, "usageUpdated", Some(stats));
-
                 let words_count = final_text.split_whitespace().count();
+
+                // 1. Emit success and completion IMMEDIATELY for zero perceived UI latency
                 emit_to_frontend(
                     &app,
                     "transcriptionSuccess",
                     Some(json!({
-                        "text": final_text,
+                        "text": &final_text,
                         "duration": duration_seconds,
                         "words": words_count,
-                        "model": used_model,
+                        "model": &used_model,
                         "engine": engine_used,
-                        "targetApp": target_app_title,
+                        "targetApp": &target_app_title,
                     })),
                 );
                 emit_to_frontend(
                     &app,
                     "transcriptionComplete",
                     Some(json!({
-                        "text": final_text,
+                        "text": &final_text,
                         "duration": duration_seconds,
                         "words": words_count,
-                        "model": used_model,
+                        "model": &used_model,
                         "engine": engine_used,
-                        "targetApp": target_app_title,
+                        "targetApp": &target_app_title,
                     })),
                 );
+
+                let my_pid = std::process::id();
+                let is_rift_window = TextInjector::get_foreground_window_pid_and_raw()
+                    .map(|(pid, _)| pid == my_pid)
+                    .unwrap_or(false);
+                if is_rift_window {
+                    let preview: String = final_text.chars().take(60).collect();
+                    emit_to_frontend(
+                        &app,
+                        "toast",
+                        Some(json!({
+                            "message": format!("📋 Copied to clipboard: \"{}\"", preview),
+                            "type": "info"
+                        })),
+                    );
+                }
+
+                // 2. Offload SQLite history insertion, quota tracking, and credit deductions to background thread
+                let state_bg = Arc::clone(&state);
+                let app_bg = app.clone();
+                let text_for_db = final_text.clone();
+                let model_for_db = used_model.clone();
+                let target_for_db = target_app_title.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = state_bg.history.insert_entry(
+                        &text_for_db,
+                        duration_seconds,
+                        target_for_db.as_deref(),
+                        Some(&model_for_db),
+                        Some(engine_used),
+                    );
+
+                    if engine_used == "openrouter" {
+                        let price_per_min = if model_for_db.contains("mai-transcribe") { 0.00523 } else { 0.006 };
+                        state_bg.openrouter.deduct_credits_local(duration_seconds, price_per_min);
+                        if let Some(ref okey) = CredentialsProvider::get_openrouter_api_key() {
+                            let _ = state_bg.openrouter.fetch_credits(okey).await;
+                        }
+                    }
+
+                    state_bg.whisper_requests_today.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let stats = get_usage_stats_val(&state_bg);
+                    emit_to_frontend(&app_bg, "usageUpdated", Some(stats));
+                });
             }
             Err(err) => {
                 emit_to_frontend(
@@ -3180,6 +3443,7 @@ fn main() {
             startRecording,
             stopRecording,
             toggleRecording,
+            toggleAmbientMemory,
             setWidgetDropdownOpen,
             openScratchpadWindow,
             closeScratchpadWindow,
@@ -3274,8 +3538,8 @@ fn main() {
                 if let Ok(Some(monitor)) = widget_win.primary_monitor() {
                     let size = monitor.size();
                     let scale = monitor.scale_factor();
-                    let widget_phys_w = (260.0 * scale) as i32;
-                    let widget_phys_h = (76.0 * scale) as i32;
+                    let widget_phys_w = (190.0 * scale) as i32;
+                    let widget_phys_h = (60.0 * scale) as i32;
                     let def_x = ((size.width as i32) - widget_phys_w) / 2;
                     let def_y = (size.height as i32) - widget_phys_h - (40.0 * scale) as i32;
 
@@ -3339,28 +3603,7 @@ fn main() {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
                         let _ = main_clone.hide();
-                    }
-                });
-            }
-
-            // 2b. Setup scratchpad window: hide on close to keep notes alive
-            if let Some(sp_win) = app.get_webview_window("scratchpad") {
-                let sp_clone = sp_win.clone();
-                sp_win.on_window_event(move |event| {
-                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        api.prevent_close();
-                        let _ = sp_clone.hide();
-                    }
-                });
-            }
-
-            // 2c. Setup spotlight window: hide on close to keep ready
-            if let Some(spot_win) = app.get_webview_window("spotlight") {
-                let spot_clone = spot_win.clone();
-                spot_win.on_window_event(move |event| {
-                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        api.prevent_close();
-                        let _ = spot_clone.hide();
+                        crate::window::auxiliary::trim_application_working_set_async();
                     }
                 });
             }
@@ -3411,6 +3654,7 @@ fn main() {
             let _tray = tray_builder.build(app)?;
 
             let settings = load_settings();
+            crate::audio::cue::prewarm(settings.sound_volume);
 
             // 3b. Setup Smart Clipboard History Listener (Win32 Event-Driven)
             if settings.clipboard_history_enabled {
@@ -3419,6 +3663,14 @@ fn main() {
                     app_state.is_internal_pasting.clone(),
                     app.handle().clone(),
                 );
+            }
+
+            // 3c. Start Ambient Memory if enabled
+            if settings.ambient_memory_enabled {
+                if let Ok(mut recorder) = app_state.ambient_recorder.lock() {
+                    let _ = recorder.start();
+                    log_status("Ambient Memory started from settings on launch.");
+                }
             }
 
             // 4. Setup Hotkey Listener (Push-to-Talk + Toggle Recording)
@@ -3445,12 +3697,12 @@ fn main() {
                 // On PTT Press
                 move || {
                     log_status("PTT Key Pressed -> starting recording and emitting recordingStarted");
-                    crate::audio::mute::mute_system_audio();
 
                     let s = load_settings();
                     if s.recording_sounds {
                         crate::audio::cue::play_start(s.sound_volume);
                     }
+                    crate::audio::mute::mute_system_audio_delayed(180);
 
                     let target_hwnd = TextInjector::get_foreground_window();
                     {
@@ -3493,6 +3745,7 @@ fn main() {
                 move || {
                     log_status("PTT Key Released -> stopping recorder");
                     crate::audio::mute::unmute_system_audio();
+                    emit_to_frontend(&app_handle_for_release, "recordingStopped", None);
 
                     let result = {
                         let mut recorder = state_for_release.recorder.lock().unwrap();
@@ -3532,13 +3785,12 @@ fn main() {
                     log_status(&format!("Toggle Key Pressed -> current is_recording={}", is_recording));
                     if !is_recording {
                         // Start recording
-                        crate::audio::mute::mute_system_audio();
-                        state_for_toggle.is_toggle_recording.store(true, std::sync::atomic::Ordering::SeqCst);
-
                         let s = load_settings();
                         if s.recording_sounds {
                             crate::audio::cue::play_start(s.sound_volume);
                         }
+                        crate::audio::mute::mute_system_audio_delayed(180);
+                        state_for_toggle.is_toggle_recording.store(true, std::sync::atomic::Ordering::SeqCst);
 
                         let target_hwnd = TextInjector::get_foreground_window();
                         {
@@ -3579,6 +3831,7 @@ fn main() {
                         // Stop recording and transcribe
                         crate::audio::mute::unmute_system_audio();
                         state_for_toggle.is_toggle_recording.store(false, std::sync::atomic::Ordering::SeqCst);
+                        emit_to_frontend(&app_handle_for_toggle, "recordingStopped", None);
                         let result = {
                             let mut recorder = state_for_toggle.recorder.lock().unwrap();
                             recorder.stop()
@@ -3625,6 +3878,28 @@ fn main() {
                         }
                     }
                 },
+                // On Ambient Memory Trigger (Ctrl+Shift+M)
+                {
+                    let app_handle_for_ambient = app_handle.clone();
+                    let state_for_ambient = Arc::clone(&app_state);
+                    move || {
+                        log_status("Ambient Memory Triggered!");
+                        let wav_bytes = {
+                            let recorder = state_for_ambient.ambient_recorder.lock().unwrap();
+                            recorder.extract_wav_bytes()
+                        };
+                        
+                        if !wav_bytes.is_empty() {
+                            emit_to_frontend(&app_handle_for_ambient, "ambientMemoryStarted", None);
+                            // Process in background
+                            let app_clone = app_handle_for_ambient.clone();
+                            let state_clone = Arc::clone(&state_for_ambient);
+                            tauri::async_runtime::spawn(async move {
+                                process_ambient_memory(app_clone, state_clone, wav_bytes).await;
+                            });
+                        }
+                    }
+                },
             );
 
             log_status("setup() hook completed successfully");
@@ -3660,6 +3935,13 @@ fn main() {
             }
             tauri::RunEvent::Resumed => {
                 log_status("RunEvent::Resumed received");
+            }
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            tauri::RunEvent::Opened { .. } => {
+                log_status("RunEvent::Opened received - restoring main window");
+                if let Some(main_win) = _app_handle.get_webview_window("main") {
+                    show_and_focus_window(&main_win);
+                }
             }
             tauri::RunEvent::WindowEvent { label, event, .. } => {
                 match event {

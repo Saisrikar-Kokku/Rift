@@ -23,6 +23,7 @@ pub struct AppState {
     pub whisper_requests_today: AtomicU32,
     pub is_toggle_recording: AtomicBool,
     pub last_recording: Mutex<Option<(Vec<u8>, f64)>>,
+    pub ambient_recorder: Mutex<crate::audio::ambient_memory::AmbientRecorder>,
 }
 
 impl AppState {
@@ -46,6 +47,7 @@ impl AppState {
             whisper_requests_today: AtomicU32::new(initial_today),
             is_toggle_recording: AtomicBool::new(false),
             last_recording: Mutex::new(None),
+            ambient_recorder: Mutex::new(crate::audio::ambient_memory::AmbientRecorder::new(3 * 60)), // 3 minutes buffer
         })
     }
 }

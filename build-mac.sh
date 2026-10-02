@@ -22,8 +22,11 @@ fi
 echo "📦 Installing npm dependencies..."
 npm install
 
+echo "🎨 Building React frontend with Vite..."
+(cd frontend && npm install && npm run build)
+
 echo "🔨 Building Rift native macOS application and .dmg installer..."
-npm run build
+npx @tauri-apps/cli build
 
 echo ""
 echo "=========================================="

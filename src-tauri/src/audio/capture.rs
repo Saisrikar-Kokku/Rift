@@ -338,8 +338,8 @@ pub fn trim_silence_16k(samples: &[i16]) -> Vec<i16> {
 
     let window_size = 160; // 10ms windows at 16kHz
     let threshold: i32 = 75; // Whisper-sensitive threshold (catches faint speech)
-    let margin_start = 4800; // 300ms leading padding to preserve initial consonants
-    let margin_end = 7200;   // 450ms trailing padding to preserve slow speech and word endings
+    let margin_start = 3600; // 225ms leading padding to preserve initial consonants with zero clipping
+    let margin_end = 4000;   // 250ms trailing padding to preserve word endings and breath margins
 
     let mut first_speech = None;
     let mut last_speech = None;

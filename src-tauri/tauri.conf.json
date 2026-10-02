@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "identifier": "com.rift.dictation",
   "build": {
-    "frontendDist": "../ui"
+    "frontendDist": "../ui/dist"
   },
   "app": {
     "withGlobalTauri": true,
@@ -14,8 +14,8 @@
         "label": "widget",
         "title": "Rift Widget",
         "url": "widget/widget.html",
-        "width": 260,
-        "height": 76,
+        "width": 190,
+        "height": 60,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
@@ -27,7 +27,7 @@
       {
         "label": "main",
         "title": "Rift",
-        "url": "screens/home.html",
+        "url": "index.html",
         "width": 1100,
         "height": 720,
         "minWidth": 860,
@@ -35,35 +35,6 @@
         "visible": true,
         "resizable": true,
         "decorations": true
-      },
-      {
-        "label": "scratchpad",
-        "title": "Rift Scratch Pad",
-        "url": "screens/scratchpad.html",
-        "width": 440,
-        "height": 540,
-        "minWidth": 360,
-        "minHeight": 380,
-        "decorations": false,
-        "transparent": false,
-        "alwaysOnTop": true,
-        "skipTaskbar": false,
-        "resizable": true,
-        "visible": false
-      },
-      {
-        "label": "spotlight",
-        "title": "Ask Rift - Spotlight Voice AI",
-        "url": "screens/spotlight.html",
-        "width": 640,
-        "height": 440,
-        "decorations": false,
-        "transparent": true,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "resizable": false,
-        "shadow": false,
-        "visible": false
       }
     ],
     "security": {
@@ -75,6 +46,7 @@
     "targets": "all",
     "icon": [
       "icons/icon.ico",
+      "icons/icon.png",
       "icons/tray_icon.png"
     ],
     "macOS": {
