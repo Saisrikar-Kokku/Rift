@@ -30,6 +30,9 @@ enum HookEvent {
 static mut HOOK_HANDLE: Option<HHOOK> = None;
 #[cfg(target_os = "macos")]
 static mut MACOS_RUN_LOOP: Option<macos_tap::CFRunLoopRef> = None;
+#[cfg(target_os = "macos")]
+static MACOS_TAP_PORT: std::sync::atomic::AtomicPtr<std::ffi::c_void> =
+    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
 static mut KEY_CALLBACK_PRESS: Option<Box<dyn Fn() + Send + Sync>> = None;
 static mut KEY_CALLBACK_RELEASE: Option<Box<dyn Fn() + Send + Sync>> = None;
 static mut KEY_CALLBACK_TOGGLE: Option<Box<dyn Fn() + Send + Sync>> = None;
@@ -630,7 +633,13 @@ mod macos_tap {
         pub static kCFRunLoopCommonModes: CFStringRef;
     }
 
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        pub fn AXIsProcessTrusted() -> bool;
+    }
+
     pub const K_CG_HID_EVENT_TAP: u32 = 0;
+    pub const K_CG_SESSION_EVENT_TAP: u32 = 1;
     pub const K_CG_HEAD_INSERT_EVENT_TAP: u32 = 0;
     pub const K_CG_EVENT_TAP_OPTION_LISTEN_ONLY: u32 = 1;
 
@@ -985,6 +994,39 @@ unsafe extern "C" fn macos_event_tap_callback(
     event: macos_tap::CGEventRef,
     _user_info: *mut std::ffi::c_void,
 ) -> macos_tap::CGEventRef {
+    // 0. Handle system disabled/timeout notifications first before touching event pointer!
+    if event_type == macos_tap::K_CG_EVENT_TAP_DISABLED_BY_TIMEOUT
+        || event_type == macos_tap::K_CG_EVENT_TAP_DISABLED_BY_USER_INPUT
+    {
+        crate::log_status("macOS Event Tap disabled by system! Re-enabling with authentic CFMachPortRef...");
+
+        // 1. Re-enable the tap using the authentic CFMachPortRef (NOT the proxy!)
+        let tap_port = MACOS_TAP_PORT.load(Ordering::SeqCst);
+        if !tap_port.is_null() {
+            macos_tap::CGEventTapEnable(tap_port, true);
+            crate::log_status("macOS Event Tap successfully re-enabled with genuine MachPort.");
+        } else {
+            crate::log_status("macOS Event Tap tap_port was null, cannot re-enable yet.");
+        }
+
+        // 2. Clear all active keys to prevent keys from getting "stuck" down
+        if let Ok(mut active) = ACTIVE_KEYS_MACOS.lock() {
+            active.clear();
+        }
+
+        // 3. If Push-to-Talk was stuck in recording, force a release event
+        if IS_PTT_PRESSED.swap(false, Ordering::SeqCst) {
+            crate::log_status("macOS PTT Release (Forced due to Tap Timeout) -> sending HookEvent::PttRelease");
+            send_event(HookEvent::PttRelease);
+        }
+
+        // 4. Reset toggle and widget debounce states
+        IS_TOGGLE_KEY_DOWN.store(false, Ordering::SeqCst);
+        IS_WIDGET_KEY_DOWN.store(false, Ordering::SeqCst);
+
+        return event;
+    }
+
     if event.is_null() {
         return event;
     }
@@ -993,27 +1035,6 @@ unsafe extern "C" fn macos_event_tap_callback(
     let effective_vk = macos_keycode_to_vk(raw_keycode);
 
     match event_type {
-        macos_tap::K_CG_EVENT_TAP_DISABLED_BY_TIMEOUT | macos_tap::K_CG_EVENT_TAP_DISABLED_BY_USER_INPUT => {
-            crate::log_status("macOS Event Tap disabled by system! Re-enabling and resetting state...");
-            
-            // 1. Re-enable the tap immediately using the callback proxy
-            macos_tap::CGEventTapEnable(_proxy as macos_tap::CFMachPortRef, true);
-            
-            // 2. Clear all active keys to prevent keys from getting "stuck" down
-            if let Ok(mut active) = ACTIVE_KEYS_MACOS.lock() {
-                active.clear();
-            }
-            
-            // 3. If Push-to-Talk was stuck in recording, force a release event
-            if IS_PTT_PRESSED.swap(false, std::sync::atomic::Ordering::SeqCst) {
-                crate::log_status("macOS PTT Release (Forced due to Tap Timeout) -> sending HookEvent::PttRelease");
-                send_event(HookEvent::PttRelease);
-            }
-            
-            // 4. Reset toggle and widget debounce states
-            IS_TOGGLE_KEY_DOWN.store(false, std::sync::atomic::Ordering::SeqCst);
-            IS_WIDGET_KEY_DOWN.store(false, std::sync::atomic::Ordering::SeqCst);
-        }
         macos_tap::K_CG_EVENT_KEY_DOWN => {
             dispatch_macos_key(effective_vk, true);
         }
@@ -1227,9 +1248,25 @@ impl HotkeyListener {
             crate::log_status("Starting macOS native CGEventTap hotkey listener...");
             let running_thread = Arc::clone(&running);
             std::thread::spawn(move || unsafe {
+                let mut prompt_attempted = false;
                 while running_thread.load(Ordering::Relaxed) {
-                    let tap = macos_tap::CGEventTapCreate(
-                        macos_tap::K_CG_HID_EVENT_TAP,
+                    // Check Accessibility permission
+                    if !macos_tap::AXIsProcessTrusted() {
+                        crate::log_status("macOS Accessibility NOT trusted!");
+                        if !prompt_attempted {
+                            prompt_attempted = true;
+                            crate::log_status("Prompting user to enable Accessibility in macOS System Settings...");
+                            let _ = std::process::Command::new("open")
+                                .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+                                .spawn();
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(1500));
+                        continue;
+                    }
+
+                    // Try kCGSessionEventTap first, fallback to kCGHIDEventTap
+                    let mut tap = macos_tap::CGEventTapCreate(
+                        macos_tap::K_CG_SESSION_EVENT_TAP,
                         macos_tap::K_CG_HEAD_INSERT_EVENT_TAP,
                         macos_tap::K_CG_EVENT_TAP_OPTION_LISTEN_ONLY,
                         (1u64 << macos_tap::K_CG_EVENT_KEY_DOWN)
@@ -1240,10 +1277,26 @@ impl HotkeyListener {
                     );
 
                     if tap.is_null() {
-                        crate::log_status("CGEventTap waiting for macOS Accessibility permission...");
+                        tap = macos_tap::CGEventTapCreate(
+                            macos_tap::K_CG_HID_EVENT_TAP,
+                            macos_tap::K_CG_HEAD_INSERT_EVENT_TAP,
+                            macos_tap::K_CG_EVENT_TAP_OPTION_LISTEN_ONLY,
+                            (1u64 << macos_tap::K_CG_EVENT_KEY_DOWN)
+                                | (1u64 << macos_tap::K_CG_EVENT_KEY_UP)
+                                | (1u64 << macos_tap::K_CG_EVENT_FLAGS_CHANGED),
+                            macos_event_tap_callback,
+                            std::ptr::null_mut(),
+                        );
+                    }
+
+                    if tap.is_null() {
+                        crate::log_status("CGEventTap creation returned null, waiting for Accessibility...");
                         std::thread::sleep(std::time::Duration::from_millis(1500));
                         continue;
                     }
+
+                    // Store genuine CFMachPortRef in MACOS_TAP_PORT
+                    MACOS_TAP_PORT.store(tap, Ordering::SeqCst);
 
                     crate::log_status("CGEventTap created successfully! Attaching to RunLoop...");
                     let source = macos_tap::CFMachPortCreateRunLoopSource(
@@ -1253,6 +1306,7 @@ impl HotkeyListener {
                     );
                     if source.is_null() {
                         crate::log_status("CFMachPortCreateRunLoopSource failed");
+                        MACOS_TAP_PORT.store(std::ptr::null_mut(), Ordering::SeqCst);
                         macos_tap::CFRelease(tap);
                         std::thread::sleep(std::time::Duration::from_millis(1500));
                         continue;
@@ -1266,6 +1320,7 @@ impl HotkeyListener {
                     macos_tap::CFRunLoopRun();
 
                     macos_tap::CFRelease(source);
+                    MACOS_TAP_PORT.store(std::ptr::null_mut(), Ordering::SeqCst);
                     macos_tap::CFRelease(tap);
                     MACOS_RUN_LOOP = None;
                     break;
@@ -1290,6 +1345,10 @@ impl HotkeyListener {
         }
         #[cfg(target_os = "macos")]
         unsafe {
+            let tap_port = MACOS_TAP_PORT.swap(std::ptr::null_mut(), Ordering::SeqCst);
+            if !tap_port.is_null() {
+                macos_tap::CGEventTapEnable(tap_port, false);
+            }
             if let Some(rl) = MACOS_RUN_LOOP.take() {
                 macos_tap::CFRunLoopStop(rl);
             }

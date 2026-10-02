@@ -603,9 +603,65 @@ impl TextInjector {
     }
 }
 
+#[cfg(target_os = "macos")]
+mod macos_inject {
+    use std::ffi::c_void;
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        pub fn CGEventCreateKeyboardEvent(
+            source: *const c_void,
+            virtual_key: u16,
+            key_down: bool,
+        ) -> *mut c_void;
+        pub fn CGEventSetFlags(event: *mut c_void, flags: u64);
+        pub fn CGEventPost(tap: u32, event: *mut c_void);
+        pub fn CFRelease(cf: *const c_void);
+    }
+
+    pub const K_CG_SESSION_EVENT_TAP: u32 = 1;
+    pub const K_CG_HID_EVENT_TAP: u32 = 0;
+    pub const K_CG_EVENT_FLAG_MASK_COMMAND: u64 = 0x00100000;
+    pub const K_VK_V: u16 = 0x09;
+    pub const K_VK_C: u16 = 0x08;
+    pub const K_VK_Z: u16 = 0x06;
+
+    pub fn send_key_with_command(vk: u16) -> bool {
+        unsafe {
+            let event_down = CGEventCreateKeyboardEvent(std::ptr::null(), vk, true);
+            if event_down.is_null() {
+                return false;
+            }
+            CGEventSetFlags(event_down, K_CG_EVENT_FLAG_MASK_COMMAND);
+            CGEventPost(K_CG_SESSION_EVENT_TAP, event_down);
+            CGEventPost(K_CG_HID_EVENT_TAP, event_down);
+            CFRelease(event_down);
+
+            std::thread::sleep(std::time::Duration::from_millis(15));
+
+            let event_up = CGEventCreateKeyboardEvent(std::ptr::null(), vk, false);
+            if event_up.is_null() {
+                return false;
+            }
+            CGEventSetFlags(event_up, K_CG_EVENT_FLAG_MASK_COMMAND);
+            CGEventPost(K_CG_SESSION_EVENT_TAP, event_up);
+            CGEventPost(K_CG_HID_EVENT_TAP, event_up);
+            CFRelease(event_up);
+        }
+        true
+    }
+}
+
 #[cfg(not(windows))]
 impl TextInjector {
     pub fn get_foreground_window() -> WindowTarget {
+        #[cfg(target_os = "macos")]
+        {
+            if let Some((pid, _)) = Self::get_foreground_window_pid_and_raw() {
+                return WindowTarget(pid as usize);
+            }
+        }
         WindowTarget(0)
     }
 
@@ -654,15 +710,60 @@ impl TextInjector {
     }
 
     pub fn paste_text(text: &str, target_hwnd: Option<WindowTarget>) -> (bool, Option<WindowTarget>) {
+        if text.is_empty() {
+            return (false, target_hwnd);
+        }
+
+        let prev_clipboard = Self::get_clipboard_text();
+
         if !Self::set_clipboard_text(text) {
             return (false, target_hwnd);
         }
-        thread::sleep(Duration::from_millis(20));
-        let status = std::process::Command::new("osascript")
-            .arg("-e")
-            .arg("tell application \"System Events\" to keystroke \"v\" using command down")
-            .status();
-        (status.map(|s| s.success()).unwrap_or(false), target_hwnd)
+
+        #[cfg(target_os = "macos")]
+        {
+            if let Some(target) = target_hwnd {
+                if target.0 != 0 {
+                    let script = format!(
+                        "tell application \"System Events\" to set frontmost of (first process whose unix id is {}) to true",
+                        target.0
+                    );
+                    let _ = std::process::Command::new("osascript")
+                        .arg("-e")
+                        .arg(&script)
+                        .status();
+                    thread::sleep(Duration::from_millis(25));
+                }
+            }
+        }
+
+        thread::sleep(Duration::from_millis(25));
+
+        #[cfg(target_os = "macos")]
+        let mut pasted = macos_inject::send_key_with_command(macos_inject::K_VK_V);
+
+        #[cfg(not(target_os = "macos"))]
+        let mut pasted = false;
+
+        if !pasted {
+            let status = std::process::Command::new("osascript")
+                .arg("-e")
+                .arg("tell application \"System Events\" to keystroke \"v\" using command down")
+                .status();
+            pasted = status.map(|s| s.success()).unwrap_or(false);
+        }
+
+        // Restore prior clipboard content after buffer delay
+        if let Some(prev) = prev_clipboard {
+            if !prev.is_empty() && prev != text {
+                thread::spawn(move || {
+                    thread::sleep(Duration::from_millis(350));
+                    Self::set_clipboard_text(&prev);
+                });
+            }
+        }
+
+        (pasted, target_hwnd)
     }
 
     pub fn type_unicode_text(text: &str, target_hwnd: Option<WindowTarget>) -> (bool, Option<WindowTarget>) {
@@ -670,6 +771,12 @@ impl TextInjector {
     }
 
     pub fn simulate_undo(_target_hwnd: Option<WindowTarget>) -> bool {
+        #[cfg(target_os = "macos")]
+        {
+            if macos_inject::send_key_with_command(macos_inject::K_VK_Z) {
+                return true;
+            }
+        }
         let status = std::process::Command::new("osascript")
             .arg("-e")
             .arg("tell application \"System Events\" to keystroke \"z\" using command down")
@@ -679,10 +786,15 @@ impl TextInjector {
 
     pub fn get_selected_text_from_target(_target_hwnd: Option<WindowTarget>) -> Option<String> {
         let prev_clip = Self::get_clipboard_text();
-        let _ = std::process::Command::new("osascript")
-            .arg("-e")
-            .arg("tell application \"System Events\" to keystroke \"c\" using command down")
-            .status();
+        #[cfg(target_os = "macos")]
+        macos_inject::send_key_with_command(macos_inject::K_VK_C);
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = std::process::Command::new("osascript")
+                .arg("-e")
+                .arg("tell application \"System Events\" to keystroke \"c\" using command down")
+                .status();
+        }
         thread::sleep(Duration::from_millis(50));
         let selected = Self::get_clipboard_text();
         if let Some(ref prev) = prev_clip {
@@ -692,6 +804,23 @@ impl TextInjector {
     }
 
     pub fn get_foreground_window_pid_and_raw() -> Option<(u32, isize)> {
+        #[cfg(target_os = "macos")]
+        {
+            let my_pid = std::process::id();
+            let output = std::process::Command::new("osascript")
+                .arg("-e")
+                .arg("tell application \"System Events\" to get unix id of first application process whose frontmost is true")
+                .output()
+                .ok()?;
+            if output.status.success() {
+                let pid_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if let Ok(pid) = pid_str.parse::<u32>() {
+                    if pid != 0 && pid != my_pid {
+                        return Some((pid, pid as isize));
+                    }
+                }
+            }
+        }
         None
     }
 }
