@@ -255,9 +255,11 @@ Use these scenarios during behavioral and technical interview questions (*"Tell 
 ```
 Rift Monorepo
 ├── Rift-rust/                      # Desktop Core Application (Rust + Tauri v2)
-│   ├── Cargo.toml                  # Tauri 2.0, cpal, rusqlite, tokio, reqwest, windows 0.58
-│   ├── src-tauri/src/
-│   │   ├── main.rs                 # Tauri IPC handlers, background thread lifecycles, app setup
+│   ├── src-tauri/
+│   │   ├── Cargo.toml              # Tauri 2.0, cpal, rusqlite, tokio, reqwest, windows 0.58
+│   │   ├── tauri.conf.json         # Tauri v2 configuration
+│   │   └── src/
+│   │       ├── main.rs             # Tauri IPC handlers, background thread lifecycles, app setup
 │   │   ├── ai/
 │   │   │   ├── intent_router.rs    # LLM intent routing (Verbatim, Transform, Code, Note)
 │   │   │   ├── spotlight.rs        # Instant desktop Q&A powered by Groq Llama 3.3

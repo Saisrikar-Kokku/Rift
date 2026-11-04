@@ -26,10 +26,16 @@ yarn-error.log*
 *.pfx
 *.p12
 *.id_rsa
+id_rsa*
+*.id_ed25519
+id_ed25519*
 *.keystore
 *.jks
 *.token
 *.secret
+.npmrc
+credentials.json
+service-account*.json
 
 # Binaries, packages & debug symbol dumps
 *.exe
@@ -52,7 +58,15 @@ yarn-error.log*
 *.db-wal
 *.db-shm
 *.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
+*.aac
 recordings/
+frontend/dist/
+dist/
+!ui/dist/
 backups/
 backup/
 scratch/

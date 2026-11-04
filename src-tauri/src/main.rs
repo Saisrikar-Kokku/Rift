@@ -1,5 +1,6 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 #![recursion_limit = "256"]
+#![allow(non_snake_case)]
 
 mod ai;
 mod ambient;
@@ -2291,7 +2292,7 @@ fn cancelRecording(app: AppHandle, state: State<'_, Arc<AppState>>) {
 }
 
 #[tauri::command]
-fn toggleAmbientMemory(app: AppHandle, state: State<'_, Arc<AppState>>, enable: bool) {
+fn toggleAmbientMemory(_app: AppHandle, state: State<'_, Arc<AppState>>, enable: bool) {
     let mut recorder = state.ambient_recorder.lock();
     if enable {
         let _ = recorder.start();
@@ -2497,7 +2498,7 @@ async fn process_ambient_memory(
     // 1. Transcribe the audio
     let transcript = {
         let groq_api_key = CredentialsProvider::get_api_key().unwrap_or_default();
-        let s = load_settings();
+        let _s = load_settings();
         let lang = "en".to_string();
         
         let client = reqwest::Client::new();
@@ -3768,7 +3769,7 @@ const ERROR_ALREADY_EXISTS: u32 = 183;
 #[cfg(windows)]
 const EVENT_MODIFY_STATE: u32 = 0x0002;
 #[cfg(windows)]
-const SYNCHRONIZE: u32 = 0x00100000;
+const _SYNCHRONIZE: u32 = 0x00100000;
 #[cfg(windows)]
 const INFINITE: u32 = 0xFFFFFFFF;
 
@@ -3866,7 +3867,7 @@ pub(crate) fn log_status(msg: &str) {
 fn main() {
     log_status("=== Rift instance launched ===");
     #[cfg(windows)]
-    let (show_event, ack_event) = {
+    let (_primary_mutex, show_event, ack_event) = {
         // 0. Single-Instance Check & Activation: Prevent multiple tray icons, reliably restore main window
         let mutex_name: Vec<u16> = "Local\\Rift_SingleInstance_Mutex\0".encode_utf16().collect();
         let mut mutex = unsafe { CreateMutexW(std::ptr::null(), 1, mutex_name.as_ptr()) };
@@ -3956,7 +3957,6 @@ fn main() {
             unsafe {
                 if mutex != 0 {
                     CloseHandle(mutex);
-                    mutex = 0;
                 }
             }
             kill_stale_rift_instances();
@@ -3971,11 +3971,11 @@ fn main() {
         let show_event = unsafe { CreateEventW(std::ptr::null(), 0, 0, event_name.as_ptr()) };
         let ack_event_name: Vec<u16> = "Local\\Rift_ShowMain_Ack_Event\0".encode_utf16().collect();
         let ack_event = unsafe { CreateEventW(std::ptr::null(), 0, 0, ack_event_name.as_ptr()) };
-        (show_event, ack_event)
+        (mutex, show_event, ack_event)
     };
 
     #[cfg(not(windows))]
-    let (show_event, ack_event): (isize, isize) = (0, 0);
+    let (_primary_mutex, show_event, ack_event): (isize, isize, isize) = (0, 0, 0);
 
     let log_path = std::env::current_exe()
         .map(|p| p.parent().unwrap_or(&p).join("rift.log"))

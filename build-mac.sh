@@ -7,13 +7,13 @@ echo "=========================================="
 echo ""
 
 # Check for Node.js
-if ! command -v node \u0026> /dev/null; then
+if ! command -v node >/dev/null 2>&1; then
     echo "❌ Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/"
     exit 1
 fi
 
 # Check for Rust
-if ! command -v cargo \u0026> /dev/null; then
+if ! command -v cargo >/dev/null 2>&1; then
     echo "❌ Rust is not installed. Installing Rust via rustup..."
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
     source "$HOME/.cargo/env"

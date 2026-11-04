@@ -134,10 +134,10 @@ flowchart TD
 ## 📂 Project Structure
 
 ```
-Rift-rust/
+rift/
 ├── .github/workflows/          # Automated CI/CD pipelines
 │   ├── build-mac.yml           # macOS Apple Silicon & Intel DMG build
-│   └── build-windows.yml       # Windows locked compilation & check
+│   └── build-windows.yml       # Windows compilation, unit tests & check
 ├── frontend/                   # Reactive HUD & Management Dashboard
 │   ├── src/                    # React 18, TypeScript, Tailwind CSS
 │   │   ├── components/         # Dashboard, Settings, History, Library, Auth
@@ -190,7 +190,7 @@ Run the automated installation script to compile, install to `%LOCALAPPDATA%\Pro
 1. **Clone the repository:**
    ```bash
    git clone https://github.com/Saisrikar-Kokku/Rift.git
-   cd Rift/Rift-rust
+   cd Rift
    ```
 
 2. **Install frontend dependencies:**
