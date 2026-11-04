@@ -1,4 +1,5 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
+#![recursion_limit = "256"]
 
 mod ai;
 mod ambient;
@@ -15,7 +16,7 @@ use state::AppState;
 use storage::credentials::CredentialsProvider;
 use storage::dictionary::{apply_dictionary, DictionaryEntry};
 use storage::history::HistoryEntry;
-use storage::settings::{load_settings, save_settings, WidgetPosition};
+use storage::settings::{load_settings, save_settings, try_save_settings, WidgetPosition};
 use storage::snippets::VoiceSnippet;
 use stt::openrouter::OpenRouterClient;
 use text::cleaner::{clean_transcript, is_silence_or_hallucination};
@@ -29,6 +30,8 @@ use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, State};
 
 static IS_RECORDING_SESSION: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static WIDGET_DROPDOWN_ORIGIN: std::sync::Mutex<Option<tauri::PhysicalPosition<i32>>> =
+    std::sync::Mutex::new(None);
 
 fn start_dynamic_focus_tracker(state: Arc<AppState>) {
     if !IS_RECORDING_SESSION.swap(true, std::sync::atomic::Ordering::SeqCst) {
@@ -38,7 +41,7 @@ fn start_dynamic_focus_tracker(state: Arc<AppState>) {
                 std::thread::sleep(std::time::Duration::from_millis(40));
                 if let Some((fg_pid, raw_val)) = TextInjector::get_foreground_window_pid_and_raw() {
                     if fg_pid != 0 && fg_pid != my_pid {
-                        if let Ok(mut target) = state.target_window.lock() {
+                        let mut target = state.target_window.lock(); {
                             *target = Some(raw_val);
                         }
                     }
@@ -156,6 +159,8 @@ fn getWidgetConfig() -> Value {
         "follow_cursor_across_monitors": settings.follow_cursor_across_monitors,
         "lock_widget_position": settings.lock_widget_position,
         "widget_style": settings.widget_style,
+        "widgetTranscribingStyle": settings.widget_transcribing_style,
+        "widget_transcribing_style": settings.widget_transcribing_style,
         "inferenceModel": settings.inference_model,
         "sttProvider": settings.stt_provider,
         "transcriptionMode": settings.transcription_mode,
@@ -380,31 +385,158 @@ fn triggerWidgetTestState(app: AppHandle, state: String) -> Value {
 }
 
 #[tauri::command]
-fn setWidgetDropdownOpen(app: AppHandle, open: bool) {
-    if let Some(w) = app.get_webview_window("widget") {
-        let size = if open {
-            tauri::Size::Logical(tauri::LogicalSize::new(190.0, 195.0))
+fn setWidgetDropdownOpen(app: AppHandle, open: bool) -> Result<(), String> {
+    const WINDOW_WIDTH: f64 = 190.0;
+    const COLLAPSED_HEIGHT: f64 = 60.0;
+    const EXPANDED_HEIGHT: f64 = 152.0;
+    const IDLE_PILL_BOTTOM_OFFSET: f64 = 27.0;
+    const OPEN_MENU_BOTTOM_PADDING: f64 = 6.0;
+
+    let Some(window) = app.get_webview_window("widget") else {
+        return Ok(());
+    };
+
+    let mut saved_origin = WIDGET_DROPDOWN_ORIGIN
+        .lock()
+        .map_err(|_| "Widget menu position lock is poisoned".to_string())?;
+
+    if !open {
+        window
+            .eval("document.body.classList.remove('menu-open-above');")
+            .map_err(|error| format!("Failed to reset widget menu layout: {error}"))?;
+        window
+            .set_size(tauri::Size::Logical(tauri::LogicalSize::new(
+                WINDOW_WIDTH,
+                COLLAPSED_HEIGHT,
+            )))
+            .map_err(|error| format!("Failed to collapse the widget window: {error}"))?;
+        if let Some(position) = *saved_origin {
+            window
+                .set_position(tauri::Position::Physical(position))
+                .map_err(|error| format!("Failed to restore the widget position: {error}"))?;
+        }
+        *saved_origin = None;
+    } else if saved_origin.is_none() {
+        let origin = window
+            .outer_position()
+            .map_err(|error| format!("Failed to read the widget position: {error}"))?;
+        let scale = window.scale_factor().unwrap_or(1.0).max(0.5);
+        let expanded_height = (EXPANDED_HEIGHT * scale).round() as i32;
+        let collapsed_anchor = (IDLE_PILL_BOTTOM_OFFSET * scale).round() as i32;
+        let open_bottom_padding = (OPEN_MENU_BOTTOM_PADDING * scale).round() as i32;
+        let above_shift = expanded_height - collapsed_anchor - open_bottom_padding;
+
+        let monitor = window
+            .current_monitor()
+            .ok()
+            .flatten()
+            .or_else(|| window.primary_monitor().ok().flatten());
+
+        let (open_above, target_y) = if let Some(monitor) = monitor {
+            let area = monitor.work_area();
+            let (area_top, area_bottom) = if area.size.height > 0 {
+                (
+                    area.position.y,
+                    area.position.y.saturating_add(area.size.height as i32),
+                )
+            } else {
+                let monitor_position = monitor.position();
+                let monitor_size = monitor.size();
+                (
+                    monitor_position.y,
+                    monitor_position.y.saturating_add(monitor_size.height as i32),
+                )
+            };
+            let max_y = area_bottom.saturating_sub(expanded_height);
+            let below_fits = origin.y <= max_y;
+            let above_y = origin.y.saturating_sub(above_shift);
+            let above_fits = above_y >= area_top;
+
+            if below_fits {
+                (false, origin.y)
+            } else if above_fits {
+                (true, above_y)
+            } else {
+                let available_above = origin.y.saturating_sub(area_top);
+                let available_below = area_bottom.saturating_sub(origin.y.saturating_add(expanded_height));
+                if available_above > available_below {
+                    (true, above_y.clamp(area_top, max_y.max(area_top)))
+                } else {
+                    (false, origin.y.clamp(area_top, max_y.max(area_top)))
+                }
+            }
         } else {
-            tauri::Size::Logical(tauri::LogicalSize::new(190.0, 60.0))
+            (false, origin.y)
         };
-        let _ = w.set_size(size);
+
+        let layout_script = if open_above {
+            "document.body.classList.add('menu-open-above');"
+        } else {
+            "document.body.classList.remove('menu-open-above');"
+        };
+        window
+            .eval(layout_script)
+            .map_err(|error| format!("Failed to place the widget menu: {error}"))?;
+        if let Err(error) = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(
+                WINDOW_WIDTH,
+                EXPANDED_HEIGHT,
+            ))) {
+            let _ = window.eval("document.body.classList.remove('menu-open-above');");
+            return Err(format!("Failed to expand the widget menu: {error}"));
+        }
+        if target_y != origin.y {
+            if let Err(error) = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+                    x: origin.x,
+                    y: target_y,
+                })) {
+                let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(
+                    WINDOW_WIDTH,
+                    COLLAPSED_HEIGHT,
+                )));
+                let _ = window.eval("document.body.classList.remove('menu-open-above');");
+                return Err(format!("Failed to keep the widget menu on screen: {error}"));
+            }
+        }
+        *saved_origin = Some(origin);
     }
+
+    #[cfg(windows)]
+    if let Ok(hwnd_ptr) = window.hwnd() {
+        let hwnd = windows::Win32::Foundation::HWND(hwnd_ptr.0 as *mut _);
+        unsafe {
+            use windows::Win32::UI::WindowsAndMessaging::{
+                SetWindowPos, HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE, SWP_NOACTIVATE,
+                SWP_SHOWWINDOW,
+            };
+            let _ = SetWindowPos(
+                hwnd,
+                HWND_TOPMOST,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            );
+        }
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
-fn openScratchpadWindow(app: AppHandle) {
-    let _ = crate::window::auxiliary::get_or_create_scratchpad(&app);
+fn openScratchpadWindow(app: AppHandle) -> Result<(), String> {
+    crate::window::auxiliary::get_or_create_scratchpad(&app).map(|_| ())
 }
 
 #[tauri::command]
-fn closeScratchpadWindow(app: AppHandle, state: State<'_, Arc<AppState>>) {
+fn closeScratchpadWindow(app: AppHandle, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     if state.is_toggle_recording.load(std::sync::atomic::Ordering::SeqCst) {
         stopRecording(app.clone(), state);
     }
     if let Some(sp) = app.get_webview_window("scratchpad") {
-        let _ = sp.hide();
-        crate::window::auxiliary::trim_application_working_set_async();
+        crate::window::auxiliary::schedule_scratchpad_close(sp);
     }
+    Ok(())
 }
 
 #[tauri::command]
@@ -427,7 +559,7 @@ fn insertScratchpadText(app: AppHandle, state: State<'_, Arc<AppState>>, text: S
         return;
     }
     let target_hwnd = {
-        let target = state.target_window.lock().unwrap();
+        let target = state.target_window.lock();
         TextInjector::target_from_raw(target.map(|v| v as usize))
     };
     TextInjector::paste_text(&text, target_hwnd);
@@ -435,9 +567,68 @@ fn insertScratchpadText(app: AppHandle, state: State<'_, Arc<AppState>>, text: S
 }
 
 #[tauri::command]
+fn drainScratchpadInbox() -> Value {
+    let notes = crate::storage::settings::drain_scratchpad_inbox_notes();
+    json!({ "notes": notes })
+}
+
+#[tauri::command]
+async fn searchLibrary(
+    state: State<'_, Arc<AppState>>,
+    query: String,
+    kind: Option<String>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> Result<crate::storage::library::LibrarySearchPage, String> {
+    let library = state.library.clone();
+    let limit = limit.unwrap_or(30);
+    let offset = offset.unwrap_or(0);
+    tauri::async_runtime::spawn_blocking(move || {
+        library.search(&query, kind.as_deref(), limit, offset)
+    })
+    .await
+    .map_err(|error| format!("Library search worker failed: {error}"))?
+    .map_err(|error| {
+        let message = error.to_string();
+        log_status(&format!("Library search failed: {message}"));
+        message
+    })
+}
+
+#[tauri::command]
+async fn getLibraryItemContent(
+    state: State<'_, Arc<AppState>>,
+    id: String,
+) -> Result<Option<String>, String> {
+    let library = state.library.clone();
+    tauri::async_runtime::spawn_blocking(move || library.get_content(&id))
+        .await
+        .map_err(|error| format!("Library content worker failed: {error}"))?
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn getScratchpadDraft(
+    state: State<'_, Arc<AppState>>,
+) -> Result<crate::storage::library::ScratchpadDraft, String> {
+    state.library.get_draft().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn saveScratchpadDraft(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    content: String,
+) -> Result<String, String> {
+    let updated_at = state.library.save_draft(&content).map_err(|e| e.to_string())?;
+    emit_to_frontend(&app, "libraryUpdated", None);
+    Ok(updated_at)
+}
+
+#[tauri::command]
 async fn polishSelectedText(app: AppHandle, state: State<'_, Arc<AppState>>) -> Result<Value, String> {
     let target_raw: Option<isize> = {
-        let target = state.target_window.lock().unwrap();
+        let target = state.target_window.lock();
         *target
     };
 
@@ -625,6 +816,122 @@ fn deleteSnippet(state: State<'_, Arc<AppState>>, id: String) -> Result<(), Stri
     state.snippets.delete_snippet(&id).map_err(|e| e.to_string())
 }
 
+fn sync_wake_word_engine(app: &AppHandle, state: &Arc<AppState>, force_restart: bool) {
+    let settings = load_settings();
+    let mut ww = state.wake_word.lock();
+
+    if !settings.wake_word_enabled {
+        if ww.is_running() {
+            ww.stop();
+            log_status("[WakeWord] Hands-free 'Hey Rift' listener stopped.");
+        }
+        return;
+    }
+
+    if ww.is_running() && !force_restart {
+        return;
+    }
+
+    let manual_flag = state.recorder.lock().is_recording_arc();
+    let app_for_level = app.clone();
+    let app_for_act = app.clone();
+    let app_for_cancel = app.clone();
+    let app_for_done = app.clone();
+    let state_for_act = Arc::clone(state);
+    let state_for_done = Arc::clone(state);
+
+    let last_level = Arc::new(std::sync::Mutex::new(std::time::Instant::now()));
+
+    let res = ww.start(
+        settings.microphone_device_id.as_deref(),
+        manual_flag,
+        move |level| {
+            let now = std::time::Instant::now();
+            let should_emit = if let Ok(mut l) = last_level.try_lock() {
+                if now.duration_since(*l).as_millis() >= 40 {
+                    *l = now;
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+            if should_emit {
+                emit_to_frontend(&app_for_level, "audioLevel", Some(json!(level)));
+            }
+        },
+        move || {
+            log_status("[WakeWord] 'Hey Rift' detected -> starting hands-free recording");
+            let s = load_settings();
+            if s.recording_sounds {
+                crate::audio::cue::play_start(s.sound_volume);
+            }
+            crate::audio::mute::mute_system_audio_delayed(120);
+
+            let target_hwnd = TextInjector::get_foreground_window();
+            {
+                let mut target = state_for_act.target_window.lock();
+                *target = Some(target_hwnd.0 as isize);
+            }
+            start_dynamic_focus_tracker(Arc::clone(&state_for_act));
+
+            emit_to_frontend(&app_for_act, "recordingStarted", None);
+            emit_to_frontend(
+                &app_for_act,
+                "toast",
+                Some(json!({ "message": "🎧 'Hey Rift' — Listening...", "type": "info" })),
+            );
+
+            if let Some(key) = CredentialsProvider::get_openrouter_api_key() {
+                state_for_act.openrouter.prewarm(&key);
+            }
+            if let Some(key) = CredentialsProvider::get_api_key() {
+                state_for_act.groq.prewarm(&key);
+            }
+        },
+        move || {
+            log_status("[WakeWord] Hands-free recording cancelled (no speech after wake word)");
+            crate::audio::mute::unmute_system_audio();
+            stop_dynamic_focus_tracker();
+            let s = load_settings();
+            if s.recording_sounds {
+                crate::audio::cue::play_cancel(s.sound_volume);
+            }
+            emit_to_frontend(&app_for_cancel, "recordingCancelled", None);
+        },
+        move |samples_16k| {
+            log_status("[WakeWord] Auto-silence completion triggered -> processing utterance");
+            crate::audio::mute::unmute_system_audio();
+            emit_to_frontend(&app_for_done, "recordingStopped", None);
+
+            let result = crate::audio::capture::process_raw_16k_samples(samples_16k);
+            if result.is_short_press || result.is_silent {
+                stop_dynamic_focus_tracker();
+                let s = load_settings();
+                if s.recording_sounds {
+                    crate::audio::cue::play_cancel(s.sound_volume);
+                }
+                emit_to_frontend(&app_for_done, "recordingCancelled", None);
+                return;
+            }
+
+            process_and_transcribe(
+                app_for_done.clone(),
+                Arc::clone(&state_for_done),
+                Arc::from(result.wav_bytes),
+                result.duration_seconds,
+            );
+        },
+    );
+
+    if let Err(e) = res {
+        log_status(&format!("[WakeWord] Failed to start listener: {}", e));
+    } else {
+        log_status("[WakeWord] Hands-free 'Hey Rift' listener active.");
+    }
+}
+
 // -------------------------------------------------------------
 // Settings Commands
 // -------------------------------------------------------------
@@ -638,6 +945,8 @@ fn getSettings() -> Value {
         "toggleRecordingKey": settings.toggle_recording_key,
         "widgetVisibility": settings.widget_visibility,
         "widgetStyle": settings.widget_style,
+        "widgetTranscribingStyle": settings.widget_transcribing_style,
+        "widget_transcribing_style": settings.widget_transcribing_style,
         "followCursorAcrossMonitors": settings.follow_cursor_across_monitors,
         "lockWidgetPosition": settings.lock_widget_position,
         "widgetCustomPosition": settings.widget_custom_position,
@@ -655,6 +964,8 @@ fn getSettings() -> Value {
         "inferenceProfile": settings.local_inference_profile,
         "localModelProfile": settings.local_inference_profile,
         "localInferenceProfile": settings.local_inference_profile,
+        "localWhisperUnloadOnIdle": settings.local_whisper_unload_on_idle,
+        "local_whisper_unload_on_idle": settings.local_whisper_unload_on_idle,
         "microphoneDeviceId": settings.microphone_device_id,
         "autoEnhancePrompt": settings.auto_enhance_prompt,
         "formattingInstructions": settings.formatting_instructions,
@@ -666,6 +977,17 @@ fn getSettings() -> Value {
         "voiceCommandsEnabled": settings.voice_commands_enabled,
         "voiceSnippetsEnabled": settings.voice_snippets_enabled,
         "quickActionsEnabled": settings.quick_actions_enabled,
+        "contextAwareFormatting": settings.context_aware_formatting,
+        "noiseCancellationEnabled": settings.noise_cancellation_enabled,
+        "clipboardHistoryEnabled": settings.clipboard_history_enabled,
+        "clipboardMaxItems": settings.clipboard_max_items,
+        "ambientMemoryEnabled": settings.ambient_memory_enabled,
+        "whisperModeEnabled": settings.whisper_mode_enabled,
+        "whisper_mode_enabled": settings.whisper_mode_enabled,
+        "intentRouterEnabled": settings.intent_router_enabled,
+        "intent_router_enabled": settings.intent_router_enabled,
+        "wakeWordEnabled": settings.wake_word_enabled,
+        "wake_word_enabled": settings.wake_word_enabled,
         "tenglishModeEnabled": settings.tenglish_mode_enabled,
         "tenglish_mode_enabled": settings.tenglish_mode_enabled,
         "tenglishSttTier": settings.tenglish_stt_tier,
@@ -677,11 +999,39 @@ fn getSettings() -> Value {
 
 
 #[tauri::command]
-fn saveSettings(app: AppHandle, state: State<'_, Arc<AppState>>, patch: Value) -> Value {
+fn saveSettings(app: AppHandle, state: State<'_, Arc<AppState>>, patch: Value) -> Result<Value, String> {
     let mut settings = load_settings();
+    let previous_clipboard_history_enabled = settings.clipboard_history_enabled;
+    let previous_clipboard_max_items = settings.clipboard_max_items;
+    let mut mic_changed = false;
+    let mut preview_transcribing_style = false;
     if let Some(obj) = patch.as_object() {
         if let Some(v) = obj.get("tenglishModeEnabled").and_then(|x| x.as_bool()).or_else(|| obj.get("tenglish_mode_enabled").and_then(|x| x.as_bool())) {
             settings.tenglish_mode_enabled = v;
+        }
+        if let Some(v) = obj.get("whisperModeEnabled").and_then(|x| x.as_bool()).or_else(|| obj.get("whisper_mode_enabled").and_then(|x| x.as_bool())) {
+            settings.whisper_mode_enabled = v;
+        }
+        if let Some(v) = obj.get("intentRouterEnabled").and_then(|x| x.as_bool()).or_else(|| obj.get("intent_router_enabled").and_then(|x| x.as_bool())) {
+            settings.intent_router_enabled = v;
+        }
+        if let Some(v) = obj.get("wakeWordEnabled").and_then(|x| x.as_bool()).or_else(|| obj.get("wake_word_enabled").and_then(|x| x.as_bool())) {
+            settings.wake_word_enabled = v;
+        }
+        if let Some(v) = obj.get("noiseCancellationEnabled").and_then(|x| x.as_bool()).or_else(|| obj.get("noise_cancellation_enabled").and_then(|x| x.as_bool())) {
+            settings.noise_cancellation_enabled = v;
+        }
+        if let Some(v) = obj.get("contextAwareFormatting").and_then(|x| x.as_bool()).or_else(|| obj.get("context_aware_formatting").and_then(|x| x.as_bool())) {
+            settings.context_aware_formatting = v;
+        }
+        if let Some(v) = obj.get("clipboardHistoryEnabled").and_then(|x| x.as_bool()).or_else(|| obj.get("clipboard_history_enabled").and_then(|x| x.as_bool())) {
+            settings.clipboard_history_enabled = v;
+        }
+        if let Some(v) = obj.get("clipboardMaxItems").and_then(|x| x.as_u64()).or_else(|| obj.get("clipboard_max_items").and_then(|x| x.as_u64())) {
+            settings.clipboard_max_items = (v as usize).clamp(1, 5_000);
+        }
+        if let Some(v) = obj.get("ambientMemoryEnabled").and_then(|x| x.as_bool()).or_else(|| obj.get("ambient_memory_enabled").and_then(|x| x.as_bool())) {
+            settings.ambient_memory_enabled = v;
         }
         if let Some(v) = obj.get("tenglishSttTier").and_then(|x| x.as_str()).or_else(|| obj.get("tenglish_stt_tier").and_then(|x| x.as_str())) {
             settings.tenglish_stt_tier = v.to_string();
@@ -722,6 +1072,10 @@ fn saveSettings(app: AppHandle, state: State<'_, Arc<AppState>>, patch: Value) -
         if let Some(v) = obj.get("widgetStyle").and_then(|x| x.as_str()) {
             settings.widget_style = v.to_string();
         }
+        if let Some(v) = obj.get("widgetTranscribingStyle").and_then(|x| x.as_str()).or_else(|| obj.get("widget_transcribing_style").and_then(|x| x.as_str())) {
+            settings.widget_transcribing_style = v.to_string();
+            preview_transcribing_style = true;
+        }
         if let Some(v) = obj.get("followCursorAcrossMonitors").and_then(|x| x.as_bool()) {
             settings.follow_cursor_across_monitors = v;
         }
@@ -757,7 +1111,7 @@ fn saveSettings(app: AppHandle, state: State<'_, Arc<AppState>>, patch: Value) -
             settings.inference_model = v.to_string();
             if v.starts_with("groq/") || v == "whisper-large-v3-turbo" || v == "whisper-large-v3" {
                 settings.stt_provider = "groq".to_string();
-            } else if v.contains('/') || v.contains("mai-transcribe") {
+            } else if v.contains('/') || v.contains("scribe") {
                 settings.stt_provider = "openrouter".to_string();
             } else {
                 settings.stt_provider = "groq".to_string();
@@ -767,16 +1121,17 @@ fn saveSettings(app: AppHandle, state: State<'_, Arc<AppState>>, patch: Value) -
             settings.inference_model = v.to_string();
             if v.starts_with("groq/") || v == "whisper-large-v3-turbo" || v == "whisper-large-v3" {
                 settings.stt_provider = "groq".to_string();
-            } else if v.contains('/') || v.contains("mai-transcribe") {
+            } else if v.contains('/') || v.contains("scribe") {
                 settings.stt_provider = "openrouter".to_string();
             } else {
                 settings.stt_provider = "groq".to_string();
             }
         }
         if let Some(v) = obj.get("sttProvider").and_then(|x| x.as_str()) {
-            let is_openrouter_model = settings.inference_model.starts_with("microsoft/")
+            let is_openrouter_model = settings.inference_model.starts_with("elevenlabs/")
                 || settings.inference_model.starts_with("openai/")
-                || settings.inference_model.contains("mai-transcribe");
+                || settings.inference_model.starts_with("microsoft/")
+                || settings.inference_model.contains("scribe");
             let is_groq_model = settings.inference_model.starts_with("groq/");
             if is_openrouter_model {
                 settings.stt_provider = "openrouter".to_string();
@@ -798,6 +1153,9 @@ fn saveSettings(app: AppHandle, state: State<'_, Arc<AppState>>, patch: Value) -
         if let Some(v) = obj.get("localInferenceProfile").and_then(|x| x.as_str()) {
             settings.local_inference_profile = v.to_string();
         }
+        if let Some(v) = obj.get("localWhisperUnloadOnIdle").and_then(|x| x.as_bool()).or_else(|| obj.get("local_whisper_unload_on_idle").and_then(|x| x.as_bool())) {
+            settings.local_whisper_unload_on_idle = v;
+        }
         if let Some(v) = obj.get("pauseOtherAudioWhileTalking").and_then(|x| x.as_bool()) {
             settings.pause_other_audio_while_talking = v;
         }
@@ -813,6 +1171,7 @@ fn saveSettings(app: AppHandle, state: State<'_, Arc<AppState>>, patch: Value) -
             update_windows_startup(v);
         }
         if let Some(v) = obj.get("microphoneDeviceId") {
+            mic_changed = true;
             if v.is_null() {
                 settings.microphone_device_id = None;
             } else if let Some(s) = v.as_str() {
@@ -826,7 +1185,60 @@ fn saveSettings(app: AppHandle, state: State<'_, Arc<AppState>>, patch: Value) -
             }
         }
     }
-    save_settings(&settings);
+    try_save_settings(&settings)?;
+
+    // Reconcile capture immediately when its privacy setting changes. If starting or
+    // stopping the listener fails, restore the persisted state and reject the save.
+    let clipboard_configuration_changed =
+        settings.clipboard_history_enabled != previous_clipboard_history_enabled
+            || settings.clipboard_max_items != previous_clipboard_max_items;
+    if clipboard_configuration_changed {
+        let start_listener = || crate::ambient::clipboard_listener::start_clipboard_listener(
+                state.clipboard.clone(),
+                state.is_internal_pasting.clone(),
+                app.clone(),
+                settings.clipboard_max_items,
+            );
+        let listener_result = if settings.clipboard_history_enabled {
+            if previous_clipboard_history_enabled
+                && settings.clipboard_max_items != previous_clipboard_max_items
+            {
+                crate::ambient::clipboard_listener::stop_clipboard_listener()
+                    .and_then(|()| start_listener())
+            } else {
+                start_listener()
+            }
+        } else {
+            crate::ambient::clipboard_listener::stop_clipboard_listener()
+        };
+
+        if let Err(error) = listener_result {
+            log::error!("Failed to apply clipboard history setting: {error}");
+            settings.clipboard_history_enabled = previous_clipboard_history_enabled;
+            settings.clipboard_max_items = previous_clipboard_max_items;
+            if let Err(restore_error) = try_save_settings(&settings) {
+                log::error!("Failed to restore settings after clipboard listener error: {restore_error}");
+            }
+            if previous_clipboard_history_enabled {
+                if let Err(restart_error) = crate::ambient::clipboard_listener::start_clipboard_listener(
+                    state.clipboard.clone(),
+                    state.is_internal_pasting.clone(),
+                    app.clone(),
+                    previous_clipboard_max_items,
+                ) {
+                    log::error!("Failed to restore clipboard listener after configuration error: {restart_error}");
+                }
+            }
+            emit_to_frontend(&app, "settingsChanged", Some(json!({
+                "clipboardHistoryEnabled": settings.clipboard_history_enabled,
+                "clipboardMaxItems": settings.clipboard_max_items,
+            })));
+            return Err(error);
+        }
+    }
+
+    // Sync hands-free "Hey Rift" wake-word engine
+    sync_wake_word_engine(&app, state.inner(), mic_changed);
 
     // Re-arm low-level keyboard hook with active keys dynamically
     let ptt_target = if settings.push_to_talk_mode == "combo" {
@@ -837,7 +1249,12 @@ fn saveSettings(app: AppHandle, state: State<'_, Arc<AppState>>, patch: Value) -
     state.as_ref().hotkey.set_ptt_key(ptt_target);
     state.as_ref().hotkey.set_toggle_key(settings.toggle_recording_key.as_deref());
 
-    let cfg = getWidgetConfig();
+    let mut cfg = getWidgetConfig();
+    if preview_transcribing_style {
+        if let Some(cfg_obj) = cfg.as_object_mut() {
+            cfg_obj.insert("previewTranscribingStyle".to_string(), json!(true));
+        }
+    }
     emit_to_frontend(&app, "widgetConfigChanged", Some(cfg));
     emit_to_frontend(&app, "settingsChanged", Some(json!({
         "inferenceModel": settings.inference_model,
@@ -846,13 +1263,22 @@ fn saveSettings(app: AppHandle, state: State<'_, Arc<AppState>>, patch: Value) -
         "transcriptionMode": settings.transcription_mode,
         "inferenceProfile": settings.local_inference_profile,
         "localModelProfile": settings.local_inference_profile,
+        "localWhisperUnloadOnIdle": settings.local_whisper_unload_on_idle,
         "tenglishModeEnabled": settings.tenglish_mode_enabled,
+        "whisperModeEnabled": settings.whisper_mode_enabled,
+        "intentRouterEnabled": settings.intent_router_enabled,
+        "wakeWordEnabled": settings.wake_word_enabled,
         "pushToTalkKey": settings.push_to_talk_key,
         "pushToTalkMode": settings.push_to_talk_mode,
         "pushToTalkCombo": settings.push_to_talk_combo,
         "toggleRecordingKey": settings.toggle_recording_key,
+        "widgetStyle": settings.widget_style,
+        "widgetTranscribingStyle": settings.widget_transcribing_style,
+        "widget_transcribing_style": settings.widget_transcribing_style,
+        "clipboardHistoryEnabled": settings.clipboard_history_enabled,
+        "clipboardMaxItems": settings.clipboard_max_items,
     })));
-    json!({ "success": true })
+    Ok(json!({ "success": true }))
 }
 
 #[tauri::command]
@@ -1058,23 +1484,28 @@ async fn testGroqKey(key: String) -> Value {
 }
 
 #[tauri::command]
+async fn testSavedGroqKey() -> Value {
+    match CredentialsProvider::get_api_key() {
+        Some(key) => testGroqKey(key).await,
+        None => json!({ "success": false, "valid": false, "message": "No Groq API key is saved." }),
+    }
+}
+
+#[tauri::command]
 fn saveGroqKey(key: String) -> Value {
     let key = key.trim().to_string();
     if let Err(e) = CredentialsProvider::set_api_key(&key) {
         return json!({ "success": false, "message": e.to_string() });
     }
-    json!({ "success": true, "message": "Groq API key saved securely." })
+    json!({ "success": true, "message": "Groq API key saved." })
 }
 
 #[tauri::command]
 fn deleteGroqKey() -> Value {
-    let _ = CredentialsProvider::delete_api_key();
-    json!({ "success": true })
-}
-
-#[tauri::command]
-fn getApiKey() -> Option<String> {
-    CredentialsProvider::get_api_key()
+    match CredentialsProvider::delete_api_key() {
+        Ok(()) => json!({ "success": true }),
+        Err(error) => json!({ "success": false, "message": error }),
+    }
 }
 
 #[tauri::command]
@@ -1163,23 +1594,28 @@ async fn testOpenRouterKey(key: String) -> Value {
 }
 
 #[tauri::command]
+async fn testSavedOpenRouterKey() -> Value {
+    match CredentialsProvider::get_openrouter_api_key() {
+        Some(key) => testOpenRouterKey(key).await,
+        None => json!({ "success": false, "valid": false, "message": "No OpenRouter API key is saved." }),
+    }
+}
+
+#[tauri::command]
 fn saveOpenRouterKey(key: String) -> Value {
     let key = key.trim().to_string();
     if let Err(e) = CredentialsProvider::set_openrouter_api_key(&key) {
         return json!({ "success": false, "message": e.to_string() });
     }
-    json!({ "success": true, "message": "OpenRouter API key saved securely." })
+    json!({ "success": true, "message": "OpenRouter API key saved." })
 }
 
 #[tauri::command]
 fn deleteOpenRouterKey() -> Value {
-    let _ = CredentialsProvider::delete_openrouter_api_key();
-    json!({ "success": true })
-}
-
-#[tauri::command]
-fn getOpenRouterApiKey() -> Option<String> {
-    CredentialsProvider::get_openrouter_api_key()
+    match CredentialsProvider::delete_openrouter_api_key() {
+        Ok(()) => json!({ "success": true }),
+        Err(error) => json!({ "success": false, "message": error }),
+    }
 }
 
 #[tauri::command]
@@ -1207,6 +1643,25 @@ fn getHistory(state: State<'_, Arc<AppState>>, filter: Option<Value>) -> Result<
         .unwrap_or(50);
 
     state.as_ref().history.get_recent(limit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn searchHistory(
+    state: State<'_, Arc<AppState>>,
+    query: String,
+    filter: String,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> Result<crate::storage::history::HistorySearchPage, String> {
+    let history = state.history.clone();
+    let limit = limit.unwrap_or(50);
+    let offset = offset.unwrap_or(0);
+    tauri::async_runtime::spawn_blocking(move || {
+        history.search_history(&query, &filter, limit, offset)
+    })
+    .await
+    .map_err(|error| format!("History search worker failed: {error}"))?
+    .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -1297,7 +1752,7 @@ fn pasteClipById(
     id: i64,
 ) -> Result<(), String> {
     if let Ok(Some(clip)) = state.clipboard.get_clip_by_id(id) {
-        let target_raw = state.target_window.lock().ok().and_then(|g| *g);
+        let target_raw = *state.target_window.lock();
         let target_hwnd = TextInjector::target_from_raw(target_raw.map(|v| v as usize));
 
         state.is_internal_pasting.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -1334,9 +1789,10 @@ fn getClipboardCounts(state: State<'_, Arc<AppState>>) -> Result<Value, String> 
 
 fn compute_remaining_usage(state: &AppState, settings: &crate::storage::settings::AppSettings) -> Value {
     let mode = settings.transcription_mode.to_lowercase();
-    let is_openrouter = settings.inference_model.starts_with("microsoft/")
+    let is_openrouter = settings.inference_model.starts_with("elevenlabs/")
         || settings.inference_model.starts_with("openai/")
-        || settings.inference_model.contains("mai-transcribe")
+        || settings.inference_model.starts_with("microsoft/")
+        || settings.inference_model.contains("scribe")
         || (settings.stt_provider == "openrouter" && !settings.inference_model.starts_with("groq/"));
 
     let primary_is_groq = !is_openrouter && (
@@ -1437,8 +1893,8 @@ fn compute_remaining_usage(state: &AppState, settings: &crate::storage::settings
     }
 
     let balance = cached.remaining_balance;
-    let price_per_minute = if settings.inference_model.contains("mai-transcribe") {
-        0.00523
+    let price_per_minute = if settings.inference_model.contains("scribe") {
+        0.00092
     } else {
         0.006
     };
@@ -1461,8 +1917,8 @@ fn compute_remaining_usage(state: &AppState, settings: &crate::storage::settings
         format!("{:.0}s", remaining_seconds)
     };
 
-    let friendly_name = if settings.inference_model.contains("mai-transcribe") {
-        "MAI-Transcribe 2"
+    let friendly_name = if settings.inference_model.contains("scribe") {
+        "ElevenLabs Scribe v2"
     } else if settings.inference_model.contains("turbo") {
         "OpenAI Turbo"
     } else {
@@ -1615,7 +2071,7 @@ fn getAvailableCloudModels() -> Value {
     json!({ "models": [
         "groq/whisper-large-v3-turbo",
         "groq/whisper-large-v3",
-        "microsoft/mai-transcribe-2",
+        "elevenlabs/scribe-v2",
         "openai/whisper-large-v3-turbo",
         "openai/whisper-large-v3"
     ] })
@@ -1790,7 +2246,8 @@ fn update_windows_startup(enabled: bool) {
 #[tauri::command]
 fn openSettingsWindow(app: AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.eval("window.location.href = 'settings.html';");
+        use tauri::Emitter;
+        let _ = app.emit("navigateTo", "settings");
         show_and_focus_window(&window);
     }
 }
@@ -1798,7 +2255,7 @@ fn openSettingsWindow(app: AppHandle) {
 #[tauri::command]
 fn openOnboardingWindow(app: AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.eval("window.location.href = 'onboarding-welcome.html';");
+        let _ = window.eval("window.location.href = 'screens/onboarding-welcome.html';");
         show_and_focus_window(&window);
     }
 }
@@ -1818,10 +2275,11 @@ fn quitApplication(app: AppHandle) {
 
 #[tauri::command]
 fn cancelRecording(app: AppHandle, state: State<'_, Arc<AppState>>) {
+    let _transition = state.recording_transition.lock();
     crate::audio::mute::unmute_system_audio();
     state.is_toggle_recording.store(false, std::sync::atomic::Ordering::SeqCst);
     {
-        let mut recorder = state.recorder.lock().unwrap();
+        let mut recorder = state.recorder.lock();
         recorder.cancel();
     }
     stop_dynamic_focus_tracker();
@@ -1834,7 +2292,7 @@ fn cancelRecording(app: AppHandle, state: State<'_, Arc<AppState>>) {
 
 #[tauri::command]
 fn toggleAmbientMemory(app: AppHandle, state: State<'_, Arc<AppState>>, enable: bool) {
-    let mut recorder = state.ambient_recorder.lock().unwrap();
+    let mut recorder = state.ambient_recorder.lock();
     if enable {
         let _ = recorder.start();
         log_status("Ambient Memory started.");
@@ -1845,41 +2303,28 @@ fn toggleAmbientMemory(app: AppHandle, state: State<'_, Arc<AppState>>, enable: 
 }
 
 #[tauri::command]
-fn startRecording(app: AppHandle, state: State<'_, Arc<AppState>>) {
-    let is_rec = state.is_toggle_recording.load(std::sync::atomic::Ordering::SeqCst);
-    if is_rec {
-        return;
+fn startRecording(app: AppHandle, state: State<'_, Arc<AppState>>) -> Value {
+    let _transition = state.recording_transition.lock();
+    if state.is_toggle_recording.compare_exchange(
+        false,
+        true,
+        std::sync::atomic::Ordering::SeqCst,
+        std::sync::atomic::Ordering::SeqCst,
+    ).is_err() {
+        return json!({ "success": true, "isRecording": true });
     }
     let s = load_settings();
     if s.recording_sounds {
         crate::audio::cue::play_start(s.sound_volume);
     }
     crate::audio::mute::mute_system_audio_delayed(180);
-    state.is_toggle_recording.store(true, std::sync::atomic::Ordering::SeqCst);
-
     let target_hwnd = TextInjector::get_foreground_window();
-    {
-        let mut target = state.target_window.lock().unwrap();
-        if target.is_none() {
-            *target = Some(target_hwnd.0 as isize);
-        }
-    }
-    start_dynamic_focus_tracker(Arc::clone(&state));
-
-    emit_to_frontend(&app, "recordingStarted", None);
-    if let Some(key) = CredentialsProvider::get_openrouter_api_key() {
-        state.openrouter.prewarm(&key);
-    }
-    if let Some(gkey) = CredentialsProvider::get_api_key() {
-        state.groq.prewarm(&gkey);
-    }
-
     let app_for_level = app.clone();
     let last_level = Arc::new(std::sync::Mutex::new(std::time::Instant::now()));
     let boost = s.mic_boost_multiplier();
     let dev = s.microphone_device_id;
-    let mut recorder = state.recorder.lock().unwrap();
-    let _ = recorder.start(dev.as_deref(), boost, move |level| {
+    let on_stop = recording_stop_handler(app.clone(), Arc::clone(&*state));
+    let start_result = state.recorder.lock().start(dev.as_deref(), boost, move |level| {
         let now = std::time::Instant::now();
         let should_emit = if let Ok(mut l) = last_level.try_lock() {
             if now.duration_since(*l).as_millis() >= 40 {
@@ -1894,46 +2339,111 @@ fn startRecording(app: AppHandle, state: State<'_, Arc<AppState>>) {
         if should_emit {
             emit_to_frontend(&app_for_level, "audioLevel", Some(json!(level)));
         }
-    });
+    }, on_stop);
+
+    if let Err(error) = start_result {
+        state.is_toggle_recording.store(false, std::sync::atomic::Ordering::SeqCst);
+        crate::audio::mute::unmute_system_audio();
+        if s.recording_sounds {
+            crate::audio::cue::play_cancel(s.sound_volume);
+        }
+        log::error!("Failed to start audio capture: {error}");
+        emit_to_frontend(&app, "recordingError", Some(json!({ "message": error })));
+        return json!({ "success": false, "isRecording": false });
+    }
+
+    {
+        let mut target = state.target_window.lock();
+        if target.is_none() {
+            *target = Some(target_hwnd.0 as isize);
+        }
+    }
+    start_dynamic_focus_tracker(Arc::clone(&state));
+    emit_to_frontend(&app, "recordingStarted", None);
+    if let Some(key) = CredentialsProvider::get_openrouter_api_key() {
+        state.openrouter.prewarm(&key);
+    }
+    if let Some(gkey) = CredentialsProvider::get_api_key() {
+        state.groq.prewarm(&gkey);
+    }
+    json!({ "success": true, "isRecording": true })
 }
 
 #[tauri::command]
 fn stopRecording(app: AppHandle, state: State<'_, Arc<AppState>>) {
+    stop_recording_inner(app, Arc::clone(&*state));
+}
+
+fn recording_stop_handler(
+    app: AppHandle,
+    state: Arc<AppState>,
+) -> impl Fn(crate::audio::capture::CaptureStopReason) + Send + Sync + 'static {
+    move |reason| {
+        let app = app.clone();
+        let state = Arc::clone(&state);
+        std::thread::spawn(move || {
+            if matches!(reason, crate::audio::capture::CaptureStopReason::MaximumDuration) {
+                emit_to_frontend(
+                    &app,
+                    "toast",
+                    Some(json!({
+                        "message": "Recording stopped at the 10-minute limit.",
+                        "type": "info"
+                    })),
+                );
+            }
+            stop_recording_inner(app, state);
+        });
+    }
+}
+
+fn stop_recording_inner(app: AppHandle, state: Arc<AppState>) {
+    let _transition = state.recording_transition.lock();
+    if !state
+        .is_toggle_recording
+        .swap(false, std::sync::atomic::Ordering::SeqCst)
+    {
+        return;
+    }
     crate::audio::mute::unmute_system_audio();
-    state.is_toggle_recording.store(false, std::sync::atomic::Ordering::SeqCst);
     emit_to_frontend(&app, "recordingStopped", None);
-    let result = {
-        let mut recorder = state.recorder.lock().unwrap();
-        recorder.stop()
-    };
+    let result = state.recorder.lock().stop();
+    drop(_transition);
 
-    if result.is_short_press {
-        stop_dynamic_focus_tracker();
-        let s = load_settings();
-        if s.recording_sounds {
-            crate::audio::cue::play_cancel(s.sound_volume);
+    std::thread::spawn(move || {
+        if let Some(error) = result.error.as_ref() {
+            stop_dynamic_focus_tracker();
+            emit_to_frontend(&app, "recordingError", Some(json!({ "message": error })));
+            return;
         }
-        emit_to_frontend(&app, "recordingCancelled", None);
-        return;
-    }
 
-    if result.is_silent {
-        stop_dynamic_focus_tracker();
-        let s = load_settings();
-        if s.recording_sounds {
-            crate::audio::cue::play_cancel(s.sound_volume);
+        if result.is_short_press {
+            stop_dynamic_focus_tracker();
+            let settings = load_settings();
+            if settings.recording_sounds {
+                crate::audio::cue::play_cancel(settings.sound_volume);
+            }
+            emit_to_frontend(&app, "recordingCancelled", None);
+            return;
         }
-        emit_to_frontend(&app, "recordingSaved", Some(json!({ "isSilent": true })));
-        return;
-    }
 
+        if result.is_silent {
+            stop_dynamic_focus_tracker();
+            let settings = load_settings();
+            if settings.recording_sounds {
+                crate::audio::cue::play_cancel(settings.sound_volume);
+            }
+            emit_to_frontend(&app, "recordingSaved", Some(json!({ "isSilent": true })));
+            return;
+        }
 
-    process_and_transcribe(
-        app,
-        Arc::clone(&state),
-        result.wav_bytes,
-        result.duration_seconds,
-    );
+        process_and_transcribe(
+            app,
+            state,
+            Arc::from(result.wav_bytes),
+            result.duration_seconds,
+        );
+    });
 }
 
 #[tauri::command]
@@ -1943,53 +2453,20 @@ fn toggleRecording(app: AppHandle, state: State<'_, Arc<AppState>>) -> Value {
         stopRecording(app, state);
         json!({ "isRecording": false })
     } else {
-        startRecording(app, state);
-        json!({ "isRecording": true })
+        let result = startRecording(app, state);
+        json!({ "isRecording": result.get("isRecording").and_then(Value::as_bool).unwrap_or(false) })
     }
-}
-
-pub fn get_recordings_dir() -> std::path::PathBuf {
-    // 1. Explicit recordings directory under Rift-rust requested by user
-    let explicit_dir = std::path::PathBuf::from(r"C:\Saisrikar@Kokku\Vibe Coding\Rift\Rift-rust\recordings");
-    if explicit_dir.exists() || std::fs::create_dir_all(&explicit_dir).is_ok() {
-        return explicit_dir;
-    }
-    // 2. Relative to current executable
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            let p = parent.join("recordings");
-            if p.exists() || std::fs::create_dir_all(&p).is_ok() {
-                return p;
-            }
-        }
-    }
-    // 3. Fallback to AppData
-    let appdata = crate::storage::settings::get_app_data_dir().join("recordings");
-    let _ = std::fs::create_dir_all(&appdata);
-    appdata
 }
 
 #[tauri::command]
 fn retryLastTranscription(app: AppHandle, state: State<'_, Arc<AppState>>) -> Result<Value, String> {
     let cached = {
-        let guard = state.last_recording.lock().unwrap();
+        let guard = state.last_recording.lock();
         guard.clone()
     };
 
-    let (wav_bytes, duration) = match cached {
-        Some(data) => data,
-        None => {
-            let rec_dir = get_recordings_dir();
-            let file_path = rec_dir.join("last_recording.wav");
-            if file_path.exists() {
-                let bytes = std::fs::read(&file_path).map_err(|e| format!("Failed to read saved recording: {}", e))?;
-                let dur = (bytes.len().saturating_sub(44) as f64) / (16000.0 * 2.0);
-                (bytes, dur)
-            } else {
-                return Err("No saved recording found to retry".to_string());
-            }
-        }
-    };
+    let (wav_bytes, duration) = cached
+        .ok_or_else(|| "No recording is available to retry in this session".to_string())?;
 
     process_and_transcribe(app, Arc::clone(&state), wav_bytes, duration);
     Ok(json!({ "success": true, "duration": duration }))
@@ -1998,19 +2475,11 @@ fn retryLastTranscription(app: AppHandle, state: State<'_, Arc<AppState>>) -> Re
 #[tauri::command]
 fn hasSavedRecording(state: State<'_, Arc<AppState>>) -> Value {
     let cached = {
-        let guard = state.last_recording.lock().unwrap();
+        let guard = state.last_recording.lock();
         guard.clone()
     };
     if let Some((_, dur)) = cached {
         return json!({ "hasRecording": true, "duration": dur });
-    }
-    let rec_dir = get_recordings_dir();
-    let file_path = rec_dir.join("last_recording.wav");
-    if file_path.exists() {
-        if let Ok(meta) = std::fs::metadata(&file_path) {
-            let dur = (meta.len().saturating_sub(44) as f64) / (16000.0 * 2.0);
-            return json!({ "hasRecording": true, "duration": dur });
-        }
     }
     json!({ "hasRecording": false, "duration": 0.0 })
 }
@@ -2110,26 +2579,22 @@ async fn process_ambient_memory(
 fn process_and_transcribe(
     app: AppHandle,
     state: Arc<AppState>,
-    wav_bytes: Vec<u8>,
+    wav_bytes: Arc<[u8]>,
     duration_seconds: f64,
 ) {
     // 1. Stage in-memory for instant retry
     {
-        let mut last = state.last_recording.lock().unwrap();
-        *last = Some((wav_bytes.clone(), duration_seconds));
+        let mut last = state.last_recording.lock();
+        *last = Some((Arc::clone(&wav_bytes), duration_seconds));
     }
-
-    // 2. Persist to dedicated recordings folder on disk
-    let wav_for_disk = wav_bytes.clone();
-    std::thread::spawn(move || {
-        let rec_dir = get_recordings_dir();
-        let file_path = rec_dir.join("last_recording.wav");
-        let _ = std::fs::write(&file_path, &wav_for_disk);
-    });
 
     let settings = load_settings();
     let (initial_display_model, initial_provider) = if settings.tenglish_mode_enabled {
-        ("MAI-Transcribe 2".to_string(), "openrouter".to_string())
+        if settings.stt_provider == "groq" {
+            ("Whisper Large (Telugu · Groq)".to_string(), "groq".to_string())
+        } else {
+            ("ElevenLabs Scribe v2".to_string(), "openrouter".to_string())
+        }
     } else if settings.transcription_mode == "local" {
         (format!("Local ({})", settings.local_inference_profile), "local".to_string())
     } else if settings.stt_provider == "groq" || settings.inference_model.starts_with("groq/") {
@@ -2139,12 +2604,14 @@ fn process_and_transcribe(
             "Whisper Large (Groq)".to_string()
         };
         (name, "groq".to_string())
+    } else if settings.inference_model.contains("scribe") {
+        ("ElevenLabs Scribe v2".to_string(), "openrouter".to_string())
     } else if settings.inference_model.contains("whisper-large-v3-turbo") {
         ("Whisper Turbo (OpenRouter)".to_string(), "openrouter".to_string())
     } else if settings.inference_model.contains("whisper-large-v3") {
         ("Whisper Large (OpenRouter)".to_string(), "openrouter".to_string())
     } else {
-        ("MAI-Transcribe 2".to_string(), "openrouter".to_string())
+        ("ElevenLabs Scribe v2".to_string(), "openrouter".to_string())
     };
 
     emit_to_frontend(&app, "recordingStopped", Some(json!({
@@ -2160,10 +2627,9 @@ fn process_and_transcribe(
     })));
 
     tauri::async_runtime::spawn(async move {
-        let settings = load_settings();
         let mode = settings.transcription_mode.to_lowercase(); // "cloud", "local", "auto"
         let target_raw = {
-            let target = state.target_window.lock().unwrap();
+            let target = state.target_window.lock();
             *target
         };
         let window_ctx = if settings.context_aware_formatting {
@@ -2173,12 +2639,12 @@ fn process_and_transcribe(
         };
 
         let mut transcribed_result: Result<(String, String, &'static str), String> = Err("No transcription result".to_string());
-        let wav_for_local = wav_bytes.clone();
+        let wav_for_local = Arc::clone(&wav_bytes);
 
         if mode == "local" {
             let local_profile = settings.local_inference_profile.clone();
             let res = tokio::task::spawn_blocking(move || {
-                stt::local::transcribe_local(&wav_for_local, &local_profile)
+                stt::local::transcribe_local_shared(wav_for_local, &local_profile)
             }).await.map_err(|e| e.to_string()).and_then(|r| r);
 
             match res {
@@ -2203,11 +2669,22 @@ fn process_and_transcribe(
             let target_lang = if settings.tenglish_mode_enabled { Some("te") } else { None };
 
             let (primary_is_groq, gmodel_str, or_model_str) = if settings.tenglish_mode_enabled {
-                (false, "whisper-large-v3-turbo".to_string(), "microsoft/mai-transcribe-2".to_string())
+                let has_groq = groq_key.as_ref().map(|k| !k.is_empty()).unwrap_or(false);
+                if has_groq && provider == "groq" {
+                    (true, "whisper-large-v3".to_string(), "elevenlabs/scribe-v2".to_string())
+                } else {
+                    let om = if settings.inference_model.contains("whisper") || settings.tenglish_stt_tier.contains("turbo") {
+                        "openai/whisper-large-v3-turbo".to_string()
+                    } else {
+                        "elevenlabs/scribe-v2".to_string()
+                    };
+                    (false, "whisper-large-v3".to_string(), om)
+                }
             } else {
-                let is_openrouter = settings.inference_model.starts_with("microsoft/")
+                let is_openrouter = settings.inference_model.starts_with("elevenlabs/")
                     || settings.inference_model.starts_with("openai/")
-                    || settings.inference_model.contains("mai-transcribe")
+                    || settings.inference_model.starts_with("microsoft/")
+                    || settings.inference_model.contains("scribe")
                     || (provider == "openrouter" && !settings.inference_model.starts_with("groq/"));
 
                 let is_groq = !is_openrouter && (provider == "groq" || settings.inference_model.starts_with("groq/") || settings.inference_model.contains("whisper"));
@@ -2220,7 +2697,7 @@ fn process_and_transcribe(
                     settings.inference_model.clone()
                 };
                 let om = if settings.inference_model.is_empty() || settings.inference_model.starts_with("groq/") {
-                    "microsoft/mai-transcribe-2".to_string()
+                    "elevenlabs/scribe-v2".to_string()
                 } else {
                     settings.inference_model.clone()
                 };
@@ -2279,7 +2756,7 @@ fn process_and_transcribe(
                                 "provider": "groq"
                             })),
                         );
-                        match state.groq.transcribe(gkey, wav_bytes.clone(), gmodel, groq_prompt.as_deref(), target_lang).await {
+                        match state.groq.transcribe(gkey, Arc::clone(&wav_bytes), gmodel, groq_prompt.as_deref(), target_lang).await {
                             Ok(raw_text) => {
                                 transcribed_result = Ok((raw_text, gmodel.to_string(), "groq"));
                                 cloud_success = true;
@@ -2289,7 +2766,7 @@ fn process_and_transcribe(
                                 if let Some(ref okey) = or_key {
                                     if !okey.is_empty() {
                                         emit_to_frontend(&app, "transcriptionProcessing", Some(json!({ "model": "OpenRouter (Backup)", "provider": "openrouter", "rawModel": &or_model, "isFallback": true })));
-                                        match state.openrouter.transcribe(okey, wav_bytes.clone(), &or_model, phrases_ref, target_lang).await {
+                                        match state.openrouter.transcribe(okey, Arc::clone(&wav_bytes), &or_model, phrases_ref, target_lang).await {
                                             Ok(raw_text) => {
                                                 transcribed_result = Ok((raw_text, or_model.clone(), "openrouter"));
                                                 cloud_success = true;
@@ -2336,15 +2813,15 @@ fn process_and_transcribe(
                 if let Some(ref key) = or_key {
                     if !key.is_empty() {
                         let friendly_name = if settings.tenglish_mode_enabled {
-                            if or_model.contains("mai-transcribe") {
-                                "MAI-Transcribe 2 (Telugu · Studio)"
+                            if or_model.contains("scribe") {
+                                "ElevenLabs Scribe v2 (Telugu · Studio)"
                             } else {
                                 "Whisper Large (Telugu · Studio)"
                             }
+                        } else if or_model.contains("scribe") {
+                            "ElevenLabs Scribe v2"
                         } else if or_model.contains("whisper-large-v3-turbo") || or_model.contains("turbo") {
                             "Whisper Turbo"
-                        } else if or_model.contains("mai-transcribe") {
-                            "MAI-Transcribe 2"
                         } else if or_model.contains("whisper-large-v3") {
                             "Whisper Large"
                         } else {
@@ -2360,7 +2837,7 @@ fn process_and_transcribe(
                                 "provider": "openrouter"
                             })),
                         );
-                        match state.openrouter.transcribe(key, wav_bytes.clone(), &or_model, phrases_ref, target_lang).await {
+                        match state.openrouter.transcribe(key, Arc::clone(&wav_bytes), &or_model, phrases_ref, target_lang).await {
                             Ok(raw_text) => {
                                 transcribed_result = Ok((raw_text, or_model.clone(), "openrouter"));
                                 cloud_success = true;
@@ -2370,7 +2847,7 @@ fn process_and_transcribe(
                                 emit_to_frontend(&app, "transcriptionProcessing", Some(json!({ "model": "Whisper Turbo (Backup)", "provider": "groq", "rawModel": "whisper-large-v3-turbo", "isFallback": true })));
                                 if let Some(ref gkey) = groq_key {
                                     if !gkey.is_empty() {
-                                        match state.groq.transcribe(gkey, wav_bytes.clone(), "whisper-large-v3-turbo", groq_prompt.as_deref(), target_lang).await {
+                                        match state.groq.transcribe(gkey, Arc::clone(&wav_bytes), "whisper-large-v3-turbo", groq_prompt.as_deref(), target_lang).await {
                                             Ok(raw_text) => {
                                                 transcribed_result = Ok((raw_text, "whisper-large-v3-turbo".to_string(), "groq"));
                                                 cloud_success = true;
@@ -2404,7 +2881,7 @@ fn process_and_transcribe(
                     // Fall back to Groq if OpenRouter key not configured
                     if let Some(ref gkey) = groq_key {
                         if !gkey.is_empty() {
-                            match state.groq.transcribe(gkey, wav_bytes.clone(), "whisper-large-v3-turbo", groq_prompt.as_deref(), target_lang).await {
+                            match state.groq.transcribe(gkey, Arc::clone(&wav_bytes), "whisper-large-v3-turbo", groq_prompt.as_deref(), target_lang).await {
                                 Ok(raw_text) => {
                                     transcribed_result = Ok((raw_text, "whisper-large-v3-turbo".to_string(), "groq"));
                                     cloud_success = true;
@@ -2448,11 +2925,12 @@ fn process_and_transcribe(
             let target_lang = if settings.tenglish_mode_enabled { Some("te") } else { None };
 
             let (primary_is_groq, gmodel_str, or_model_str) = if settings.tenglish_mode_enabled {
-                (false, "whisper-large-v3-turbo".to_string(), "microsoft/mai-transcribe-2".to_string())
+                (false, "whisper-large-v3-turbo".to_string(), "elevenlabs/scribe-v2".to_string())
             } else {
-                let is_openrouter = settings.inference_model.starts_with("microsoft/")
+                let is_openrouter = settings.inference_model.starts_with("elevenlabs/")
                     || settings.inference_model.starts_with("openai/")
-                    || settings.inference_model.contains("mai-transcribe")
+                    || settings.inference_model.starts_with("microsoft/")
+                    || settings.inference_model.contains("scribe")
                     || (settings.stt_provider == "openrouter" && !settings.inference_model.starts_with("groq/"));
 
                 let is_groq = !is_openrouter && (settings.stt_provider == "groq" || settings.inference_model.starts_with("groq/") || settings.inference_model.contains("whisper"));
@@ -2465,7 +2943,7 @@ fn process_and_transcribe(
                     settings.inference_model.clone()
                 };
                 let om = if settings.inference_model.is_empty() || settings.inference_model.starts_with("groq/") {
-                    "microsoft/mai-transcribe-2".to_string()
+                    "elevenlabs/scribe-v2".to_string()
                 } else {
                     settings.inference_model.clone()
                 };
@@ -2522,7 +3000,7 @@ fn process_and_transcribe(
                                 "provider": "groq"
                             })),
                         );
-                        match state.groq.transcribe(gkey, wav_bytes.clone(), gmodel, groq_prompt.as_deref(), target_lang).await {
+                        match state.groq.transcribe(gkey, Arc::clone(&wav_bytes), gmodel, groq_prompt.as_deref(), target_lang).await {
                             Ok(raw_text) => {
                                 transcribed_result = Ok((raw_text, gmodel.to_string(), "groq"));
                                 cascade_success = true;
@@ -2539,7 +3017,7 @@ fn process_and_transcribe(
                     emit_to_frontend(&app, "transcriptionProcessing", Some(json!({ "model": "OpenRouter (Backup)", "provider": "openrouter", "rawModel": &or_model, "isFallback": true })));
                     if let Some(ref okey) = or_key {
                         if !okey.is_empty() {
-                            match state.openrouter.transcribe(okey, wav_bytes.clone(), &or_model, phrases_ref, target_lang).await {
+                            match state.openrouter.transcribe(okey, Arc::clone(&wav_bytes), &or_model, phrases_ref, target_lang).await {
                                 Ok(raw_text) => {
                                     transcribed_result = Ok((raw_text, or_model.clone(), "openrouter"));
                                     cascade_success = true;
@@ -2561,15 +3039,15 @@ fn process_and_transcribe(
                 if let Some(ref okey) = or_key {
                     if !okey.is_empty() {
                         let friendly_name = if settings.tenglish_mode_enabled {
-                            if or_model.contains("mai-transcribe") {
-                                "MAI-Transcribe 2 (Telugu · Studio)"
+                            if or_model.contains("scribe") {
+                                "ElevenLabs Scribe v2 (Telugu · Studio)"
                             } else {
                                 "Whisper Large (Telugu · Studio)"
                             }
+                        } else if or_model.contains("scribe") {
+                            "ElevenLabs Scribe v2"
                         } else if or_model.contains("whisper-large-v3-turbo") || or_model.contains("turbo") {
                             "Whisper Turbo"
-                        } else if or_model.contains("mai-transcribe") {
-                            "MAI-Transcribe 2"
                         } else if or_model.contains("whisper-large-v3") {
                             "Whisper Large"
                         } else {
@@ -2585,7 +3063,7 @@ fn process_and_transcribe(
                                 "provider": "openrouter"
                             })),
                         );
-                        match state.openrouter.transcribe(okey, wav_bytes.clone(), &or_model, phrases_ref, target_lang).await {
+                        match state.openrouter.transcribe(okey, Arc::clone(&wav_bytes), &or_model, phrases_ref, target_lang).await {
                             Ok(raw_text) => {
                                 transcribed_result = Ok((raw_text, or_model.clone(), "openrouter"));
                                 cascade_success = true;
@@ -2602,7 +3080,7 @@ fn process_and_transcribe(
                     emit_to_frontend(&app, "transcriptionProcessing", Some(json!({ "model": "Whisper Turbo (Backup)", "provider": "groq", "rawModel": "whisper-large-v3-turbo", "isFallback": true })));
                     if let Some(ref gkey) = groq_key {
                         if !gkey.is_empty() {
-                            match state.groq.transcribe(gkey, wav_bytes.clone(), "whisper-large-v3-turbo", groq_prompt.as_deref(), target_lang).await {
+                            match state.groq.transcribe(gkey, Arc::clone(&wav_bytes), "whisper-large-v3-turbo", groq_prompt.as_deref(), target_lang).await {
                                 Ok(raw_text) => {
                                     transcribed_result = Ok((raw_text, "whisper-large-v3-turbo".to_string(), "groq"));
                                     cascade_success = true;
@@ -2626,7 +3104,7 @@ fn process_and_transcribe(
                 emit_to_frontend(&app, "transcriptionProcessing", Some(json!({ "model": "Offline Whisper", "provider": "local", "rawModel": &settings.local_inference_profile, "isFallback": true })));
                 let local_profile = settings.local_inference_profile.clone();
                 let res = tokio::task::spawn_blocking(move || {
-                    stt::local::transcribe_local(&wav_for_local, &local_profile)
+                stt::local::transcribe_local_shared(wav_for_local, &local_profile)
                 }).await.map_err(|e| e.to_string()).and_then(|r| r);
 
                 match res {
@@ -2658,9 +3136,11 @@ fn process_and_transcribe(
 
         match transcribed_result {
             Ok((raw_text, used_model, engine_used)) => {
-                // Telugu -> Tenglish transliteration (Setup 1: Microsoft MAI-Transcribe 2 + Google Gemini 2.5 Flash)
-                let (raw_text, _translit_prov) = if settings.tenglish_mode_enabled
-                    || crate::text::transliterate::contains_telugu(&raw_text)
+                let raw_text = crate::ai::intent_router::strip_wake_word_prefix(&raw_text);
+                // Telugu -> Tenglish transliteration (Setup 1: ElevenLabs Scribe v2 + Google Gemini 2.5 Flash)
+                let (raw_text, _translit_prov) = if !raw_text.trim().is_empty()
+                    && (settings.tenglish_mode_enabled
+                        || crate::text::transliterate::contains_telugu(&raw_text))
                 {
                     let translit_label = "Gemini 2.5 Flash";
                     let translit_provider = "openrouter";
@@ -2694,6 +3174,7 @@ fn process_and_transcribe(
                 };
 
                 let cleaned = clean_transcript(&raw_text);
+                let cleaned = crate::ai::intent_router::strip_wake_word_prefix(&cleaned);
 
                 // Apply custom dictionary
                 let entries = state.dictionary.list_entries().unwrap_or_default();
@@ -2717,16 +3198,176 @@ fn process_and_transcribe(
                     return;
                 }
 
-                // AI Auto-Enhancement & Context-Aware Smart Formatting (Skip if already formatted by Tenglish)
+                // -----------------------------------------------------------------
+                // Universal Voice Intent Router (Modes D, B, C; Mode A = 0ms fast-path)
+                // -----------------------------------------------------------------
+                let mut intent_router_handled = false;
+                if settings.intent_router_enabled && !settings.tenglish_mode_enabled {
+                    // Mode D: Background Scratchpad Note ("Note to self...", "Add to scratchpad...")
+                    if let Some(note_body) = crate::ai::intent_router::detect_background_note(&final_text) {
+                        stop_dynamic_focus_tracker();
+                        let note_persisted = match state.library.append_voice_note(&note_body) {
+                            Ok(()) => true,
+                            Err(error) => {
+                                log::error!("Failed to persist Scratchpad voice note: {}", error);
+                                crate::storage::settings::append_scratchpad_inbox_note(&note_body);
+                                false
+                            }
+                        };
+                        if note_persisted {
+                            emit_to_frontend(&app, "libraryUpdated", None);
+                        }
+                        emit_to_frontend(
+                            &app,
+                            "appendScratchpadNote",
+                            Some(json!({ "text": &note_body, "persisted": note_persisted })),
+                        );
+
+                        if settings.recording_sounds {
+                            crate::audio::cue::play_success(settings.sound_volume);
+                        }
+
+                        let preview: String = note_body.chars().take(55).collect();
+                        emit_to_frontend(
+                            &app,
+                            "toast",
+                            Some(json!({
+                                "message": format!("📝 Saved to Scratchpad: \"{}\"", preview),
+                                "type": "info"
+                            })),
+                        );
+                        emit_to_frontend(
+                            &app,
+                            "transcriptionSuccess",
+                            Some(json!({
+                                "text": &note_body,
+                                "duration": duration_seconds,
+                                "words": note_body.split_whitespace().count(),
+                                "model": &used_model,
+                                "engine": engine_used,
+                                "targetApp": "Scratchpad (Background)",
+                            })),
+                        );
+                        emit_to_frontend(
+                            &app,
+                            "transcriptionComplete",
+                            Some(json!({
+                                "text": &note_body,
+                                "duration": duration_seconds,
+                                "words": note_body.split_whitespace().count(),
+                                "model": &used_model,
+                                "engine": engine_used,
+                                "targetApp": "Scratchpad (Background)",
+                            })),
+                        );
+                        emit_to_frontend(
+                            &app,
+                            "textInjected",
+                            Some(json!({ "method": "pasted" })),
+                        );
+
+                        let _ = state.history.insert_entry(
+                            &format!("[Scratchpad Note] {}", note_body),
+                            duration_seconds,
+                            Some("Rift Scratchpad"),
+                            Some(&used_model),
+                            Some(engine_used),
+                        );
+                        if engine_used == "openrouter" {
+                            let price_per_min = if used_model.contains("scribe") { 0.00092 } else { 0.006 };
+                            state.openrouter.deduct_credits_local(duration_seconds, price_per_min);
+                        }
+                        emit_to_frontend(&app, "usageUpdated", None);
+                        return;
+                    }
+
+                    // Mode B: Inline Selection Magic Edit (only probes target selection if phrase looks like an edit instruction)
+                    if crate::ai::intent_router::looks_like_selection_instruction(&final_text) {
+                        state.is_internal_pasting.store(true, std::sync::atomic::Ordering::SeqCst);
+                        let sel_hwnd = TextInjector::target_from_raw(target_raw.map(|v| v as usize));
+                        let selected_opt = TextInjector::get_selected_text_from_target(sel_hwnd);
+                        state.is_internal_pasting.store(false, std::sync::atomic::Ordering::SeqCst);
+
+                        if let Some(selected_text) = selected_opt.filter(|s| !s.trim().is_empty()) {
+                            emit_to_frontend(
+                                &app,
+                                "transcriptionProcessing",
+                                Some(json!({
+                                    "stage": "enhancing",
+                                    "model": "Intent: Magic Edit",
+                                    "provider": "groq",
+                                    "rawModel": "llama-3.3-70b-versatile"
+                                })),
+                            );
+                            match crate::ai::intent_router::execute_selection_transform(
+                                &final_text,
+                                &selected_text,
+                                &window_ctx,
+                            )
+                            .await
+                            {
+                                Ok(transformed) if !transformed.trim().is_empty() => {
+                                    final_text = apply_dictionary(&transformed, &entries);
+                                    intent_router_handled = true;
+                                    emit_to_frontend(
+                                        &app,
+                                        "toast",
+                                        Some(json!({
+                                            "message": "🧭 Voice Intent: Rewrote highlighted selection",
+                                            "type": "info"
+                                        })),
+                                    );
+                                }
+                                Err(e) => {
+                                    log::warn!("[IntentRouter] Selection transform failed: {}", e);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+
+                    // Mode C: Generative Write / Code / Command Output
+                    if !intent_router_handled {
+                        if let Some(gen_prompt) = crate::ai::intent_router::detect_generative_prompt(&final_text) {
+                            emit_to_frontend(
+                                &app,
+                                "transcriptionProcessing",
+                                Some(json!({
+                                    "stage": "enhancing",
+                                    "model": "Intent: Generating",
+                                    "provider": "groq",
+                                    "rawModel": "llama-3.3-70b-versatile"
+                                })),
+                            );
+                            match crate::ai::intent_router::execute_generative_output(&gen_prompt, &window_ctx).await {
+                                Ok(generated) if !generated.trim().is_empty() => {
+                                    final_text = generated;
+                                    intent_router_handled = true;
+                                    emit_to_frontend(
+                                        &app,
+                                        "toast",
+                                        Some(json!({
+                                            "message": "🧭 Voice Intent: Generated output at cursor",
+                                            "type": "info"
+                                        })),
+                                    );
+                                }
+                                Err(e) => {
+                                    log::warn!("[IntentRouter] Generative output failed: {}", e);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+
+                // AI Auto-Enhancement & Context-Aware Smart Formatting (Skip if already formatted by Tenglish or Intent Router)
                 // Fast-Path: Normal transcribing pastes immediately (<0.1ms) without the blocking secondary LLM call!
-                // Only invoke LLM when user explicitly enabled auto_enhance_prompt or provided custom instructions.
-                let should_enhance = !settings.tenglish_mode_enabled
-                    && (settings.auto_enhance_prompt || !settings.formatting_instructions.trim().is_empty())
-                    && settings.context_aware_formatting
-                    && (window_ctx.domain == crate::ambient::context::AppDomain::Coding
-                        || window_ctx.domain == crate::ambient::context::AppDomain::Terminal
-                        || window_ctx.domain == crate::ambient::context::AppDomain::Messaging
-                        || window_ctx.domain == crate::ambient::context::AppDomain::Document);
+                // Only invoke LLM when user explicitly enabled auto_enhance_prompt in Settings.
+                let should_enhance = !intent_router_handled
+                    && settings.auto_enhance_prompt
+                    && !settings.tenglish_mode_enabled
+                    && (settings.context_aware_formatting || !settings.formatting_instructions.trim().is_empty());
 
                 if should_enhance {
                     let submodel_label = match window_ctx.domain {
@@ -2774,7 +3415,7 @@ fn process_and_transcribe(
                                 ctx_addon.as_deref().unwrap_or("")
                             );
 
-                            let client = reqwest::Client::new();
+                            let client = state.groq.client().clone();
                             let req_body = json!({
                                 "model": "llama-3.1-8b-instant",
                                 "messages": [
@@ -2834,7 +3475,7 @@ fn process_and_transcribe(
                 }
 
                 // Voice-Powered Quick Actions — check BEFORE voice editing commands and snippets
-                if settings.quick_actions_enabled {
+                if !intent_router_handled && settings.quick_actions_enabled {
                     let action = crate::text::quick_actions::detect_quick_action(&final_text);
                     if action != crate::text::quick_actions::QuickAction::None {
                         stop_dynamic_focus_tracker();
@@ -2855,7 +3496,7 @@ fn process_and_transcribe(
                             Some(engine_used),
                         );
                         if engine_used == "openrouter" {
-                            let price_per_min = if used_model.contains("mai-transcribe") { 0.00523 } else { 0.006 };
+                            let price_per_min = if used_model.contains("scribe") { 0.00092 } else { 0.006 };
                             state.openrouter.deduct_credits_local(duration_seconds, price_per_min);
                         }
                         emit_to_frontend(&app, "usageUpdated", None);
@@ -2871,7 +3512,7 @@ fn process_and_transcribe(
                 }
 
                 // Smart Clipboard History Voice Recall (Fast-Path: Skip during Tenglish Mode)
-                if settings.clipboard_history_enabled && !settings.tenglish_mode_enabled {
+                if !intent_router_handled && settings.clipboard_history_enabled && !settings.tenglish_mode_enabled {
                     if let Some(intent) = crate::ai::clipboard_recall::detect_clipboard_recall_intent(&final_text) {
                         stop_dynamic_focus_tracker();
                         let matched_clip: Option<crate::storage::clipboard::ClipboardEntry> = match intent {
@@ -2926,7 +3567,7 @@ fn process_and_transcribe(
                             );
 
                             if engine_used == "openrouter" {
-                                let price_per_min = if used_model.contains("mai-transcribe") { 0.00523 } else { 0.006 };
+                                let price_per_min = if used_model.contains("scribe") { 0.00092 } else { 0.006 };
                                 state.openrouter.deduct_credits_local(duration_seconds, price_per_min);
                             }
                             emit_to_frontend(&app, "usageUpdated", None);
@@ -2954,8 +3595,8 @@ fn process_and_transcribe(
 
                 let target_hwnd = TextInjector::target_from_raw(target_raw.map(|v| v as usize));
 
-                // Feature 2: Inline Voice Editing & Formatting Commands (Fast-Path: Skip during Tenglish Mode)
-                if settings.voice_commands_enabled && !settings.tenglish_mode_enabled {
+                // Feature 2: Inline Voice Editing & Formatting Commands (Fast-Path: Skip during Tenglish Mode or Intent Router)
+                if !intent_router_handled && settings.voice_commands_enabled && !settings.tenglish_mode_enabled {
                     match crate::text::commands::evaluate_voice_command(&final_text) {
                         crate::text::commands::VoiceCommandAction::Undo => {
                             stop_dynamic_focus_tracker();
@@ -2975,7 +3616,7 @@ fn process_and_transcribe(
                 }
 
                 // Feature 1: Smart Voice Snippets & Macro Expansions
-                if settings.voice_snippets_enabled {
+                if !intent_router_handled && settings.voice_snippets_enabled {
                     if let Ok(snippets) = state.snippets.list_snippets() {
                         if let Some(expanded) = crate::text::snippets::match_and_expand(&final_text, &snippets) {
                             final_text = expanded;
@@ -3084,7 +3725,7 @@ fn process_and_transcribe(
                     );
 
                     if engine_used == "openrouter" {
-                        let price_per_min = if model_for_db.contains("mai-transcribe") { 0.00523 } else { 0.006 };
+                        let price_per_min = if model_for_db.contains("scribe") { 0.00092 } else { 0.006 };
                         state_bg.openrouter.deduct_credits_local(duration_seconds, price_per_min);
                         if let Some(ref okey) = CredentialsProvider::get_openrouter_api_key() {
                             let _ = state_bg.openrouter.fetch_credits(okey).await;
@@ -3150,9 +3791,11 @@ pub fn show_and_focus_window(window: &tauri::WebviewWindow) {
             let _ = ShowWindow(hwnd, SW_RESTORE);
             let _ = ShowWindow(hwnd, SW_SHOW);
 
-            // Bypass Windows foreground restrictions by toggling HWND_TOPMOST then HWND_NOTOPMOST
+            // Bypass Windows foreground restrictions by toggling HWND_TOPMOST
             let _ = SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-            let _ = SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+            if window.label() != "widget" && window.label() != "scratchpad" {
+                let _ = SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+            }
 
             let win_thread = GetWindowThreadProcessId(hwnd, None);
             let fg = GetForegroundWindow();
@@ -3209,7 +3852,7 @@ fn kill_stale_rift_instances() {
 #[cfg(not(windows))]
 fn kill_stale_rift_instances() {}
 
-fn log_status(msg: &str) {
+pub(crate) fn log_status(msg: &str) {
     let dir = crate::storage::settings::get_app_data_dir();
     let path = dir.join("app.log");
     let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
@@ -3399,17 +4042,22 @@ fn main() {
             setMicrophone,
             getGroqKeyStatus,
             testGroqKey,
+            testSavedGroqKey,
             saveGroqKey,
             deleteGroqKey,
-            getApiKey,
             saveApiKey,
             getOpenRouterKeyStatus,
             testOpenRouterKey,
+            testSavedOpenRouterKey,
             saveOpenRouterKey,
             deleteOpenRouterKey,
-            getOpenRouterApiKey,
             saveOpenRouterApiKey,
             getHistory,
+            searchHistory,
+            searchLibrary,
+            getLibraryItemContent,
+            getScratchpadDraft,
+            saveScratchpadDraft,
             deleteHistoryEntry,
             clearHistory,
             getUsageStats,
@@ -3450,6 +4098,7 @@ fn main() {
             minimizeScratchpadWindow,
             toggleScratchpadPin,
             insertScratchpadText,
+            drainScratchpadInbox,
             polishSelectedText,
             testAudioCue,
             getSnippets,
@@ -3480,7 +4129,7 @@ fn main() {
                     std::thread::sleep(std::time::Duration::from_millis(120));
                     if let Some((fg_pid, raw_val)) = TextInjector::get_foreground_window_pid_and_raw() {
                         if fg_pid != 0 && fg_pid != my_pid {
-                            if let Ok(mut target) = tracker_state.target_window.lock() {
+                            let mut target = tracker_state.target_window.lock(); {
                                 *target = Some(raw_val);
                             }
                         }
@@ -3590,10 +4239,11 @@ fn main() {
 
             // 2. Setup main window: show on initial launch, and hide to tray on close
             if let Some(main_win) = app.get_webview_window("main") {
+                let _ = main_win.center();
                 let settings = load_settings();
                 let has_api_key = CredentialsProvider::get_api_key().is_some() || CredentialsProvider::get_openrouter_api_key().is_some();
                 if !settings.onboarding_completed || !has_api_key {
-                    let _ = main_win.eval("window.location.href = 'onboarding-welcome.html';");
+                    let _ = main_win.eval("window.location.href = 'screens/onboarding-welcome.html';");
                 }
 
                 show_and_focus_window(&main_win);
@@ -3624,12 +4274,13 @@ fn main() {
                     }
                     "settings" | "history" => {
                         if let Some(window) = app.get_webview_window("main") {
-                            let target = if event.id.as_ref() == "settings" {
-                                "settings.html"
+                            use tauri::Emitter;
+                            let destination = if event.id.as_ref() == "settings" {
+                                "settings"
                             } else {
-                                "history.html"
+                                "history"
                             };
-                            let _ = window.eval(&format!("window.location.href = '{}';", target));
+                            let _ = app.emit("navigateTo", destination);
                             show_and_focus_window(&window);
                         }
                     }
@@ -3648,29 +4299,48 @@ fn main() {
                     }
                 });
 
-            if let Some(icon) = app.default_window_icon() {
-                tray_builder = tray_builder.icon(icon.clone());
+            let tray_icon = app.default_window_icon()
+                .cloned()
+                .or_else(|| tauri::image::Image::from_bytes(include_bytes!("../icons/icon.ico")).ok())
+                .or_else(|| tauri::image::Image::from_bytes(include_bytes!("../icons/tray_icon.png")).ok())
+                .or_else(|| tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png")).ok());
+
+            if let Some(icon) = tray_icon {
+                tray_builder = tray_builder.icon(icon);
             }
-            let _tray = tray_builder.build(app)?;
+
+            let tray = tray_builder.build(app)?;
+            log_status("System tray icon registered successfully and permanently");
+            // CRITICAL: In Tauri 2.x, TrayIcon's Drop implementation removes the tray icon from Windows!
+            // Leaking/forgetting this handle ensures the tray icon stays alive for the entire process lifetime.
+            std::mem::forget(tray);
 
             let settings = load_settings();
             crate::audio::cue::prewarm(settings.sound_volume);
 
             // 3b. Setup Smart Clipboard History Listener (Win32 Event-Driven)
             if settings.clipboard_history_enabled {
-                crate::ambient::clipboard_listener::start_clipboard_listener(
+                if let Err(error) = crate::ambient::clipboard_listener::start_clipboard_listener(
                     app_state.clipboard.clone(),
                     app_state.is_internal_pasting.clone(),
                     app.handle().clone(),
-                );
+                    settings.clipboard_max_items,
+                ) {
+                    log::error!("Failed to start clipboard history listener: {error}");
+                }
             }
 
             // 3c. Start Ambient Memory if enabled
             if settings.ambient_memory_enabled {
-                if let Ok(mut recorder) = app_state.ambient_recorder.lock() {
+                let mut recorder = app_state.ambient_recorder.lock(); {
                     let _ = recorder.start();
                     log_status("Ambient Memory started from settings on launch.");
                 }
+            }
+
+            // 3d. Start Hands-Free "Hey Rift" Wake Word Engine if enabled
+            if settings.wake_word_enabled {
+                sync_wake_word_engine(app.handle(), &app_state, false);
             }
 
             // 4. Setup Hotkey Listener (Push-to-Talk + Toggle Recording)
@@ -3681,8 +4351,6 @@ fn main() {
             let app_handle_for_press = app_handle.clone();
             let app_handle_for_release = app_handle.clone();
             let app_handle_for_toggle = app_handle.clone();
-            let app_handle_for_widget = app_handle.clone();
-
             let ptt_key = if settings.push_to_talk_mode == "combo" {
                 settings.push_to_talk_combo.clone()
             } else {
@@ -3698,6 +4366,16 @@ fn main() {
                 move || {
                     log_status("PTT Key Pressed -> starting recording and emitting recordingStarted");
 
+                    let _transition = state_for_press.recording_transition.lock();
+                    if state_for_press.is_toggle_recording.compare_exchange(
+                        false,
+                        true,
+                        std::sync::atomic::Ordering::SeqCst,
+                        std::sync::atomic::Ordering::SeqCst,
+                    ).is_err() {
+                        return;
+                    }
+
                     let s = load_settings();
                     if s.recording_sounds {
                         crate::audio::cue::play_start(s.sound_volume);
@@ -3706,25 +4384,18 @@ fn main() {
 
                     let target_hwnd = TextInjector::get_foreground_window();
                     {
-                        let mut target = state_for_press.target_window.lock().unwrap();
+                        let mut target = state_for_press.target_window.lock();
                         *target = Some(target_hwnd.0 as isize);
                     }
-                    start_dynamic_focus_tracker(Arc::clone(&state_for_press));
-
-                    emit_to_frontend(&app_handle_for_press, "recordingStarted", None);
-                    if let Some(key) = CredentialsProvider::get_openrouter_api_key() {
-                        state_for_press.openrouter.prewarm(&key);
-                    }
-                    if let Some(key) = CredentialsProvider::get_api_key() {
-                        state_for_press.groq.prewarm(&key);
-                    }
-
                     let app_for_level = app_handle_for_press.clone();
                     let last_level = Arc::new(std::sync::Mutex::new(std::time::Instant::now()));
                     let boost = s.mic_boost_multiplier();
                     let dev = s.microphone_device_id;
-                    let mut recorder = state_for_press.recorder.lock().unwrap();
-                    let _ = recorder.start(dev.as_deref(), boost, move |level| {
+                    let on_stop = recording_stop_handler(
+                        app_handle_for_press.clone(),
+                        Arc::clone(&state_for_press),
+                    );
+                    let start_result = state_for_press.recorder.lock().start(dev.as_deref(), boost, move |level| {
                         let now = std::time::Instant::now();
                         let should_emit = if let Ok(mut l) = last_level.try_lock() {
                             if now.duration_since(*l).as_millis() >= 40 {
@@ -3739,79 +4410,69 @@ fn main() {
                         if should_emit {
                             emit_to_frontend(&app_for_level, "audioLevel", Some(json!(level)));
                         }
-                    });
+                    }, on_stop);
+
+                    if let Err(error) = start_result {
+                        state_for_press.is_toggle_recording.store(false, std::sync::atomic::Ordering::SeqCst);
+                        crate::audio::mute::unmute_system_audio();
+                        emit_to_frontend(&app_handle_for_press, "recordingError", Some(json!({ "message": error })));
+                        return;
+                    }
+
+                    start_dynamic_focus_tracker(Arc::clone(&state_for_press));
+                    emit_to_frontend(&app_handle_for_press, "recordingStarted", None);
+                    if let Some(key) = CredentialsProvider::get_openrouter_api_key() {
+                        state_for_press.openrouter.prewarm(&key);
+                    }
+                    if let Some(key) = CredentialsProvider::get_api_key() {
+                        state_for_press.groq.prewarm(&key);
+                    }
                 },
                 // On PTT Release
                 move || {
                     log_status("PTT Key Released -> stopping recorder");
-                    crate::audio::mute::unmute_system_audio();
-                    emit_to_frontend(&app_handle_for_release, "recordingStopped", None);
-
-                    let result = {
-                        let mut recorder = state_for_release.recorder.lock().unwrap();
-                        recorder.stop()
-                    };
-
-                    if result.is_short_press {
-                        stop_dynamic_focus_tracker();
-                        let s = load_settings();
-                        if s.recording_sounds {
-                            crate::audio::cue::play_cancel(s.sound_volume);
-                        }
-                        emit_to_frontend(&app_handle_for_release, "recordingCancelled", None);
-                        return;
-                    }
-
-                    if result.is_silent {
-                        stop_dynamic_focus_tracker();
-                        let s = load_settings();
-                        if s.recording_sounds {
-                            crate::audio::cue::play_cancel(s.sound_volume);
-                        }
-                        emit_to_frontend(&app_handle_for_release, "recordingSaved", Some(json!({ "isSilent": true })));
-                        return;
-                    }
-
-                    process_and_transcribe(
-                        app_handle_for_release.clone(),
-                        Arc::clone(&state_for_release),
-                        result.wav_bytes,
-                        result.duration_seconds,
-                    );
+                    let state = Arc::clone(&state_for_release);
+                    let app = app_handle_for_release.clone();
+                    std::thread::spawn(move || {
+                        stop_recording_inner(app, state);
+                    });
                 },
                 // On Toggle Recording Press
                 move || {
                     let is_recording = state_for_toggle.is_toggle_recording.load(std::sync::atomic::Ordering::SeqCst);
                     log_status(&format!("Toggle Key Pressed -> current is_recording={}", is_recording));
                     if !is_recording {
+                        let _transition = state_for_toggle.recording_transition.lock();
+                        if state_for_toggle.is_toggle_recording.compare_exchange(
+                            false,
+                            true,
+                            std::sync::atomic::Ordering::SeqCst,
+                            std::sync::atomic::Ordering::SeqCst,
+                        ).is_err() {
+                            return;
+                        }
                         // Start recording
                         let s = load_settings();
                         if s.recording_sounds {
                             crate::audio::cue::play_start(s.sound_volume);
                         }
                         crate::audio::mute::mute_system_audio_delayed(180);
-                        state_for_toggle.is_toggle_recording.store(true, std::sync::atomic::Ordering::SeqCst);
 
                         let target_hwnd = TextInjector::get_foreground_window();
                         {
-                            let mut target = state_for_toggle.target_window.lock().unwrap();
+                            let mut target = state_for_toggle.target_window.lock();
                             *target = Some(target_hwnd.0 as isize);
                         }
-                        start_dynamic_focus_tracker(Arc::clone(&state_for_toggle));
-                        emit_to_frontend(&app_handle_for_toggle, "recordingStarted", None);
-                        if let Some(key) = CredentialsProvider::get_openrouter_api_key() {
-                            state_for_toggle.openrouter.prewarm(&key);
-                        }
-                        if let Some(key) = CredentialsProvider::get_api_key() {
-                            state_for_toggle.groq.prewarm(&key);
-                        }
-
                         let app_for_level = app_handle_for_toggle.clone();
                         let last_level = Arc::new(std::sync::Mutex::new(std::time::Instant::now()));
                         let boost = s.mic_boost_multiplier();
                         let dev = s.microphone_device_id;
-                        let mut recorder = state_for_toggle.recorder.lock().unwrap();
-                        let _ = recorder.start(dev.as_deref(), boost, move |level| {
+                        let on_stop = recording_stop_handler(
+                            app_handle_for_toggle.clone(),
+                            Arc::clone(&state_for_toggle),
+                        );
+                        let mut recorder = state_for_toggle.recorder.lock();
+                        let start_result = recorder.start(dev.as_deref(), boost, move |level| {
                             let now = std::time::Instant::now();
                             let should_emit = if let Ok(mut l) = last_level.try_lock() {
                                 if now.duration_since(*l).as_millis() >= 40 {
@@ -3826,42 +4487,26 @@ fn main() {
                             if should_emit {
                                 emit_to_frontend(&app_for_level, "audioLevel", Some(json!(level)));
                             }
-                        });
+                        }, on_stop);
+                        drop(recorder);
+                        if let Err(error) = start_result {
+                            state_for_toggle.is_toggle_recording.store(false, std::sync::atomic::Ordering::SeqCst);
+                            crate::audio::mute::unmute_system_audio();
+                            emit_to_frontend(&app_handle_for_toggle, "recordingError", Some(json!({ "message": error })));
+                            return;
+                        }
+                        start_dynamic_focus_tracker(Arc::clone(&state_for_toggle));
+                        emit_to_frontend(&app_handle_for_toggle, "recordingStarted", None);
+                        if let Some(key) = CredentialsProvider::get_openrouter_api_key() {
+                            state_for_toggle.openrouter.prewarm(&key);
+                        }
+                        if let Some(key) = CredentialsProvider::get_api_key() {
+                            state_for_toggle.groq.prewarm(&key);
+                        }
                     } else {
-                        // Stop recording and transcribe
-                        crate::audio::mute::unmute_system_audio();
-                        state_for_toggle.is_toggle_recording.store(false, std::sync::atomic::Ordering::SeqCst);
-                        emit_to_frontend(&app_handle_for_toggle, "recordingStopped", None);
-                        let result = {
-                            let mut recorder = state_for_toggle.recorder.lock().unwrap();
-                            recorder.stop()
-                        };
-
-                        if result.is_short_press {
-                            stop_dynamic_focus_tracker();
-                            let s = load_settings();
-                            if s.recording_sounds {
-                                crate::audio::cue::play_cancel(s.sound_volume);
-                            }
-                            emit_to_frontend(&app_handle_for_toggle, "recordingCancelled", None);
-                            return;
-                        }
-
-                        if result.is_silent {
-                            stop_dynamic_focus_tracker();
-                            let s = load_settings();
-                            if s.recording_sounds {
-                                crate::audio::cue::play_cancel(s.sound_volume);
-                            }
-                            emit_to_frontend(&app_handle_for_toggle, "recordingSaved", Some(json!({ "isSilent": true })));
-                            return;
-                        }
-
-                        process_and_transcribe(
+                        stop_recording_inner(
                             app_handle_for_toggle.clone(),
                             Arc::clone(&state_for_toggle),
-                            result.wav_bytes,
-                            result.duration_seconds,
                         );
                     }
                 },
@@ -3885,7 +4530,7 @@ fn main() {
                     move || {
                         log_status("Ambient Memory Triggered!");
                         let wav_bytes = {
-                            let recorder = state_for_ambient.ambient_recorder.lock().unwrap();
+                            let recorder = state_for_ambient.ambient_recorder.lock();
                             recorder.extract_wav_bytes()
                         };
                         

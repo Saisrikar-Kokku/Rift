@@ -139,11 +139,20 @@ Write-Host "  Registry Run key configured: HKCU:\Software\Microsoft\Windows\Curr
 # 6. Launch Rift in user interactive desktop session
 Write-Host "[6/6] Launching Rift..." -ForegroundColor Yellow
 try {
-    Start-Process "explorer.exe" -ArgumentList "`"$targetExe`""
-    Write-Host "  Rift launched successfully via Windows Explorer." -ForegroundColor Green
+    Start-ScheduledTask -TaskName "RiftLaunch" -ErrorAction Stop
+    Write-Host "  Rift launched successfully in interactive desktop session (RiftLaunch)." -ForegroundColor Green
 } catch {
-    Start-Process -FilePath $targetExe -WorkingDirectory $targetDir
-    Write-Host "  Rift launched via fallback process starter." -ForegroundColor Green
+    try {
+        $action = New-ScheduledTaskAction -Execute $targetExe -WorkingDirectory $targetDir
+        $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+        Register-ScheduledTask -TaskName "RiftInteractiveLaunch" -Action $action -Principal $principal -Settings $settings -Force -ErrorAction Stop | Out-Null
+        Start-ScheduledTask -TaskName "RiftInteractiveLaunch" -ErrorAction Stop
+        Write-Host "  Rift launched successfully in interactive desktop session." -ForegroundColor Green
+    } catch {
+        Start-Process "explorer.exe" -ArgumentList "`"$targetExe`""
+        Write-Host "  Rift launched via Windows Explorer fallback." -ForegroundColor Green
+    }
 }
 
 

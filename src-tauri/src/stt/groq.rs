@@ -1,7 +1,9 @@
 use reqwest::multipart::{Form, Part};
 use reqwest::Client;
 use serde::Deserialize;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Deserialize)]
 struct GroqTranscriptionResponse {
@@ -20,6 +22,7 @@ pub struct GroqRateLimitInfo {
 pub struct GroqClient {
     client: Client,
     rate_limits: Arc<Mutex<GroqRateLimitInfo>>,
+    last_used: Arc<AtomicU64>,
 }
 
 impl GroqClient {
@@ -34,7 +37,12 @@ impl GroqClient {
                 .build()
                 .unwrap_or_default(),
             rate_limits: Arc::new(Mutex::new(GroqRateLimitInfo::default())),
+            last_used: Arc::new(AtomicU64::new(0)),
         }
+    }
+
+    pub fn client(&self) -> &Client {
+        &self.client
     }
 
     /// Pre-warms the TCP and TLS 1.3 connection to Groq in the background during PTT press
@@ -43,6 +51,16 @@ impl GroqClient {
         if api_key.trim().is_empty() {
             return;
         }
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let last = self.last_used.load(Ordering::Relaxed);
+        if now.saturating_sub(last) < 25 {
+            // Connection is already active and warm inside the pool
+            return;
+        }
+
         let client = self.client.clone();
         let key = api_key.trim().to_string();
         tauri::async_runtime::spawn(async move {
@@ -55,23 +73,29 @@ impl GroqClient {
     }
 
     pub fn get_rate_limit_info(&self) -> GroqRateLimitInfo {
-        self.rate_limits.lock().map(|l| l.clone()).unwrap_or_default()
+        self.rate_limits
+            .lock()
+            .map(|l| l.clone())
+            .unwrap_or_default()
     }
 
     pub async fn transcribe(
         &self,
         api_key: &str,
-        wav_bytes: Vec<u8>,
+        wav_bytes: Arc<[u8]>,
         model: &str,
         prompt: Option<&str>,
         language: Option<&str>,
     ) -> Result<String, String> {
         let url = "https://api.groq.com/openai/v1/audio/transcriptions";
 
-        let file_part = Part::bytes(wav_bytes)
-            .file_name("audio.wav")
-            .mime_str("audio/wav")
-            .map_err(|e| e.to_string())?;
+        let file_part = Part::stream_with_length(
+            reqwest::Body::from(bytes::Bytes::from_owner(wav_bytes.clone())),
+            wav_bytes.len() as u64,
+        )
+        .file_name("audio.wav")
+        .mime_str("audio/wav")
+        .map_err(|e| e.to_string())?;
 
         let mut form = Form::new()
             .part("file", file_part)
@@ -133,6 +157,12 @@ impl GroqClient {
                 lock.last_updated = Some(std::time::Instant::now());
             }
         }
+
+        let now_sec = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        self.last_used.store(now_sec, Ordering::Relaxed);
 
         if !response.status().is_success() {
             let status = response.status();

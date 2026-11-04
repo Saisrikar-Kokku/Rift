@@ -31,6 +31,22 @@
       font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
     }
 
+    body.menu-open-above {
+      box-sizing: border-box;
+      justify-content: flex-end;
+      padding-top: 0;
+      padding-bottom: 6px;
+    }
+
+    body.menu-open-above .widget-wrapper {
+      flex-direction: column-reverse;
+    }
+
+    body.menu-open-above .widget-dropdown-menu {
+      margin-top: 0;
+      margin-bottom: 4px;
+    }
+
     /* ============================================================
        BASE WIDGET CONTAINER (#statusPill)
        Obsidian Dynamic Island floating capsule.
@@ -61,12 +77,12 @@
 
       /* Dynamic Island Liquid-Metal Spring Transition */
       transition: 
-        width 280ms cubic-bezier(0.34, 1.56, 0.64, 1),
-        height 280ms cubic-bezier(0.34, 1.56, 0.64, 1),
-        border-color 200ms ease,
-        background 200ms ease,
-        opacity 200ms ease,
-        transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
+        width 170ms cubic-bezier(0.16, 1, 0.3, 1),
+        height 170ms cubic-bezier(0.16, 1, 0.3, 1),
+        border-color 140ms ease,
+        background 140ms ease,
+        opacity 140ms ease,
+        transform 170ms cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     .pill.visible {
@@ -78,7 +94,7 @@
     .pill:active,
     .pill.dragging {
       cursor: grabbing !important;
-      transform: scale(0.97) rotate(0.5deg);
+      transform: scale(0.97) rotate(0.4deg);
     }
 
     .pill.position-locked {
@@ -87,7 +103,7 @@
 
     /* Phase 6: Hover & Interaction — magnetic lift on idle hover */
     .pill.state-idle:hover {
-      transform: translateY(-1px) scale(1.03);
+      transform: translateY(-1px) scale(1.02);
       border-color: rgba(255, 255, 255, 0.14);
     }
     .pill.state-idle:hover .idle-wordmark {
@@ -98,18 +114,18 @@
     }
 
     /* ============================================================
-       STATE 1: IDLE CAPSULE (Ultra-sleek 96x28px)
+       STATE 1: IDLE CAPSULE (Ultra-sleek Minimal 74x21px)
        ============================================================ */
     .pill.state-idle {
-      width: 96px;
-      height: 28px;
+      width: 74px;
+      height: 21px;
       border-radius: 999px;
-      padding: 0 8px;
-      background: #0b0b12;
+      padding: 0 5px;
+      background: #0a0a10;
       border: 1px solid rgba(255, 255, 255, 0.08);
     }
 
-    /* Phase 2: Ambient idle border glow — subtle breathing */
+    /* Ambient idle border glow */
     .pill.state-idle.visible {
       animation: idleAmbientBorder 4s ease-in-out infinite alternate;
     }
@@ -120,17 +136,17 @@
     }
 
     /* ============================================================
-       ACTIVE BASE & STATES (Height: 30px, continuous capsule)
+       ACTIVE BASE & STATES (Height: 21px, continuous capsule)
        ============================================================ */
     .pill.state-active {
-      height: 30px;
+      height: 21px;
       border-radius: 999px;
-      padding: 0 8px;
+      padding: 0 5px;
     }
 
-    /* Active Recording State: 144px width */
+    /* Active Recording State: 98px width */
     .pill.recording-active {
-      width: 164px;
+      width: 98px;
       border-color: rgba(139, 92, 246, 0.65);
       background: #0d0c18;
       box-shadow: 
@@ -139,76 +155,82 @@
       animation: recordingBorderPulse 2s ease-in-out infinite alternate !important;
     }
 
-    /* Phase 2: Recording state ambient border pulse */
     @keyframes recordingBorderPulse {
       0% { border-color: rgba(139, 92, 246, 0.45); }
       100% { border-color: rgba(167, 139, 250, 0.85); }
     }
 
-    /* Processing State: 138px width */
+    /* Processing State: Adaptive width based on selected transcribing style (height strictly 21px) */
     .pill.state-processing-active {
-      width: 138px;
-      border-color: rgba(99, 102, 241, 0.65);
-      background: linear-gradient(
-        90deg,
-        #0b0b14 0%,
-        #16162a 50%,
-        #0b0b14 100%
-      );
-      background-size: 200% 100%;
-      animation: shimmerSweep 2.0s ease-in-out infinite;
+      width: 58px;
+      border-color: rgba(129, 140, 248, 0.58);
+      background: #0b0b13;
       box-shadow: 
-        inset 0 1px 0 0 rgba(129, 140, 248, 0.25),
+        inset 0 1px 0 0 rgba(129, 140, 248, 0.24),
         inset 0 -1px 0 0 rgba(0, 0, 0, 0.50) !important;
+      animation: processingBorderBreathe 1.8s ease-in-out infinite alternate;
     }
 
-    /* Enhancing State: 138px width */
+    /* Enhancing State */
     .pill.state-enhancing-active {
-      width: 138px;
-      border-color: rgba(168, 85, 247, 0.75) !important;
-      background: linear-gradient(
-        90deg,
-        #0d0918 0%,
-        #22123d 50%,
-        #0d0918 100%
-      ) !important;
-      background-size: 200% 100% !important;
-      animation: neuralSweep 1.6s ease-in-out infinite !important;
+      width: 58px;
+      border-color: rgba(192, 132, 252, 0.68) !important;
+      background: #0d0a16 !important;
       box-shadow: 
-        inset 0 1px 0 0 rgba(192, 132, 252, 0.3),
+        inset 0 1px 0 0 rgba(192, 132, 252, 0.28),
         inset 0 -1px 0 0 rgba(0, 0, 0, 0.50) !important;
+      animation: enhancingBorderBreathe 1.5s ease-in-out infinite alternate !important;
     }
 
-    @keyframes shimmerSweep {
-      0% { background-position: 200% 0; }
-      100% { background-position: -200% 0; }
+    .pill.tstyle-orbit_pure.state-processing-active,
+    .pill.tstyle-orbit_pure.state-enhancing-active {
+      width: 58px;
     }
 
-    @keyframes neuralSweep {
-      0% { background-position: 200% 0; }
-      100% { background-position: -200% 0; }
+    .pill.tstyle-orbit_badge.state-processing-active,
+    .pill.tstyle-orbit_badge.state-enhancing-active {
+      width: 88px;
     }
 
-    /* Success Pill: 116px width */
+    .pill.tstyle-harmonic_wave.state-processing-active,
+    .pill.tstyle-harmonic_wave.state-enhancing-active {
+      width: 68px;
+    }
+
+    .pill.tstyle-infinity_pulse.state-processing-active,
+    .pill.tstyle-infinity_pulse.state-enhancing-active {
+      width: 72px;
+    }
+
+    @keyframes processingBorderBreathe {
+      0% { border-color: rgba(99, 102, 241, 0.42); }
+      100% { border-color: rgba(129, 140, 248, 0.82); }
+    }
+
+    @keyframes enhancingBorderBreathe {
+      0% { border-color: rgba(168, 85, 247, 0.45); }
+      100% { border-color: rgba(216, 180, 254, 0.85); }
+    }
+
+    /* Success Pill: 54px width (Sleek minimal Done animation, no text) */
     .pill.state-success-active {
-      width: 116px;
+      width: 54px;
       border-color: rgba(52, 211, 153, 0.65);
-      background: #081410;
+      background: #07120e;
       box-shadow: 
-        inset 0 1px 0 0 rgba(52, 211, 153, 0.25),
+        inset 0 1px 0 0 rgba(52, 211, 153, 0.28),
         inset 0 -1px 0 0 rgba(0, 0, 0, 0.50) !important;
-      animation: successFlash 400ms ease-out !important;
+      animation: successFlash 420ms cubic-bezier(0.16, 1, 0.3, 1) !important;
     }
 
-    /* Phase 4: Success border flash */
     @keyframes successFlash {
-      0% { border-color: rgba(52, 211, 153, 1); }
-      100% { border-color: rgba(52, 211, 153, 0.65); }
+      0% { border-color: rgba(110, 231, 183, 0.95); }
+      100% { border-color: rgba(52, 211, 153, 0.55); }
     }
 
-    /* Warning Pill: 132px width */
+    /* Warning Pill: 94px width */
     .pill.state-warning-active {
-      width: 132px;
+      width: 94px;
       border-color: rgba(251, 191, 36, 0.65);
       background: #141006;
       box-shadow: 
@@ -216,9 +238,9 @@
         inset 0 -1px 0 0 rgba(0, 0, 0, 0.50) !important;
     }
 
-    /* Error Pill: 132px width */
+    /* Error Pill: 94px width */
     .pill.state-error-active {
-      width: 132px;
+      width: 94px;
       border-color: rgba(239, 68, 68, 0.65);
       background: #160808;
       box-shadow: 
@@ -226,9 +248,9 @@
         inset 0 -1px 0 0 rgba(0, 0, 0, 0.50) !important;
     }
 
-    /* Retry Audio Recovery: 158px width */
+    /* Retry Audio Recovery: 98px width */
     .pill.state-retry-active {
-      width: 158px;
+      width: 98px;
       border-color: rgba(245, 158, 11, 0.55) !important;
       background: #151108 !important;
       box-shadow: 
@@ -317,9 +339,9 @@
        ============================================================ */
     .idle-logo-chip {
       position: relative;
-      width: 16px;
-      height: 16px;
-      border-radius: 4px;
+      width: 13px;
+      height: 13px;
+      border-radius: 3px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -327,32 +349,33 @@
     }
 
     .idle-logo-svg {
-      width: 16px;
-      height: 16px;
+      width: 13px;
+      height: 13px;
       display: block;
     }
 
     .idle-wordmark {
       font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      font-size: 11px;
-      font-weight: 600;
+      font-size: 9px;
+      font-weight: 700;
       color: #cbd5e1;
-      letter-spacing: -0.01em;
-      margin-left: 6px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-left: 4px;
       line-height: 1;
       white-space: nowrap;
       transition: color 200ms ease;
     }
 
     .idle-presence-dot {
-      width: 4.5px;
-      height: 4.5px;
+      width: 3.5px;
+      height: 3.5px;
       border-radius: 50%;
       background: #10b981;
       box-shadow: 
-        0 0 4px rgba(16, 185, 129, 0.6),
-        0 0 8px rgba(16, 185, 129, 0.3);
-      margin-left: 5px;
+        0 0 3px rgba(16, 185, 129, 0.6),
+        0 0 6px rgba(16, 185, 129, 0.3);
+      margin-left: 4px;
       flex-shrink: 0;
       animation: presenceBreathe 3s ease-in-out infinite alternate;
       transition: animation-duration 300ms ease;
@@ -384,7 +407,7 @@
       outline: none;
       padding: 0;
       width: 0;
-      height: 16px;
+      height: 14px;
       margin-left: 0;
       opacity: 0;
       cursor: pointer;
@@ -393,9 +416,9 @@
       overflow: hidden;
       pointer-events: none;
       flex-shrink: 0;
-      transition: width 160ms cubic-bezier(0.16, 1, 0.3, 1),
-                  opacity 160ms ease,
-                  margin-left 160ms ease,
+      transition: width 140ms cubic-bezier(0.16, 1, 0.3, 1),
+                  opacity 140ms ease,
+                  margin-left 140ms ease,
                   background 120ms ease,
                   border-color 120ms ease,
                   color 120ms ease,
@@ -406,9 +429,9 @@
     .pill.state-idle:hover .dropdown-trigger-btn,
     .pill.state-idle.dropdown-open .dropdown-trigger-btn,
     .widget-wrapper:hover .dropdown-trigger-btn {
-      width: 16px;
-      height: 16px;
-      margin-left: 5px;
+      width: 14px;
+      height: 14px;
+      margin-left: 4px;
       opacity: 0.85;
       background: #1a1a27;
       border-color: #2b2b3d;
@@ -421,12 +444,12 @@
       color: #c084fc !important;
       background: #27193d !important;
       border-color: #6d4dc7 !important;
-      transform: scale(1.08);
+      transform: scale(1.06);
     }
 
     .dropdown-chevron-svg {
-      width: 10px;
-      height: 10px;
+      width: 8.5px;
+      height: 8.5px;
       display: block;
       transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
     }
@@ -439,24 +462,24 @@
     /* Phase 3: Premium Frosted Glass Dropdown */
     .widget-dropdown-menu {
       box-sizing: border-box;
-      width: 140px;
-      margin-top: 6px;
-      background: rgba(11, 11, 20, 0.88);
-      backdrop-filter: blur(16px) saturate(160%);
-      -webkit-backdrop-filter: blur(16px) saturate(160%);
+      width: 118px;
+      margin-top: 4px;
+      background: rgba(10, 10, 16, 0.96);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
       border: 1px solid rgba(255, 255, 255, 0.10);
-      border-radius: 10px;
-      padding: 3px;
+      border-radius: 8px;
+      padding: 2px;
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 1.5px;
       box-shadow: 
         inset 0 1px 0 0 rgba(255, 255, 255, 0.14),
-        inset 0 -1px 0 0 rgba(0, 0, 0, 0.5) !important;
+        0 8px 24px rgba(0, 0, 0, 0.6) !important;
       opacity: 0;
-      transform: translateY(-6px) scale(0.92);
+      transform: translateY(-5px) scale(0.94);
       pointer-events: none;
-      transition: opacity 180ms ease-out, transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+      transition: opacity 160ms ease-out, transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
       z-index: 1000;
     }
 
@@ -469,13 +492,13 @@
     /* Phase 3: Staggered menu item reveal */
     .widget-dropdown-menu .menu-action-item {
       opacity: 0;
-      transform: translateY(-6px);
+      transform: translateY(-5px);
       transition: opacity 100ms ease-out, transform 140ms cubic-bezier(0.34, 1.56, 0.64, 1), background 120ms ease, color 120ms ease;
     }
-    .widget-dropdown-menu.open .menu-action-item:nth-child(1) { opacity: 1; transform: translateY(0); transition-delay: 20ms; }
-    .widget-dropdown-menu.open .menu-action-item:nth-child(2) { opacity: 1; transform: translateY(0); transition-delay: 55ms; }
-    .widget-dropdown-menu.open .menu-action-item:nth-child(3) { opacity: 1; transform: translateY(0); transition-delay: 90ms; }
-    .widget-dropdown-menu.open .menu-action-item:nth-child(4) { opacity: 1; transform: translateY(0); transition-delay: 125ms; }
+    .widget-dropdown-menu.open .menu-action-item:nth-child(1) { opacity: 1; transform: translateY(0); transition-delay: 15ms; }
+    .widget-dropdown-menu.open .menu-action-item:nth-child(2) { opacity: 1; transform: translateY(0); transition-delay: 40ms; }
+    .widget-dropdown-menu.open .menu-action-item:nth-child(3) { opacity: 1; transform: translateY(0); transition-delay: 65ms; }
+    .widget-dropdown-menu.open .menu-action-item:nth-child(4) { opacity: 1; transform: translateY(0); transition-delay: 90ms; }
 
     .menu-action-item {
       box-sizing: border-box;
@@ -483,11 +506,11 @@
       align-items: center;
       justify-content: space-between;
       width: 100%;
-      height: 28px;
-      padding: 0 7px;
+      height: 25px;
+      padding: 0 6px;
       background: transparent;
       border: none;
-      border-radius: 6px;
+      border-radius: 5px;
       color: #e2e8f0;
       font-family: inherit;
       cursor: pointer;
@@ -596,8 +619,8 @@
        RECORDING STATE (GPU Waveform & Live Timer)
        ============================================================ */
     .mic-chip {
-      width: 18px;
-      height: 18px;
+      width: 13.5px;
+      height: 13.5px;
       border-radius: 50%;
       background: #7c5cfa;
       display: flex;
@@ -608,68 +631,46 @@
     }
 
     .mic-icon-svg {
-      width: 10px;
-      height: 10px;
+      width: 7.5px;
+      height: 7.5px;
       color: #ffffff;
     }
 
-    /* Phase 1: Enhanced 12-bar waveform with glow halo */
-    .waveform-bars {
+    /* Crisp Minimal 4-Bar Audio Equalizer (Zero blur, retina-sharp) */
+    .equalizer-bars {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 1.8px;
-      height: 18px;
-      flex: 1;
-      margin: 0 4px;
-      position: relative;
+      gap: 2px;
+      height: 12px;
+      margin: 0 3px;
     }
-
-    /* Phase 1: Glow halo behind waveform bars */
-    .waveform-bars::before {
-      content: '';
-      position: absolute;
-      inset: -3px -6px;
-      background: radial-gradient(ellipse at center, rgba(129,140,248,0.12) 0%, transparent 70%);
+    .eq-bar {
+      width: 1.8px;
+      height: 3px;
+      min-height: 2.5px;
+      max-height: 11px;
       border-radius: 999px;
-      opacity: 0;
-      transition: opacity 250ms ease;
-      pointer-events: none;
+      transition: height 50ms cubic-bezier(0.16, 1, 0.3, 1);
+      will-change: height;
     }
-    .pill.recording-active .waveform-bars::before {
-      opacity: 1;
-      animation: waveGlowPulse 2.4s ease-in-out infinite alternate;
-    }
-    @keyframes waveGlowPulse {
-      0% { opacity: 0.5; }
-      100% { opacity: 1; }
-    }
-
-    .wave-bar {
-      width: 2px;
-      height: 14px;
-      min-height: 14px;
-      background: linear-gradient(to top, #818cf8, #a78bfa, #c084fc);
-      border-radius: 999px;
-      transform: scaleY(0.15);
-      transform-origin: center center;
-      will-change: transform;
-      /* Phase 7: Use rAF for updates, CSS transition only for idle reset */
-      transition: transform 60ms cubic-bezier(0.16, 1, 0.3, 1);
-    }
+    .eq-bar-1 { height: 3px; background: #818cf8; }
+    .eq-bar-2 { height: 5px; background: #a78bfa; }
+    .eq-bar-3 { height: 6px; background: #c084fc; }
+    .eq-bar-4 { height: 4px; background: #38bdf8; }
 
     .rec-indicator {
       display: flex;
       align-items: center;
-      gap: 3px;
+      gap: 2.5px;
       flex-shrink: 0;
     }
 
     .rec-dot {
-      width: 4px;
-      height: 4px;
+      width: 3px;
+      height: 3px;
       border-radius: 50%;
-      background: #ef4444;
+      background: #f43f5e;
       animation: recPulse 1.2s ease-in-out infinite;
     }
 
@@ -679,9 +680,9 @@
     }
 
     .rec-timer {
-      font-size: 9.5px;
+      font-size: 8px;
       font-weight: 600;
-      color: #f43f5e;
+      color: #cbd5e1;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       letter-spacing: 0.02em;
     }
@@ -713,89 +714,84 @@
     }
 
     /* ============================================================
-       PROCESSING STATE (Compact & Calm)
+       PROCESSING STATE (4 Selectable Flagship Transcribing Animations)
+       1. orbit_pure:     16px Dual-Orbit Liquid Ring (Icon-Only, matches Done 1:1)
+       2. orbit_badge:    15.5px Dual-Orbit Ring + Horizontal Micro Model Chip
+       3. harmonic_wave:  5-Bar 15px Harmonic Liquid Sine-Wave
+       4. infinity_pulse: 32x14px Stadium Comet Track + Breathing Core Star
        ============================================================ */
-    .processing-chip {
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: #18192a;
-      border: 1px solid #4f46e5;
+    .state-view-processing {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+    }
+    .state-view-processing.active {
+      display: flex;
+    }
+
+    .processing-content-column {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      padding: 0 2px;
+      gap: 5.5px;
+    }
+
+    .processing-loading-icon {
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
+      width: 16px;
+      height: 16px;
+      line-height: 1;
       flex-shrink: 0;
-      position: relative;
     }
 
-    /* Phase 5: Orbital processing dots */
-    .orbital-dots {
-      position: absolute;
-      inset: -2px;
-      animation: orbitalSpin 1.4s linear infinite;
-    }
-    .orbital-dot {
-      position: absolute;
-      width: 3px;
-      height: 3px;
-      border-radius: 50%;
-      background: #818cf8;
-    }
-    .orbital-dot:nth-child(1) { top: -1px; left: 50%; transform: translateX(-50%); opacity: 1; }
-    .orbital-dot:nth-child(2) { top: 50%; right: -1px; transform: translateY(-50%); opacity: 0.6; }
-    .orbital-dot:nth-child(3) { bottom: -1px; left: 50%; transform: translateX(-50%); opacity: 0.3; }
-    @keyframes orbitalSpin {
-      to { transform: rotate(360deg); }
-    }
-    .pill.state-enhancing-active .orbital-dot { background: #c084fc; }
-
+    /* Dual-Orbit Ring SVG (16px x 16px — prominent, razor-sharp, full capsule height) */
     .processing-spinner {
-      width: 11px;
-      height: 11px;
-      animation: spin 1s linear infinite;
+      width: 16px;
+      height: 16px;
+      display: block;
+      filter: drop-shadow(0 0 3.5px rgba(56, 189, 248, 0.5));
     }
 
-    @keyframes spin {
+    .orbit-outer-group {
+      transform-origin: 12px 12px;
+      animation: spinClockwise 740ms linear infinite;
+    }
+
+    .orbit-inner-group {
+      transform-origin: 12px 12px;
+      animation: spinCounterClockwise 1080ms linear infinite;
+    }
+
+    .orbit-core-dot {
+      transform-origin: 12px 12px;
+      animation: coreBreathe 900ms ease-in-out infinite alternate;
+    }
+
+    @keyframes spinClockwise {
       to { transform: rotate(360deg); }
     }
 
-    .processing-text-wrapper {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      margin-left: 6px;
-      flex: 1;
-      overflow: hidden;
+    @keyframes spinCounterClockwise {
+      to { transform: rotate(-360deg); }
     }
 
-    .processing-text {
-      color: #F1F5F9;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-      line-height: 1.1;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .processing-subtext {
-      color: #a5b4fc;
-      font-size: 8.5px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .pill.state-enhancing-active .processing-chip {
-      background: #2b1747;
-      border-color: #a855f7;
+    @keyframes coreBreathe {
+      0% { transform: scale(0.75); opacity: 0.65; }
+      100% { transform: scale(1.2); opacity: 1; }
     }
 
     .enhancing-sparkle {
-      width: 12px;
-      height: 12px;
+      width: 15.5px;
+      height: 15.5px;
       display: none;
       animation: sparklePulse 1.0s ease-in-out infinite;
     }
@@ -808,22 +804,169 @@
       display: none;
     }
 
-    .pill.state-enhancing-active .processing-text {
-      color: #faf5ff;
+    /* Horizontal Micro-Badge for orbit_badge mode */
+    .processing-model-label {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      color: #e0e7ff;
+      background: rgba(129, 140, 248, 0.14);
+      border: 1px solid rgba(129, 140, 248, 0.30);
+      border-radius: 999px;
+      padding: 1.5px 5px;
+      font-size: 6.5px;
+      font-weight: 800;
+      font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+      line-height: 1;
+      flex-shrink: 0;
     }
 
-    .pill.state-enhancing-active .processing-subtext {
-      color: #d8b4fe;
+    .pill.tstyle-orbit_badge .processing-model-label {
+      display: inline-flex;
+    }
+
+    .pill.state-enhancing-active .processing-model-label {
+      color: #f3e8ff;
+      background: rgba(192, 132, 252, 0.16);
+      border-color: rgba(192, 132, 252, 0.36);
+    }
+
+    /* Style 3: 5-Bar Harmonic Liquid Sine-Wave (15px tall bars, GPU scaleY from centerline) */
+    .processing-harmonic-wave {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      width: 28px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    .hw-bar {
+      width: 2.6px;
+      border-radius: 999px;
+      transform-origin: center center;
+      animation: harmonicWaveScale 680ms ease-in-out infinite;
+      will-change: transform, opacity;
+      flex-shrink: 0;
+    }
+    .hw-bar:nth-child(1) {
+      height: 11px;
+      background: linear-gradient(180deg, #818cf8 0%, #6366f1 100%);
+      animation-delay: 0ms;
+    }
+    .hw-bar:nth-child(2) {
+      height: 13.5px;
+      background: linear-gradient(180deg, #38bdf8 0%, #818cf8 100%);
+      animation-delay: -135ms;
+    }
+    .hw-bar:nth-child(3) {
+      height: 15px;
+      background: linear-gradient(180deg, #6ee7b7 0%, #38bdf8 55%, #818cf8 100%);
+      filter: drop-shadow(0 0 3.5px rgba(56, 189, 248, 0.55));
+      animation-delay: -270ms;
+    }
+    .hw-bar:nth-child(4) {
+      height: 13.5px;
+      background: linear-gradient(180deg, #c084fc 0%, #38bdf8 100%);
+      animation-delay: -405ms;
+    }
+    .hw-bar:nth-child(5) {
+      height: 11px;
+      background: linear-gradient(180deg, #34d399 0%, #38bdf8 100%);
+      animation-delay: -540ms;
+    }
+
+    @keyframes harmonicWaveScale {
+      0%, 100% {
+        transform: scaleY(0.34);
+        opacity: 0.62;
+      }
+      50% {
+        transform: scaleY(1);
+        opacity: 1;
+      }
+    }
+
+    /* Style 4: Stadium Comet Track + Breathing Star Core (34x15px, exact pathLength=100) */
+    .processing-infinity-pulse {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 15px;
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .infinity-track-svg {
+      width: 34px;
+      height: 15px;
+      display: block;
+      overflow: visible;
+      filter: drop-shadow(0 0 3.5px rgba(56, 189, 248, 0.48));
+    }
+
+    .infinity-comet-rect {
+      stroke-dasharray: 32 68;
+      stroke-dashoffset: 100;
+      animation: cometRacePrimary 880ms linear infinite;
+    }
+
+    .infinity-comet-rect-secondary {
+      stroke-dasharray: 18 82;
+      stroke-dashoffset: 50;
+      animation: cometRaceSecondary 880ms linear infinite;
+    }
+
+    @keyframes cometRacePrimary {
+      0% { stroke-dashoffset: 100; }
+      100% { stroke-dashoffset: 0; }
+    }
+
+    @keyframes cometRaceSecondary {
+      0% { stroke-dashoffset: 50; }
+      100% { stroke-dashoffset: -50; }
+    }
+
+    .infinity-center-star {
+      transform-origin: 18px 8px;
+      filter: drop-shadow(0 0 4px rgba(110, 231, 183, 0.9));
+      animation: coreBreathe 720ms ease-in-out infinite alternate;
+    }
+
+    /* Visibility switching across the 4 transcribing styles */
+    .pill.tstyle-harmonic_wave:not(.state-enhancing-active) .processing-loading-icon,
+    .pill.tstyle-harmonic_wave .processing-model-label,
+    .pill.tstyle-harmonic_wave .processing-infinity-pulse {
+      display: none !important;
+    }
+    .pill.tstyle-harmonic_wave:not(.state-enhancing-active) .processing-harmonic-wave {
+      display: flex !important;
+    }
+
+    .pill.tstyle-infinity_pulse:not(.state-enhancing-active) .processing-loading-icon,
+    .pill.tstyle-infinity_pulse .processing-model-label,
+    .pill.tstyle-infinity_pulse .processing-harmonic-wave {
+      display: none !important;
+    }
+    .pill.tstyle-infinity_pulse:not(.state-enhancing-active) .processing-infinity-pulse {
+      display: flex !important;
     }
 
     @keyframes sparklePulse {
       0%, 100% {
-        transform: scale(0.92) rotate(0deg);
-        filter: drop-shadow(0 0 3px #a855f7);
+        transform: scale(0.92);
+        opacity: 0.85;
+        filter: drop-shadow(0 0 3px rgba(192, 132, 252, 0.5));
       }
       50% {
-        transform: scale(1.16) rotate(18deg);
-        filter: drop-shadow(0 0 6px #c084fc);
+        transform: scale(1.1);
+        opacity: 1;
+        filter: drop-shadow(0 0 6px rgba(216, 180, 254, 0.85));
       }
     }
 
@@ -840,10 +983,91 @@
       flex-shrink: 0;
     }
 
-    .state-chip.success {
-      background: #064e3b;
-      border: 1px solid #059669;
-      color: #34d399;
+    .state-view-success {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+    }
+    .state-view-success.active {
+      display: flex;
+    }
+
+    .success-done-pill {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+    }
+
+    .done-minimal-wrap {
+      position: relative;
+      width: 14px;
+      height: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .done-halo-ring {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 1px solid #34d399;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .state-view-success.active .done-halo-ring {
+      animation: doneHaloRipple 460ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes doneHaloRipple {
+      0% {
+        opacity: 0.75;
+        transform: scale(0.55);
+      }
+      100% {
+        opacity: 0;
+        transform: scale(1.75);
+      }
+    }
+
+    .done-tick-svg {
+      width: 13px;
+      height: 13px;
+      display: block;
+      filter: drop-shadow(0 0 3.5px rgba(52, 211, 153, 0.45));
+      transform: scale(0.84);
+      opacity: 0;
+    }
+
+    .state-view-success.active .done-tick-svg {
+      animation: doneSvgScaleIn 260ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes doneSvgScaleIn {
+      0% {
+        opacity: 0;
+        transform: scale(0.82);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .done-tick-svg path {
+      stroke-dasharray: 22;
+      stroke-dashoffset: 22;
+    }
+
+    .state-view-success.active .done-tick-svg path {
+      animation: checkStrokeDraw 280ms cubic-bezier(0.22, 1, 0.36, 1) 35ms forwards;
     }
 
     .state-chip.warning {
@@ -877,45 +1101,9 @@
       }
     }
 
-    /* Phase 4: Success check-draw animation */
-    .state-chip.success svg polyline {
-      stroke-dasharray: 24;
-      stroke-dashoffset: 24;
-    }
-    .state-view.active .state-chip.success svg polyline {
-      animation: checkStrokeDraw 350ms cubic-bezier(0.16, 1, 0.3, 1) 100ms forwards;
-    }
     @keyframes checkStrokeDraw {
-      0% { stroke-dashoffset: 24; }
+      0% { stroke-dashoffset: 22; }
       100% { stroke-dashoffset: 0; }
-    }
-
-    /* Phase 4: Success particle burst */
-    .success-particles {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-    }
-    .success-particle {
-      position: absolute;
-      width: 3px;
-      height: 3px;
-      border-radius: 50%;
-      background: #34d399;
-      opacity: 0;
-    }
-    .state-view.active .success-particle {
-      animation: particleBurst 500ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    }
-    .success-particle:nth-child(1) { left: 50%; top: 50%; animation-delay: 50ms; --px: -8px; --py: -10px; }
-    .success-particle:nth-child(2) { left: 50%; top: 50%; animation-delay: 80ms; --px: 10px; --py: -7px; }
-    .success-particle:nth-child(3) { left: 50%; top: 50%; animation-delay: 110ms; --px: -6px; --py: 9px; }
-    .success-particle:nth-child(4) { left: 50%; top: 50%; animation-delay: 60ms; --px: 8px; --py: 8px; }
-    .success-particle:nth-child(5) { left: 50%; top: 50%; animation-delay: 100ms; --px: -11px; --py: 2px; }
-    .success-particle:nth-child(6) { left: 50%; top: 50%; animation-delay: 90ms; --px: 12px; --py: -3px; }
-    @keyframes particleBurst {
-      0% { opacity: 1; transform: translate(0, 0) scale(1); }
-      100% { opacity: 0; transform: translate(var(--px), var(--py)) scale(0.3); }
     }
 
     .state-text-wrapper {
@@ -1022,6 +1210,7 @@
     .pill.style-icon_mono .idle-logo-chip svg {
       filter: grayscale(100%) opacity(0.85);
     }
+
   </style>
 
   <script src="../shared/qwebchannel.js"></script>
@@ -1074,19 +1263,11 @@
               <line x1="8" y1="23" x2="16" y2="23"></line>
             </svg>
           </div>
-          <div class="waveform-bars">
-            <div class="wave-bar" id="wb0"></div>
-            <div class="wave-bar" id="wb1"></div>
-            <div class="wave-bar" id="wb2"></div>
-            <div class="wave-bar" id="wb3"></div>
-            <div class="wave-bar" id="wb4"></div>
-            <div class="wave-bar" id="wb5"></div>
-            <div class="wave-bar" id="wb6"></div>
-            <div class="wave-bar" id="wb7"></div>
-            <div class="wave-bar" id="wb8"></div>
-            <div class="wave-bar" id="wb9"></div>
-            <div class="wave-bar" id="wb10"></div>
-            <div class="wave-bar" id="wb11"></div>
+          <div class="equalizer-bars" id="equalizerBars">
+            <div class="eq-bar eq-bar-1" id="eqBar1"></div>
+            <div class="eq-bar eq-bar-2" id="eqBar2"></div>
+            <div class="eq-bar eq-bar-3" id="eqBar3"></div>
+            <div class="eq-bar eq-bar-4" id="eqBar4"></div>
           </div>
           <div class="key-dock-badge" id="keyDockBadge">ALT</div>
           <div class="rec-indicator">
@@ -1095,48 +1276,96 @@
           </div>
         </div>
 
-        <!-- View: Processing / Enhancing -->
-        <div id="stateProcessing" class="state-view">
-          <div class="processing-chip flourish-icon" id="processingChip">
-            <div class="orbital-dots">
-              <div class="orbital-dot"></div>
-              <div class="orbital-dot"></div>
-              <div class="orbital-dot"></div>
+        <!-- View: Processing / Enhancing (Supports 4 Flagship Transcribing Styles) -->
+        <div id="stateProcessing" class="state-view state-view-processing">
+          <div class="processing-content-column">
+            <div class="processing-loading-icon" id="processingLoadingIcon">
+              <!-- Style 1 & 2: Dual-Orbit Liquid Ring (16px x 16px) -->
+              <svg class="processing-spinner" id="processingSpinner" viewBox="0 0 24 24" fill="none">
+                <defs>
+                  <linearGradient id="procOrbitOuterGrad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stop-color="#a5b4fc" />
+                    <stop offset="50%" stop-color="#38bdf8" />
+                    <stop offset="100%" stop-color="#34d399" />
+                  </linearGradient>
+                  <linearGradient id="procOrbitInnerGrad" x1="20" y1="4" x2="4" y2="20" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stop-color="#c084fc" />
+                    <stop offset="100%" stop-color="#818cf8" />
+                  </linearGradient>
+                </defs>
+                <!-- Subtle ambient track -->
+                <circle cx="12" cy="12" r="9.5" stroke="rgba(129, 140, 248, 0.15)" stroke-width="2.2"></circle>
+                <!-- Outer clockwise liquid comet arc -->
+                <g class="orbit-outer-group">
+                  <path d="M12 2.5A9.5 9.5 0 0 1 21.5 12" stroke="url(#procOrbitOuterGrad)" stroke-width="2.5" stroke-linecap="round"></path>
+                </g>
+                <!-- Inner counter-rotating harmonic arc -->
+                <g class="orbit-inner-group">
+                  <path d="M12 18.2A6.2 6.2 0 0 1 5.8 12" stroke="url(#procOrbitInnerGrad)" stroke-width="1.9" stroke-linecap="round"></path>
+                </g>
+                <!-- Center breathing energy core -->
+                <circle class="orbit-core-dot" cx="12" cy="12" r="2.1" fill="#38bdf8"></circle>
+              </svg>
+
+              <!-- Enhancing Sparkle Icon -->
+              <svg class="enhancing-sparkle" id="enhancingSparkle" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>
+              </svg>
             </div>
-            <svg class="processing-spinner" id="processingSpinner" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="9" stroke="rgba(255,255,255,0.15)" stroke-width="2.5"></circle>
-              <path d="M12 3C16.9706 3 21 7.02944 21 12" stroke="#818cf8" stroke-width="2.5" stroke-linecap="round"></path>
-            </svg>
-            <svg class="enhancing-sparkle" id="enhancingSparkle" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>
-            </svg>
+
+            <!-- Style 3: 5-Bar Harmonic Liquid Sine-Wave (15px tall peak, sibling of #processingLoadingIcon) -->
+            <div class="processing-harmonic-wave" id="processingHarmonicWave">
+              <div class="hw-bar"></div>
+              <div class="hw-bar"></div>
+              <div class="hw-bar"></div>
+              <div class="hw-bar"></div>
+              <div class="hw-bar"></div>
+            </div>
+
+            <!-- Style 4: Stadium Comet Track + Core Pulse (34px x 15px, sibling of #processingLoadingIcon) -->
+            <div class="processing-infinity-pulse" id="processingInfinityPulse">
+              <svg class="infinity-track-svg" viewBox="0 0 36 16" fill="none">
+                <defs>
+                  <linearGradient id="procInfinityGrad" x1="0" y1="0" x2="36" y2="16" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stop-color="#6ee7b7" />
+                    <stop offset="50%" stop-color="#38bdf8" />
+                    <stop offset="100%" stop-color="#c084fc" />
+                  </linearGradient>
+                </defs>
+                <!-- Ambient stadium loop track -->
+                <rect x="2" y="2" width="32" height="12" rx="6" stroke="rgba(129, 140, 248, 0.18)" stroke-width="2"></rect>
+                <!-- Secondary harmonic chasing comet -->
+                <rect class="infinity-comet-rect-secondary" x="2" y="2" width="32" height="12" rx="6" pathLength="100" stroke="url(#procInfinityGrad)" stroke-width="1.8" stroke-linecap="round" opacity="0.65"></rect>
+                <!-- Primary racing liquid comet -->
+                <rect class="infinity-comet-rect" x="2" y="2" width="32" height="12" rx="6" pathLength="100" stroke="url(#procInfinityGrad)" stroke-width="2.3" stroke-linecap="round"></rect>
+                <!-- Center breathing energy star (mathematically centered at 18, 8) -->
+                <circle class="infinity-center-star" cx="18" cy="8" r="2.2" fill="#6ee7b7"></circle>
+              </svg>
+            </div>
+
+            <!-- Style 2 Horizontal Frosted Micro-Badge -->
+            <span class="processing-model-label" id="processingModelLabel">SCRIBE</span>
           </div>
-          <div class="processing-text-wrapper">
-            <span class="processing-text" id="processingTitle">Transcribing...</span>
-            <span class="processing-subtext" id="processingModelLabel">Whisper Turbo</span>
-          </div>
+          <span id="processingTitle" style="display: none;"></span>
         </div>
 
-        <!-- View: Success -->
-        <div id="stateSuccess" class="state-view">
-          <div class="state-chip success flourish-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="width: 11px; height: 11px;">
-              <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
-            <!-- Phase 4: Success particle burst -->
-            <div class="success-particles">
-              <div class="success-particle"></div>
-              <div class="success-particle"></div>
-              <div class="success-particle"></div>
-              <div class="success-particle"></div>
-              <div class="success-particle"></div>
-              <div class="success-particle"></div>
+        <!-- View: Success (Sleek, minimal Done animation: standalone emerald checkmark + halo ripple) -->
+        <div id="stateSuccess" class="state-view state-view-success">
+          <div class="success-done-pill">
+            <div class="done-minimal-wrap">
+              <div class="done-halo-ring"></div>
+              <svg class="done-tick-svg" viewBox="0 0 24 24" fill="none">
+                <defs>
+                  <linearGradient id="doneEmeraldGrad" x1="4" y1="12" x2="20" y2="6" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stop-color="#6ee7b7" />
+                    <stop offset="100%" stop-color="#10b981" />
+                  </linearGradient>
+                </defs>
+                <path d="M4.5 12.5L9.5 17.5L19.5 6.5" stroke="url(#doneEmeraldGrad)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
             </div>
           </div>
-          <div class="state-text-wrapper">
-            <span class="state-title success" id="successLabel">Inserted</span>
-            <span class="state-subtitle">Complete</span>
-          </div>
+          <span id="successLabel" style="display: none;">Inserted</span>
         </div>
 
         <!-- View: Warning -->
@@ -1243,7 +1472,6 @@
     </div>
 
   </div> <!-- Closes widgetWrapper -->
-
   <script>
     (function () {
       const statusPill = document.getElementById('statusPill');
@@ -1263,23 +1491,12 @@
       const successLabel = document.getElementById('successLabel');
       const micChip = document.getElementById('micChip');
       const recTimerEl = document.getElementById('recTimer');
-      const waveBars = [
-        document.getElementById('wb0'),
-        document.getElementById('wb1'),
-        document.getElementById('wb2'),
-        document.getElementById('wb3'),
-        document.getElementById('wb4'),
-        document.getElementById('wb5'),
-        document.getElementById('wb6'),
-        document.getElementById('wb7'),
-        document.getElementById('wb8'),
-        document.getElementById('wb9'),
-        document.getElementById('wb10'),
-        document.getElementById('wb11')
+      const eqBars = [
+        document.getElementById('eqBar1'),
+        document.getElementById('eqBar2'),
+        document.getElementById('eqBar3'),
+        document.getElementById('eqBar4')
       ];
-
-      // Phase 1: 12-bar symmetric multipliers (tapered edges, peak center)
-      const barMultipliers = [0.25, 0.4, 0.6, 0.8, 0.95, 1.0, 1.0, 0.95, 0.8, 0.6, 0.4, 0.25];
 
       // Phase 7: rAF-based audio rendering
       let pendingAudioLevel = null;
@@ -1336,30 +1553,36 @@
         }
       }
 
+      function resizeDropdownWindow(open) {
+        if (!window.rift || typeof window.rift.setWidgetDropdownOpen !== 'function') {
+          return Promise.resolve();
+        }
+        try {
+          return Promise.resolve(window.rift.setWidgetDropdownOpen(open)).catch((err) => {
+            console.warn('[Widget] Failed to resize the quick-action menu:', err);
+          });
+        } catch (err) {
+          console.warn('[Widget] Failed to resize the quick-action menu:', err);
+          return Promise.resolve();
+        }
+      }
+
       function closeDropdownMenu() {
         clearDropdownTimers();
-        if (!isDropdownOpen) return;
+        if (!isDropdownOpen) return Promise.resolve();
         isDropdownOpen = false;
         statusPill.classList.remove('dropdown-open');
         if (widgetDropdownMenu) widgetDropdownMenu.classList.remove('open');
-        try {
-          if (window.rift && typeof window.rift.setWidgetDropdownOpen === 'function') {
-            window.rift.setWidgetDropdownOpen(false);
-          }
-        } catch (e) {}
+        return resizeDropdownWindow(false);
       }
 
       function openDropdownMenu() {
         clearDropdownTimers();
-        if (currentState !== 'idle') return;
+        if (currentState !== 'idle') return Promise.resolve();
         isDropdownOpen = true;
         statusPill.classList.add('dropdown-open');
         if (widgetDropdownMenu) widgetDropdownMenu.classList.add('open');
-        try {
-          if (window.rift && typeof window.rift.setWidgetDropdownOpen === 'function') {
-            window.rift.setWidgetDropdownOpen(true);
-          }
-        } catch (e) {}
+        return resizeDropdownWindow(true);
       }
 
       function toggleDropdownMenu(e) {
@@ -1407,27 +1630,39 @@
       const earcons = new AcousticEarcons();
 
       function getFriendlyModelName(modelId, provider) {
-        if (!modelId && !provider) return 'Whisper Turbo';
+        if (!modelId && !provider) return 'SCRIBE';
         const m = (modelId || '').toLowerCase();
         const p = (provider || '').toLowerCase();
 
-        if (m.includes('mai-transcribe-2') || m.includes('mai-transcribe')) return 'MAI-Transcribe 2';
-        if (m.includes('gemini-2.5-flash') || m.includes('gemini')) return 'Gemini 2.5 Flash';
-        if (m.includes('whisper-large-v3-turbo') || m.includes('turbo')) {
-          return (p === 'groq' || m.startsWith('groq/')) ? 'Groq Turbo' : 'Whisper Turbo';
-        }
-        if (m.includes('whisper-large-v3')) {
-          return (p === 'groq' || m.startsWith('groq/')) ? 'Groq Whisper' : 'Whisper Large';
-        }
-        if (p === 'groq' || m.startsWith('groq/')) return 'Groq Turbo';
-        if (m.startsWith('local') || m.startsWith('offline') || p === 'local') return 'Local Whisper';
+        if (m.includes('scribe')) return 'SCRIBE';
+        if (m.includes('gemini-2.5-flash') || m.includes('gemini')) return 'GEMINI';
+        if (m.includes('whisper-large-v3-turbo') || m.includes('turbo')) return 'TURBO';
+        if (m.includes('whisper-large-v3')) return 'V3';
+        if (m.startsWith('local') || m.startsWith('offline') || p === 'local') return 'LOCAL';
+        if (m.includes('memory')) return 'MEMORY';
+        if (m.includes('saved')) return 'RETRY';
+        if (m.includes('tenglish')) return 'TENGLISH';
+        if (m.includes('magic') || m.includes('edit')) return 'EDIT';
+        if (m.includes('generat')) return 'GEN';
+        if (p === 'groq' || m.startsWith('groq/')) return 'TURBO';
         if (modelId && modelId.includes('/')) {
           const parts = modelId.split('/');
-          const last = parts[parts.length - 1];
-          if (last.length > 16) return last.substring(0, 14) + '...';
-          return last;
+          const last = parts[parts.length - 1].toUpperCase();
+          return last.length > 7 ? last.substring(0, 6) : last;
         }
-        return modelId || 'Whisper Turbo';
+        const clean = (modelId || 'SCRIBE').toUpperCase();
+        return clean.length > 7 ? clean.substring(0, 6) : clean;
+      }
+
+      function getShortEnhancingLabel(title, submodel) {
+        const combined = `${title || ''} ${submodel || ''}`.toLowerCase();
+        if (combined.includes('edit') || combined.includes('magic')) return 'EDIT';
+        if (combined.includes('gen')) return 'GEN';
+        if (combined.includes('code')) return 'CODE';
+        if (combined.includes('term')) return 'TERM';
+        if (combined.includes('chat')) return 'CHAT';
+        if (combined.includes('doc')) return 'DOC';
+        return 'AI';
       }
 
       function updateProcessingModel(modelStr, providerStr) {
@@ -1438,7 +1673,7 @@
 
       function showEnhancingState(title, submodel) {
         if (processingTitle) processingTitle.textContent = title || 'Enhancing...';
-        if (processingModelLabel) processingModelLabel.textContent = submodel || 'AI Polish';
+        if (processingModelLabel) processingModelLabel.textContent = getShortEnhancingLabel(title, submodel);
         showState('enhancing');
       }
 
@@ -1450,16 +1685,22 @@
 
       function showTransliteratingState(modelStr, providerStr) {
         if (processingTitle) processingTitle.textContent = 'Tenglish AI...';
-        updateProcessingModel(modelStr, providerStr);
+        if (processingModelLabel) processingModelLabel.textContent = 'TENGLISH';
         showState('processing');
       }
 
       let widgetVisibility = 'always'; // 'always' | 'recording' | 'hidden'
       let currentWidgetStyle = 'active_waveform'; // 'active_waveform' | 'minimal_dot' | 'key_dock'
+      let currentTranscribingStyle = 'orbit_pure'; // 'orbit_pure' | 'orbit_badge' | 'harmonic_wave' | 'infinity_pulse'
       let lockWidgetPosition = false;
       let currentState = 'idle';
       let autoDismissTimer = null;
       let safetyTimeoutTimer = null;
+      let previewChainTimer = null;
+      let currentSettings = {
+        inferenceModel: 'elevenlabs/scribe-v2',
+        sttProvider: 'openrouter'
+      };
 
       function clearTimers() {
         if (autoDismissTimer) {
@@ -1469,6 +1710,10 @@
         if (safetyTimeoutTimer) {
           clearTimeout(safetyTimeoutTimer);
           safetyTimeoutTimer = null;
+        }
+        if (previewChainTimer) {
+          clearTimeout(previewChainTimer);
+          previewChainTimer = null;
         }
       }
 
@@ -1483,6 +1728,39 @@
 
         statusPill.classList.remove('style-pill_text', 'style-icon_color', 'style-icon_mono', 'style-active_waveform', 'style-minimal_dot', 'style-key_dock');
         statusPill.classList.add(`style-${currentWidgetStyle}`);
+      }
+
+      function applyTranscribingStyle(styleName) {
+        if (!styleName) return;
+        const normalized = styleName.toLowerCase().trim();
+        if (['orbit_pure', 'orbit_badge', 'harmonic_wave', 'infinity_pulse'].includes(normalized)) {
+          currentTranscribingStyle = normalized;
+        } else {
+          currentTranscribingStyle = 'orbit_pure';
+        }
+
+        statusPill.classList.remove(
+          'tstyle-orbit_pure',
+          'tstyle-orbit_badge',
+          'tstyle-harmonic_wave',
+          'tstyle-infinity_pulse'
+        );
+        statusPill.classList.add(`tstyle-${currentTranscribingStyle}`);
+      }
+
+      function triggerTranscribingStylePreview() {
+        if (widgetVisibility === 'hidden') return;
+        clearTimers();
+        currentState = null; // Force state re-entry
+        showTranscribingState(
+          currentSettings.inferenceModel || currentSettings.inference_model || currentSettings.cloudModel || 'elevenlabs/scribe-v2',
+          currentSettings.sttProvider || currentSettings.stt_provider || 'openrouter'
+        );
+        previewChainTimer = setTimeout(() => {
+          previewChainTimer = null;
+          if (successLabel) successLabel.textContent = 'Inserted';
+          showState('success');
+        }, 1450);
       }
 
       function updateKeyDockLabel(cfg) {
@@ -1502,6 +1780,9 @@
       }
 
       function showState(stateName) {
+        if (currentState === stateName && (stateName === 'processing' || stateName === 'recording') && statusPill.classList.contains('visible')) {
+          return;
+        }
         clearTimers();
         if (stateName !== 'idle') {
           closeDropdownMenu();
@@ -1641,12 +1922,13 @@
       }
 
       function resetWaveBars() {
-        waveBars.forEach(bar => {
-          if (bar) bar.style.transform = 'scaleY(0.15)';
-        });
+        if (eqBars[0]) eqBars[0].style.height = '4px';
+        if (eqBars[1]) eqBars[1].style.height = '7px';
+        if (eqBars[2]) eqBars[2].style.height = '8px';
+        if (eqBars[3]) eqBars[3].style.height = '5px';
       }
 
-      // Phase 7: Batch waveform updates into single rAF for 60fps GPU rendering
+      // Phase 7: Batch equalizer bar updates into single rAF for 60fps GPU rendering
       function renderWaveFrame() {
         rafId = null;
         const level = pendingAudioLevel;
@@ -1664,19 +1946,18 @@
         const factor = Math.min(1.0, Math.max(0, level / 65.0));
 
         if (micChip) {
-          micChip.style.transform = `scale(${(1.0 + factor * 0.14).toFixed(3)})`;
+          micChip.style.transform = `scale(${(1.0 + factor * 0.12).toFixed(3)})`;
         }
 
-        // GPU-optimized: batch all bar transforms
-        for (let i = 0; i < waveBars.length; i++) {
-          const bar = waveBars[i];
-          if (!bar) continue;
-          const mult = barMultipliers[i] || 0.5;
-          // Organic jitter with slight per-bar phase offset
-          const jitter = 0.82 + Math.random() * 0.36;
-          const scale = Math.max(0.15, Math.min(1.0, 0.15 + (0.85 * factor * mult * jitter)));
-          bar.style.transform = `scaleY(${scale.toFixed(3)})`;
-        }
+        const b1 = Math.round(3 + factor * 6);
+        const b2 = Math.round(4 + factor * 9);
+        const b3 = Math.round(4 + factor * 8);
+        const b4 = Math.round(3 + factor * 6);
+
+        if (eqBars[0]) eqBars[0].style.height = `${b1}px`;
+        if (eqBars[1]) eqBars[1].style.height = `${b2}px`;
+        if (eqBars[2]) eqBars[2].style.height = `${b3}px`;
+        if (eqBars[3]) eqBars[3].style.height = `${b4}px`;
       }
 
       function updateAudioLevel(level) {
@@ -1690,17 +1971,20 @@
         }
       }
 
-      // Immediately display idle badge
+      // Immediately apply default transcribing style and display idle badge
+      applyTranscribingStyle('orbit_pure');
       showState('idle');
 
       window.rift.ready(async () => {
         try {
           const cfgJson = await window.rift.getWidgetConfig();
           const cfg = typeof cfgJson === 'string' ? JSON.parse(cfgJson) : (cfgJson || {});
+          currentSettings = Object.assign(currentSettings, cfg);
           widgetVisibility = (cfg.widgetVisibility || cfg.widget_visibility || 'always').toLowerCase();
           lockWidgetPosition = !!(cfg.lockWidgetPosition !== undefined ? cfg.lockWidgetPosition : cfg.lock_widget_position);
           statusPill.classList.toggle('position-locked', lockWidgetPosition);
           applyWidgetStyle(cfg.widgetStyle || cfg.widget_style || cfg.style || 'active_waveform');
+          applyTranscribingStyle(cfg.widgetTranscribingStyle || cfg.widget_transcribing_style || 'orbit_pure');
           updateKeyDockLabel(cfg);
 
           if (cfg.inferenceModel || cfg.cloudModel || cfg.sttProvider) {
@@ -1720,6 +2004,7 @@
         window.rift.on('widgetConfigChanged', (cfgJson) => {
           try {
             const cfg = typeof cfgJson === 'string' ? JSON.parse(cfgJson) : (cfgJson || {});
+            currentSettings = Object.assign(currentSettings, cfg);
             widgetVisibility = (cfg.widgetVisibility || cfg.widget_visibility || 'always').toLowerCase();
             statusPill.classList.remove('dragging');
             if (cfg.lockWidgetPosition !== undefined || cfg.lock_widget_position !== undefined) {
@@ -1730,6 +2015,11 @@
             const newStyle = cfg.widgetStyle || cfg.widget_style || cfg.style;
             if (newStyle) {
               applyWidgetStyle(newStyle);
+            }
+            const oldTranscribingStyle = currentTranscribingStyle;
+            const newTranscribingStyle = cfg.widgetTranscribingStyle || cfg.widget_transcribing_style;
+            if (newTranscribingStyle) {
+              applyTranscribingStyle(newTranscribingStyle);
             }
             updateKeyDockLabel(cfg);
             if (cfg.inferenceModel || cfg.cloudModel || cfg.sttProvider) {
@@ -1748,7 +2038,9 @@
               }
             }
 
-            if (oldStyle !== currentWidgetStyle && widgetVisibility !== 'hidden') {
+            if ((oldTranscribingStyle !== currentTranscribingStyle || cfg.previewTranscribingStyle) && widgetVisibility !== 'hidden') {
+              triggerTranscribingStylePreview();
+            } else if (oldStyle !== currentWidgetStyle && widgetVisibility !== 'hidden') {
               showState('recording');
               setTimeout(() => {
                 transitionToIdleOrHide();
@@ -1762,8 +2054,17 @@
         window.rift.on('settingsChanged', (settingsRaw) => {
           try {
             const s = typeof settingsRaw === 'string' ? JSON.parse(settingsRaw) : (settingsRaw || {});
+            currentSettings = Object.assign(currentSettings, s);
+            const oldTranscribingStyle = currentTranscribingStyle;
+            const nextTranscribingStyle = s.widgetTranscribingStyle || s.widget_transcribing_style;
+            if (nextTranscribingStyle) {
+              applyTranscribingStyle(nextTranscribingStyle);
+            }
             if (s && (s.inferenceModel || s.cloudModel || s.sttProvider)) {
               updateProcessingModel(s.inferenceModel || s.cloudModel, s.sttProvider);
+            }
+            if (oldTranscribingStyle !== currentTranscribingStyle && widgetVisibility !== 'hidden') {
+              triggerTranscribingStylePreview();
             }
           } catch (e) {}
         });
@@ -1780,6 +2081,21 @@
         window.rift.on('recordingStarted', () => {
           resetWaveBars();
           showState('recording');
+          statusPill.classList.add('visible');
+          statusPill.style.transform = 'translateY(-3px) scale(1.04)';
+          setTimeout(() => {
+            if (currentState === 'recording') {
+              statusPill.style.transform = '';
+            }
+          }, 120);
+        });
+
+        window.rift.on('repositionWidget', () => {
+          statusPill.classList.add('visible');
+          statusPill.style.transform = 'translateY(-4px) scale(1.06)';
+          setTimeout(() => {
+            statusPill.style.transform = '';
+          }, 260);
         });
 
         window.rift.on('audioLevel', (level) => {
@@ -1794,7 +2110,7 @@
               return;
             }
           } catch (e) {}
-          showTranscribingState();
+          showTranscribingState(currentSettings.inferenceModel || currentSettings.inference_model || currentSettings.cloudModel, currentSettings.sttProvider || currentSettings.stt_provider);
         });
 
         window.rift.on('recordingCancelled', () => {
@@ -1970,7 +2286,11 @@
             e.stopPropagation();
             closeDropdownMenu();
             try {
-              window.rift.polishSelectedText();
+              if (window.__TAURI__ && window.__TAURI__.core) {
+                window.__TAURI__.core.invoke('polishSelectedText');
+              } else if (window.rift && typeof window.rift.polishSelectedText === 'function') {
+                window.rift.polishSelectedText();
+              }
             } catch (err) {
               console.error('[Widget] Failed to invoke polishSelectedText:', err);
             }
@@ -1979,13 +2299,15 @@
         }
 
         if (btnScratchPad) {
-          btnScratchPad.addEventListener('click', (e) => {
+          btnScratchPad.addEventListener('click', async (e) => {
             e.stopPropagation();
-            closeDropdownMenu();
+            await closeDropdownMenu();
             try {
-              window.rift.openScratchpadWindow();
+              await window.rift.openScratchpadWindow();
             } catch (err) {
               console.error('[Widget] Failed to invoke openScratchpadWindow:', err);
+              if (errorLabel) errorLabel.textContent = 'Scratch Pad unavailable';
+              showState('error');
             }
           });
           btnScratchPad.addEventListener('mousedown', (e) => e.stopPropagation());
@@ -1998,6 +2320,8 @@
             try {
               if (window.__TAURI__ && window.__TAURI__.core) {
                 window.__TAURI__.core.invoke('openSpotlightWindow');
+              } else if (window.rift && typeof window.rift.openSpotlightWindow === 'function') {
+                window.rift.openSpotlightWindow();
               }
             } catch (err) {
               console.error('[Widget] Failed to invoke openSpotlightWindow:', err);
@@ -2050,6 +2374,10 @@
               closeDropdownMenu();
             }
           }
+        });
+
+        window.addEventListener('blur', () => {
+          closeDropdownMenu();
         });
       });
     })();

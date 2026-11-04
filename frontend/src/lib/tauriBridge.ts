@@ -86,6 +86,17 @@ export async function invokeTauri<T = any>(cmd: string, args?: Record<string, an
   if (cmd === 'getHistory') {
     return [] as any;
   }
+  if (cmd === 'searchLibrary') {
+    return {
+      results: [],
+      total: 0,
+      limit: args?.limit ?? 30,
+      offset: args?.offset ?? 0,
+    } as any;
+  }
+  if (cmd === 'getScratchpadDraft') {
+    return { content: '', updated_at: null } as any;
+  }
   if (cmd === 'getDictionary') {
     return [] as any;
   }

@@ -3,9 +3,17 @@ $ErrorActionPreference = "Stop"
 $vcBin = "C:\Program Files\Microsoft Visual Studio\2022\Community\SDK\ScopeCppSDK\vc15\VC\bin"
 $sdkBin = "C:\Program Files\Microsoft Visual Studio\2022\Community\SDK\ScopeCppSDK\vc15\SDK\bin"
 $cmakeBin = "C:\Program Files\CMake\bin"
-$rustBin = "C:\Users\Saisrikar Kokku\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin"
+$rustBin = Join-Path $env:USERPROFILE ".rustup\toolchains\stable-x86_64-pc-windows-msvc\bin"
 
-$env:PATH = "$cmakeBin;$vcBin;$sdkBin;$rustBin;" + $env:PATH
+if (Test-Path $rustBin) {
+    $env:PATH = "$rustBin;" + $env:PATH
+}
+if (Test-Path $cmakeBin) {
+    $env:PATH = "$cmakeBin;" + $env:PATH
+}
+if (Test-Path $vcBin) {
+    $env:PATH = "$vcBin;$sdkBin;" + $env:PATH
+}
 $env:RC = "$sdkBin\rc.exe"
 $env:WHISPER_DONT_GENERATE_BINDINGS = "1"
 

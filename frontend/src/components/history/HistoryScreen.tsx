@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { invokeTauri, listenTauriEvent } from '../../lib/tauriBridge';
 import { SpotlightCard } from '../ui/SpotlightCard';
 import { Badge } from '../ui/Badge';
 import { SimpleTooltip } from '../ui/Tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/Dialog';
-import { Search, Trash2, Copy, Check, Calendar, Clock, AlertTriangle, FileText } from 'lucide-react';
+import { Search, Trash2, Copy, Check, Calendar, Clock, AlertTriangle, FileText, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface HistoryEntry {
   id: number;
@@ -18,37 +18,182 @@ interface HistoryEntry {
   engine?: string;
 }
 
-export const HistoryScreen: React.FC = () => {
+interface HistorySearchPage {
+  entries: HistoryEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+const HISTORY_PAGE_SIZE = 50;
+const HISTORY_SEARCH_TIMEOUT_MS = 10_000;
+
+interface HistoryPaginationProps {
+  firstResult: number;
+  lastResult: number;
+  page: number;
+  pageCount: number;
+  total: number;
+  loading: boolean;
+  onPageChange: (page: number) => void;
+}
+
+const HistoryPagination: React.FC<HistoryPaginationProps> = ({
+  firstResult,
+  lastResult,
+  page,
+  pageCount,
+  total,
+  loading,
+  onPageChange,
+}) => (
+  <nav
+    aria-label="History result pages"
+    style={{
+      position: 'sticky',
+      top: '48px',
+      zIndex: 20,
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: '10px',
+      padding: '9px 10px',
+      borderRadius: '9px',
+      border: '1px solid rgba(255,255,255,0.07)',
+      background: 'rgba(12,12,18,0.96)',
+      backdropFilter: 'blur(12px)',
+    }}
+  >
+    <span aria-live="polite" style={{ color: '#9c97aa', fontSize: '11px' }}>
+      Showing {firstResult}–{lastResult} of {total}
+    </span>
+    {pageCount > 1 && (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <button
+          type="button"
+          disabled={loading || page === 0}
+          onClick={() => onPageChange(page - 1)}
+          aria-label="Previous history page"
+          style={{ ...historyPageButtonStyle, opacity: loading || page === 0 ? 0.45 : 1 }}
+        >
+          <ChevronLeft aria-hidden="true" size={14} /> Previous
+        </button>
+        <span aria-current="page" style={{ color: '#9c97aa', fontSize: '11px', whiteSpace: 'nowrap' }}>
+          Page {page + 1} of {pageCount}
+        </span>
+        <button
+          type="button"
+          disabled={loading || page + 1 >= pageCount}
+          onClick={() => onPageChange(page + 1)}
+          aria-label="Next history page"
+          style={{ ...historyPageButtonStyle, opacity: loading || page + 1 >= pageCount ? 0.45 : 1 }}
+        >
+          Next <ChevronRight aria-hidden="true" size={14} />
+        </button>
+      </div>
+    )}
+  </nav>
+);
+
+const historyPageButtonStyle: React.CSSProperties = {
+  minHeight: '32px',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '4px',
+  padding: '0 9px',
+  borderRadius: '7px',
+  border: '1px solid rgba(255,255,255,0.08)',
+  background: 'rgba(255,255,255,0.03)',
+  color: '#cac4d7',
+  fontSize: '11px',
+  cursor: 'pointer',
+};
+
+export const HistoryScreen: React.FC<{ onOpenLibrary: () => void }> = ({ onOpenLibrary }) => {
+  const mainAreaRef = useRef<HTMLDivElement>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'today' | 'week' | 'cloud' | 'local'>('all');
+  const [page, setPage] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [refreshToken, setRefreshToken] = useState(0);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [showClearConfirmDialog, setShowClearConfirmDialog] = useState(false);
 
-  const loadHistory = useCallback(async () => {
-    try {
-      const items = await invokeTauri<HistoryEntry[]>('getHistory', { filter: { limit: 120 } });
-      if (Array.isArray(items)) {
-        setHistory(items);
-      }
-    } catch (e) {
-      console.warn('Failed to load history', e);
-    }
+  const refreshHistory = useCallback(() => {
+    setRefreshToken((value) => value + 1);
   }, []);
 
   useEffect(() => {
-    loadHistory();
+    const timer = window.setTimeout(() => {
+      setDebouncedQuery(searchQuery.trim());
+      setPage(0);
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
 
-    const u1 = listenTauriEvent('historyCleared', loadHistory);
-    const u2 = listenTauriEvent('transcriptionSuccess', loadHistory);
-    const u3 = listenTauriEvent('transcriptionComplete', loadHistory);
+  useEffect(() => {
+    let cancelled = false;
+    let timedOut = false;
+    setIsLoading(true);
+    setLoadError(null);
+    const timeout = window.setTimeout(() => {
+      if (!cancelled) {
+        timedOut = true;
+        setLoadError('History search took too long. Please retry.');
+        setIsLoading(false);
+      }
+    }, HISTORY_SEARCH_TIMEOUT_MS);
 
+    invokeTauri<HistorySearchPage>('searchHistory', {
+      query: debouncedQuery,
+      filter: activeFilter,
+      limit: HISTORY_PAGE_SIZE,
+      offset: page * HISTORY_PAGE_SIZE,
+    })
+      .then((result) => {
+        if (timedOut) return;
+        if (!Array.isArray(result?.entries) || typeof result.total !== 'number') {
+          throw new Error('History returned an unexpected response. Please retry.');
+        }
+        if (!cancelled) {
+          setHistory(result.entries);
+          setHistoryTotal(result.total);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled && !timedOut) {
+          setHistory([]);
+          setHistoryTotal(0);
+          setLoadError(error instanceof Error ? error.message : 'Could not load your transcription history.');
+        }
+      })
+      .finally(() => {
+        window.clearTimeout(timeout);
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [debouncedQuery, activeFilter, page, refreshToken]);
+
+  useEffect(() => {
+    const u1 = listenTauriEvent('historyCleared', refreshHistory);
+    const u2 = listenTauriEvent('transcriptionSuccess', refreshHistory);
+    const u3 = listenTauriEvent('transcriptionComplete', refreshHistory);
     return () => {
       u1();
       u2();
       u3();
     };
-  }, [loadHistory]);
+  }, [refreshHistory]);
 
   const handleCopy = async (id: number, text: string) => {
     try {
@@ -65,7 +210,11 @@ export const HistoryScreen: React.FC = () => {
     e.stopPropagation();
     try {
       await invokeTauri('deleteHistoryEntry', { id });
-      setHistory((prev) => prev.filter((item) => item.id !== id));
+      if (history.length === 1 && page > 0) {
+        setPage((value) => Math.max(0, value - 1));
+      } else {
+        refreshHistory();
+      }
     } catch (err) {
       console.error('Failed to delete history item', err);
     }
@@ -75,42 +224,13 @@ export const HistoryScreen: React.FC = () => {
     try {
       await invokeTauri('clearHistory');
       setHistory([]);
+      setHistoryTotal(0);
+      setPage(0);
       setShowClearConfirmDialog(false);
     } catch (err) {
       console.error('Failed to clear history', err);
     }
   };
-
-  // Filter items
-  const filteredHistory = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
-    const now = new Date();
-
-    return history.filter((item) => {
-      if (q && !item.text.toLowerCase().includes(q)) {
-        return false;
-      }
-
-      if (activeFilter === 'all') return true;
-
-      const itemDate = new Date(item.timestamp);
-      if (activeFilter === 'today') {
-        return itemDate.toDateString() === now.toDateString();
-      }
-      if (activeFilter === 'week') {
-        const oneWeekAgo = new Date();
-        oneWeekAgo.setDate(now.getDate() - 7);
-        return itemDate >= oneWeekAgo;
-      }
-      if (activeFilter === 'cloud') {
-        return !item.engine || item.engine.toLowerCase() !== 'local';
-      }
-      if (activeFilter === 'local') {
-        return item.engine && item.engine.toLowerCase() === 'local';
-      }
-      return true;
-    });
-  }, [history, searchQuery, activeFilter]);
 
   function formatTime(isoString: string) {
     if (!isoString) return '';
@@ -144,9 +264,18 @@ export const HistoryScreen: React.FC = () => {
     { id: 'cloud', label: 'Cloud' },
     { id: 'local', label: 'Offline Whisper' },
   ] as const;
+  const pageCount = Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE));
+  const firstResult = historyTotal === 0 ? 0 : page * HISTORY_PAGE_SIZE + 1;
+  const lastResult = Math.min((page + 1) * HISTORY_PAGE_SIZE, historyTotal);
+  const handlePageChange = (nextPage: number) => {
+    const safePage = Math.max(0, Math.min(pageCount - 1, nextPage));
+    if (safePage === page) return;
+    mainAreaRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    setPage(safePage);
+  };
 
   return (
-    <div className="rift-main-area">
+    <div ref={mainAreaRef} className="rift-main-area">
       <div style={{ maxWidth: '1040px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         
         {/* Header toolbar */}
@@ -156,39 +285,61 @@ export const HistoryScreen: React.FC = () => {
               Dictation History
             </h1>
             <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#9c97aa' }}>
-              Search, review, and copy transcriptions from your local SQLite archive.
+              Search and review every transcription. Use the Library for transcripts, clipboard items, and Scratchpad notes.
             </p>
           </div>
 
-          {history.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <button
               type="button"
-              onClick={() => setShowClearConfirmDialog(true)}
+              onClick={onOpenLibrary}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
                 padding: '7px 12px',
                 borderRadius: '8px',
-                backgroundColor: 'rgba(239, 68, 68, 0.10)',
-                border: '1px solid rgba(239, 68, 68, 0.25)',
-                color: '#f87171',
+                backgroundColor: 'rgba(196, 181, 253, 0.10)',
+                border: '1px solid rgba(196, 181, 253, 0.22)',
+                color: '#d4c8ff',
                 fontSize: '12px',
                 fontWeight: 600,
                 cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.20)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.10)';
               }}
             >
-              <Trash2 style={{ width: '14px', height: '14px' }} />
-              Clear History
+              <Search style={{ width: '14px', height: '14px' }} />
+              Search Library
             </button>
-          )}
+            {historyTotal > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowClearConfirmDialog(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 12px',
+                  borderRadius: '8px',
+                  backgroundColor: 'rgba(239, 68, 68, 0.10)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  color: '#f87171',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.20)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.10)';
+                }}
+              >
+                <Trash2 style={{ width: '14px', height: '14px' }} />
+                Clear History
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Search & Filter Pills Row */}
@@ -237,7 +388,7 @@ export const HistoryScreen: React.FC = () => {
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setActiveFilter(tab.id as any)}
+                  onClick={() => { setActiveFilter(tab.id); setPage(0); }}
                   style={{
                     padding: '5px 12px',
                     borderRadius: '7px',
@@ -257,20 +408,51 @@ export const HistoryScreen: React.FC = () => {
           </div>
         </div>
 
+        {!loadError && historyTotal > 0 && (
+          <HistoryPagination
+            firstResult={firstResult}
+            lastResult={lastResult}
+            page={page}
+            pageCount={pageCount}
+            total={historyTotal}
+            loading={isLoading}
+            onPageChange={handlePageChange}
+          />
+        )}
+
         {/* History Items List */}
-        {filteredHistory.length === 0 ? (
+        {isLoading ? (
+          <SpotlightCard role="status" aria-live="polite" style={{ padding: '60px 24px', textAlign: 'center' }}>
+            <FileText style={{ width: '28px', height: '28px', color: '#6e6a7d', margin: '0 auto 12px', opacity: 0.7 }} />
+            <p style={{ margin: 0, fontSize: '13px', color: '#9c97aa' }}>Loading transcription history…</p>
+          </SpotlightCard>
+        ) : loadError ? (
+          <SpotlightCard role="alert" style={{ padding: '32px 24px', textAlign: 'center' }}>
+            <h3 style={{ margin: '0 0 6px', fontSize: '15px', fontWeight: 600, color: '#f0eff4' }}>
+              History could not be loaded
+            </h3>
+            <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#fca5a5' }}>{loadError}</p>
+            <button
+              type="button"
+              onClick={refreshHistory}
+              style={{ padding: '7px 12px', borderRadius: '7px', border: '1px solid rgba(196,181,253,0.22)', background: 'rgba(196,181,253,0.10)', color: '#d4c8ff', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+            >
+              Try again
+            </button>
+          </SpotlightCard>
+        ) : history.length === 0 ? (
           <SpotlightCard style={{ padding: '60px 24px', textAlign: 'center' }}>
             <FileText style={{ width: '36px', height: '36px', color: '#6e6a7d', margin: '0 auto 12px' }} />
             <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#f0eff4' }}>
               No dictations found
             </h3>
             <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#9c97aa' }}>
-              {searchQuery ? 'Try adjusting your search query or active filter.' : 'Your transcribed recordings will appear here.'}
+              {searchQuery || activeFilter !== 'all' ? 'Try adjusting your search query or active filter.' : 'Your transcribed recordings will appear here.'}
             </p>
           </SpotlightCard>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {filteredHistory.map((item) => {
+            {history.map((item) => {
               const isCopied = copiedId === item.id;
               return (
                 <SpotlightCard
@@ -376,6 +558,18 @@ export const HistoryScreen: React.FC = () => {
           </div>
         )}
 
+        {!isLoading && !loadError && historyTotal > 0 && (
+          <HistoryPagination
+            firstResult={firstResult}
+            lastResult={lastResult}
+            page={page}
+            pageCount={pageCount}
+            total={historyTotal}
+            loading={isLoading}
+            onPageChange={handlePageChange}
+          />
+        )}
+
         {/* Clear History Confirmation Dialog */}
         <Dialog open={showClearConfirmDialog} onOpenChange={setShowClearConfirmDialog}>
           <DialogContent>
@@ -385,7 +579,7 @@ export const HistoryScreen: React.FC = () => {
                 <DialogTitle>Clear All History?</DialogTitle>
               </div>
               <DialogDescription>
-                This action cannot be undone. All {history.length} dictation entries stored in your local SQLite database will be permanently removed.
+                This action cannot be undone. All {historyTotal} dictation entries stored in your local SQLite database will be permanently removed.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>

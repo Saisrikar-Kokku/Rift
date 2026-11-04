@@ -2,6 +2,7 @@
 target/
 src-tauri/target/
 **/*.rs.bk
+Cargo.lock.bk
 
 # Node.js dependencies & caches
 node_modules/
@@ -9,15 +10,42 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+.vite/
+.vite-temp/
 
-# Environment and secrets
+# Environment, secrets & credentials (strictly protected)
 .env
 .env.*
+!.env.example
 .groq_key
 .openrouter_key
 *.key
+*.pem
+*.cer
+*.crt
+*.pfx
+*.p12
+*.id_rsa
+*.keystore
+*.jks
+*.token
+*.secret
 
-# Application runtime logs and data
+# Binaries, packages & debug symbol dumps
+*.exe
+*.dll
+*.dylib
+*.so
+*.pdb
+*.dmg
+*.pkg
+*.msi
+*.zip
+*.tar.gz
+*.7z
+*.app
+
+# Application runtime logs, databases and audio recordings
 *.log
 *.db
 *.db-journal
@@ -26,10 +54,17 @@ yarn-error.log*
 *.wav
 recordings/
 backups/
+backup/
 scratch/
 reports/
 .freebuff/
 release-mac/
+worktrees/
+.worktrees/
+out.txt
+err.txt
+*.bak
+*.old
 
 # Operating System files
 .DS_Store
@@ -37,8 +72,10 @@ Thumbs.db
 ehthumbs.db
 [Dd]esktop.ini
 
-# IDE files
+# IDE & Editor files
 .vscode/
 .idea/
 *.sublime-project
 *.sublime-workspace
+*.suo
+*.user

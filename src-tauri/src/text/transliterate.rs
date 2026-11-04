@@ -178,7 +178,7 @@ pub async fn transliterate_telugu_groq(
     }
 
     let body = serde_json::json!({
-        "model": "qwen/qwen3.8-27b",
+        "model": "llama-3.3-70b-versatile",
         "messages": [
             { "role": "system", "content": TRANSLITERATION_SYSTEM_PROMPT },
             { "role": "user", "content": text }
@@ -187,7 +187,6 @@ pub async fn transliterate_telugu_groq(
         "max_tokens": 120
     });
 
-    log::info!("[Tenglish Groq] Requesting transliteration for: '{}'", text);
     let res = tokio::time::timeout(
         Duration::from_millis(6000),
         client
@@ -204,9 +203,8 @@ pub async fn transliterate_telugu_groq(
 
     if !res.status().is_success() {
         let status = res.status();
-        let err_text = res.text().await.unwrap_or_default();
-        log::warn!("[Tenglish Groq] API error ({}): {}", status, err_text);
-        return Err(format!("Groq API error ({}): {}", status, err_text));
+        log::warn!("[Tenglish Groq] API request failed with status {}", status);
+        return Err(format!("Groq API error ({})", status));
     }
 
     let json: Value = res
@@ -217,7 +215,6 @@ pub async fn transliterate_telugu_groq(
     if let Some(content) = json["choices"][0]["message"]["content"].as_str() {
         let cleaned = clean_llm_output(content);
         if !cleaned.is_empty() {
-            log::info!("[Tenglish Groq] Result: '{}'", cleaned);
             return Ok(cleaned);
         }
     }
@@ -254,7 +251,6 @@ pub async fn transliterate_telugu_openrouter(
         "max_tokens": 120
     });
 
-    log::info!("[Tenglish OpenRouter] Requesting transliteration with '{}' for: '{}'", target_model, text);
     let res = tokio::time::timeout(
         Duration::from_millis(8000),
         client
@@ -272,9 +268,8 @@ pub async fn transliterate_telugu_openrouter(
 
     if !res.status().is_success() {
         let status = res.status();
-        let err_text = res.text().await.unwrap_or_default();
-        log::warn!("[Tenglish OpenRouter] API error ({}): {}", status, err_text);
-        return Err(format!("OpenRouter API error ({}): {}", status, err_text));
+        log::warn!("[Tenglish OpenRouter] API request failed with status {}", status);
+        return Err(format!("OpenRouter API error ({})", status));
     }
 
     let json: Value = res
@@ -285,7 +280,6 @@ pub async fn transliterate_telugu_openrouter(
     if let Some(content) = json["choices"][0]["message"]["content"].as_str() {
         let cleaned = clean_llm_output(content);
         if !cleaned.is_empty() {
-            log::info!("[Tenglish OpenRouter] Result: '{}'", cleaned);
             return Ok(cleaned);
         }
     }

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WidgetPosition {
@@ -26,8 +27,9 @@ pub struct AppSettings {
     pub launch_at_login: bool,
     pub transcription_mode: String, // "cloud"
     pub stt_provider: String,       // "openrouter", "groq"
-    pub inference_model: String,    // "microsoft/mai-transcribe-2"
+    pub inference_model: String,    // "elevenlabs/scribe-v2"
     pub local_inference_profile: String,
+    pub local_whisper_unload_on_idle: bool,
     pub recording_sounds: bool,
     pub sound_volume: f32,
     pub pause_other_audio_while_talking: bool,
@@ -47,6 +49,10 @@ pub struct AppSettings {
     pub tenglish_translit_engine: String,
     pub noise_cancellation_enabled: bool,
     pub ambient_memory_enabled: bool,
+    pub whisper_mode_enabled: bool,
+    pub intent_router_enabled: bool,
+    pub wake_word_enabled: bool,
+    pub widget_transcribing_style: String, // "orbit_pure", "orbit_badge", "harmonic_wave", "infinity_pulse"
 }
 
 
@@ -89,6 +95,7 @@ impl Default for AppSettings {
             stt_provider: "groq".to_string(),
             inference_model: "whisper-large-v3-turbo".to_string(),
             local_inference_profile: "balanced".to_string(),
+            local_whisper_unload_on_idle: true,
             recording_sounds: true,
             sound_volume: 0.6,
             pause_other_audio_while_talking: true,
@@ -108,6 +115,10 @@ impl Default for AppSettings {
             tenglish_translit_engine: "auto".to_string(),
             noise_cancellation_enabled: true,
             ambient_memory_enabled: false,
+            whisper_mode_enabled: false,
+            intent_router_enabled: true,
+            wake_word_enabled: false,
+            widget_transcribing_style: "orbit_pure".to_string(),
         }
     }
 }
@@ -139,6 +150,7 @@ pub fn get_settings_path() -> PathBuf {
 }
 
 static CACHED_SETTINGS: std::sync::RwLock<Option<AppSettings>> = std::sync::RwLock::new(None);
+static SETTINGS_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 pub fn load_settings() -> AppSettings {
     if let Ok(guard) = CACHED_SETTINGS.read() {
@@ -172,12 +184,20 @@ fn load_settings_from_disk() -> AppSettings {
                     settings.stt_provider = "groq".to_string();
                     modified = true;
                 }
-                if settings.inference_model.is_empty() {
+                if settings.inference_model.is_empty() || settings.inference_model.contains("mai-transcribe") {
                     if settings.stt_provider == "groq" {
                         settings.inference_model = "whisper-large-v3-turbo".to_string();
                     } else {
-                        settings.inference_model = "microsoft/mai-transcribe-2".to_string();
+                        settings.inference_model = "elevenlabs/scribe-v2".to_string();
                     }
+                    modified = true;
+                }
+                if settings.tenglish_stt_tier.contains("mai") {
+                    settings.tenglish_stt_tier = "auto".to_string();
+                    modified = true;
+                }
+                if settings.widget_transcribing_style.is_empty() {
+                    settings.widget_transcribing_style = "orbit_pure".to_string();
                     modified = true;
                 }
                 if modified {
@@ -194,14 +214,61 @@ fn load_settings_from_disk() -> AppSettings {
 }
 
 pub fn save_settings(settings: &AppSettings) {
+    if let Err(error) = try_save_settings(settings) {
+        log::error!("Failed to persist Rift settings: {error}");
+    }
+}
+
+/// Persist settings before publishing them to the in-memory cache.
+/// A unique temporary file avoids collisions when multiple settings updates happen close together.
+pub fn try_save_settings(settings: &AppSettings) -> Result<(), String> {
+    let path = get_settings_path();
+    let sequence = SETTINGS_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let temp_path = path.with_file_name(format!(
+        "settings.json.tmp-{}-{sequence}",
+        std::process::id()
+    ));
+    let json = serde_json::to_vec_pretty(settings)
+        .map_err(|error| format!("Could not serialize settings: {error}"))?;
+
+    fs::write(&temp_path, json)
+        .map_err(|error| format!("Could not write temporary settings file: {error}"))?;
+    if let Err(error) = fs::rename(&temp_path, &path) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(format!("Could not replace settings file: {error}"));
+    }
+
     if let Ok(mut guard) = CACHED_SETTINGS.write() {
         *guard = Some(settings.clone());
     }
-    let path = get_settings_path();
-    let temp_path = path.with_extension("tmp");
-    if let Ok(json) = serde_json::to_string_pretty(settings) {
-        if fs::write(&temp_path, json).is_ok() {
-            let _ = fs::rename(&temp_path, &path);
-        }
+    Ok(())
+}
+
+pub fn append_scratchpad_inbox_note(note: &str) {
+    let inbox_path = get_app_data_dir().join("scratchpad_inbox.json");
+    let mut notes: Vec<String> = if inbox_path.exists() {
+        fs::read_to_string(&inbox_path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    notes.push(note.to_string());
+    if let Ok(json) = serde_json::to_string_pretty(&notes) {
+        let _ = fs::write(&inbox_path, json);
     }
+}
+
+pub fn drain_scratchpad_inbox_notes() -> Vec<String> {
+    let inbox_path = get_app_data_dir().join("scratchpad_inbox.json");
+    if !inbox_path.exists() {
+        return Vec::new();
+    }
+    let notes: Vec<String> = fs::read_to_string(&inbox_path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    let _ = fs::remove_file(&inbox_path);
+    notes
 }

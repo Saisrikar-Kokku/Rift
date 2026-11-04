@@ -1,4 +1,8 @@
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(windows)]
+use std::sync::atomic::AtomicU32;
+#[cfg(windows)]
+use std::sync::atomic::AtomicPtr;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, RwLock};
 #[cfg(windows)]
@@ -7,10 +11,12 @@ use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, UnhookWindowsHookEx,
-    HHOOK, KBDLLHOOKSTRUCT, MSG, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN,
-    WM_SYSKEYUP,
+    CallNextHookEx, DispatchMessageW, GetMessageW, PeekMessageW, PostThreadMessageW,
+    SetWindowsHookExW, UnhookWindowsHookEx, HHOOK, KBDLLHOOKSTRUCT, MSG, PM_NOREMOVE,
+    WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
 };
+#[cfg(windows)]
+use windows::Win32::System::Threading::GetCurrentThreadId;
 
 #[derive(Debug, Clone)]
 enum HookEvent {
@@ -27,18 +33,22 @@ enum HookEvent {
 }
 
 #[cfg(windows)]
-static mut HOOK_HANDLE: Option<HHOOK> = None;
+static HOOK_HANDLE: AtomicPtr<std::ffi::c_void> = AtomicPtr::new(std::ptr::null_mut());
+#[cfg(windows)]
+static HOOK_THREAD_ID: AtomicU32 = AtomicU32::new(0);
 #[cfg(target_os = "macos")]
 static mut MACOS_RUN_LOOP: Option<macos_tap::CFRunLoopRef> = None;
 #[cfg(target_os = "macos")]
 static MACOS_TAP_PORT: std::sync::atomic::AtomicPtr<std::ffi::c_void> =
     std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
-static mut KEY_CALLBACK_PRESS: Option<Box<dyn Fn() + Send + Sync>> = None;
-static mut KEY_CALLBACK_RELEASE: Option<Box<dyn Fn() + Send + Sync>> = None;
-static mut KEY_CALLBACK_TOGGLE: Option<Box<dyn Fn() + Send + Sync>> = None;
-static mut KEY_CALLBACK_SHOW_WIDGET: Option<Box<dyn Fn() + Send + Sync>> = None;
-static mut KEY_CALLBACK_AMBIENT: Option<Box<dyn Fn() + Send + Sync>> = None;
-static mut KEY_CALLBACK_CAPTURED: Option<Box<dyn Fn(String, String, String) + Send + Sync>> = None;
+type HotkeyCallback = Arc<dyn Fn() + Send + Sync>;
+type CapturedCallback = Arc<dyn Fn(String, String, String) + Send + Sync>;
+static KEY_CALLBACK_PRESS: Mutex<Option<HotkeyCallback>> = Mutex::new(None);
+static KEY_CALLBACK_RELEASE: Mutex<Option<HotkeyCallback>> = Mutex::new(None);
+static KEY_CALLBACK_TOGGLE: Mutex<Option<HotkeyCallback>> = Mutex::new(None);
+static KEY_CALLBACK_SHOW_WIDGET: Mutex<Option<HotkeyCallback>> = Mutex::new(None);
+static KEY_CALLBACK_AMBIENT: Mutex<Option<HotkeyCallback>> = Mutex::new(None);
+static KEY_CALLBACK_CAPTURED: Mutex<Option<CapturedCallback>> = Mutex::new(None);
 
 static EVENT_SENDER: Mutex<Option<Sender<HookEvent>>> = Mutex::new(None);
 
@@ -62,6 +72,25 @@ static CAPTURE_MODE: Mutex<Option<String>> = Mutex::new(None);
 static CAPTURED_KEYS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 
 static ACTIVE_KEYS_MACOS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+
+fn invoke_hotkey_callback(callback: &Mutex<Option<HotkeyCallback>>) {
+    let callback = callback.lock().ok().and_then(|guard| guard.clone());
+    if let Some(callback) = callback {
+        callback();
+    }
+}
+
+fn invoke_captured_callback(key_name: String, combo_name: String, mode: String) {
+    let callback = KEY_CALLBACK_CAPTURED.lock().ok().and_then(|guard| guard.clone());
+    if let Some(callback) = callback {
+        callback(key_name, combo_name, mode);
+    }
+}
+
+#[cfg(windows)]
+fn current_hook_handle() -> HHOOK {
+    HHOOK(HOOK_HANDLE.load(Ordering::SeqCst))
+}
 
 fn send_event(event: HookEvent) {
     if let Ok(guard) = EVENT_SENDER.try_lock() {
@@ -322,7 +351,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
         // 0. Ignore synthetic/injected keystrokes (e.g. from SendInput/TextInjector)
         // LLKHF_INJECTED = 0x00000001
         if (kbd.flags.0 & 1) != 0 {
-            return CallNextHookEx(HOOK_HANDLE.unwrap_or_default(), code, wparam, lparam);
+            return CallNextHookEx(current_hook_handle(), code, wparam, lparam);
         }
 
         let effective_vk = if (kbd.vkCode == 0 || kbd.vkCode == 0xFF || kbd.vkCode == 0xEB || kbd.vkCode == 0xE7 || kbd.vkCode == 0x88)
@@ -342,7 +371,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
                         keys.clear();
                     }
                     IS_CAPTURING.store(false, Ordering::SeqCst);
-                    return CallNextHookEx(HOOK_HANDLE.unwrap_or_default(), code, wparam, lparam);
+                    return CallNextHookEx(current_hook_handle(), code, wparam, lparam);
                 }
 
                 if let Ok(mut keys) = CAPTURED_KEYS.try_lock() {
@@ -433,7 +462,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
                     });
                 }
             }
-            return CallNextHookEx(HOOK_HANDLE.unwrap_or_default(), code, wparam, lparam);
+            return CallNextHookEx(current_hook_handle(), code, wparam, lparam);
         }
 
         // 2. Push-to-Talk Handling (supports single key and combos)
@@ -581,7 +610,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
             }
         }
     }
-    CallNextHookEx(HOOK_HANDLE.unwrap_or_default(), code, wparam, lparam)
+    CallNextHookEx(current_hook_handle(), code, wparam, lparam)
 }
 
 #[cfg(target_os = "macos")]
@@ -1110,8 +1139,8 @@ impl HotkeyListener {
         if let Ok(mut keys) = CAPTURED_KEYS.lock() {
             keys.clear();
         }
-        unsafe {
-            KEY_CALLBACK_CAPTURED = Some(Box::new(on_captured));
+        if let Ok(mut callback) = KEY_CALLBACK_CAPTURED.lock() {
+            *callback = Some(Arc::new(on_captured));
         }
         IS_CAPTURING.store(true, Ordering::SeqCst);
     }
@@ -1121,8 +1150,8 @@ impl HotkeyListener {
             keys.clear();
         }
         IS_CAPTURING.store(false, Ordering::SeqCst);
-        unsafe {
-            KEY_CALLBACK_CAPTURED = None;
+        if let Ok(mut callback) = KEY_CALLBACK_CAPTURED.lock() {
+            *callback = None;
         }
     }
 
@@ -1149,13 +1178,11 @@ impl HotkeyListener {
         // Temporarily hardcode ambient hotkey for now or allow None. For now we will set it to Ctrl+Shift+M if needed.
         self.set_ambient_key("Ctrl+Shift+M");
 
-        unsafe {
-            KEY_CALLBACK_PRESS = Some(Box::new(on_press));
-            KEY_CALLBACK_RELEASE = Some(Box::new(on_release));
-            KEY_CALLBACK_TOGGLE = Some(Box::new(on_toggle));
-            KEY_CALLBACK_SHOW_WIDGET = Some(Box::new(on_show_widget));
-            KEY_CALLBACK_AMBIENT = Some(Box::new(on_ambient));
-        }
+        if let Ok(mut callback) = KEY_CALLBACK_PRESS.lock() { *callback = Some(Arc::new(on_press)); }
+        if let Ok(mut callback) = KEY_CALLBACK_RELEASE.lock() { *callback = Some(Arc::new(on_release)); }
+        if let Ok(mut callback) = KEY_CALLBACK_TOGGLE.lock() { *callback = Some(Arc::new(on_toggle)); }
+        if let Ok(mut callback) = KEY_CALLBACK_SHOW_WIDGET.lock() { *callback = Some(Arc::new(on_show_widget)); }
+        if let Ok(mut callback) = KEY_CALLBACK_AMBIENT.lock() { *callback = Some(Arc::new(on_ambient)); }
 
         // Set up communication channel for off-hook execution
         let (tx, rx) = std::sync::mpsc::channel::<HookEvent>();
@@ -1168,46 +1195,22 @@ impl HotkeyListener {
             while let Ok(event) = rx.recv() {
                 match event {
                     HookEvent::PttPress => {
-                        unsafe {
-                            if let Some(cb) = &*std::ptr::addr_of!(KEY_CALLBACK_PRESS) {
-                                cb();
-                            }
-                        }
+                        invoke_hotkey_callback(&KEY_CALLBACK_PRESS);
                     }
                     HookEvent::PttRelease => {
-                        unsafe {
-                            if let Some(cb) = &*std::ptr::addr_of!(KEY_CALLBACK_RELEASE) {
-                                cb();
-                            }
-                        }
+                        invoke_hotkey_callback(&KEY_CALLBACK_RELEASE);
                     }
                     HookEvent::TogglePress => {
-                        unsafe {
-                            if let Some(cb) = &*std::ptr::addr_of!(KEY_CALLBACK_TOGGLE) {
-                                cb();
-                            }
-                        }
+                        invoke_hotkey_callback(&KEY_CALLBACK_TOGGLE);
                     }
                     HookEvent::ShowWidget => {
-                        unsafe {
-                            if let Some(cb) = &*std::ptr::addr_of!(KEY_CALLBACK_SHOW_WIDGET) {
-                                cb();
-                            }
-                        }
+                        invoke_hotkey_callback(&KEY_CALLBACK_SHOW_WIDGET);
                     }
                     HookEvent::AmbientMemoryTrigger => {
-                        unsafe {
-                            if let Some(cb) = &*std::ptr::addr_of!(KEY_CALLBACK_AMBIENT) {
-                                cb();
-                            }
-                        }
+                        invoke_hotkey_callback(&KEY_CALLBACK_AMBIENT);
                     }
                     HookEvent::Captured { key_name, combo_name, mode } => {
-                        unsafe {
-                            if let Some(cb) = &*std::ptr::addr_of!(KEY_CALLBACK_CAPTURED) {
-                                cb(key_name, combo_name, mode);
-                            }
-                        }
+                        invoke_captured_callback(key_name, combo_name, mode);
                     }
                 }
             }
@@ -1217,29 +1220,40 @@ impl HotkeyListener {
         running.store(true, Ordering::SeqCst);
 
         #[cfg(windows)]
-        std::thread::spawn(move || unsafe {
-            let hook = SetWindowsHookExW(
-                WH_KEYBOARD_LL,
-                Some(hook_proc),
-                HINSTANCE(std::ptr::null_mut()),
-                0,
-            );
-            match hook {
-                Ok(h) => {
-                    crate::log_status(&format!("SetWindowsHookExW succeeded (handle={:?})", h.0));
-                    HOOK_HANDLE = Some(h);
-                    let mut msg = MSG::default();
-                    while running.load(Ordering::Relaxed) && GetMessageW(&mut msg, HWND(std::ptr::null_mut()), 0, 0).as_bool() {
-                        DispatchMessageW(&msg);
+        std::thread::spawn(move || {
+            unsafe {
+                // Ensure the thread has a message queue before publishing its id. stop()
+                // posts WM_QUIT to this queue to wake GetMessageW immediately.
+                let mut bootstrap_message = MSG::default();
+                let _ = PeekMessageW(&mut bootstrap_message, None, 0, 0, PM_NOREMOVE);
+                HOOK_THREAD_ID.store(GetCurrentThreadId(), Ordering::SeqCst);
+
+                match SetWindowsHookExW(
+                    WH_KEYBOARD_LL,
+                    Some(hook_proc),
+                    HINSTANCE(std::ptr::null_mut()),
+                    0,
+                ) {
+                    Ok(hook) => {
+                        crate::log_status(&format!("SetWindowsHookExW succeeded (handle={:?})", hook.0));
+                        HOOK_HANDLE.store(hook.0, Ordering::SeqCst);
+                        let mut msg = MSG::default();
+                        while running.load(Ordering::Relaxed)
+                            && GetMessageW(&mut msg, HWND(std::ptr::null_mut()), 0, 0).as_bool()
+                        {
+                            DispatchMessageW(&msg);
+                        }
+                        let hook = HOOK_HANDLE.swap(std::ptr::null_mut(), Ordering::SeqCst);
+                        if !hook.is_null() {
+                            let _ = UnhookWindowsHookEx(HHOOK(hook));
+                        }
+                        crate::log_status("Keyboard hook message loop terminated");
                     }
-                    if let Some(h) = HOOK_HANDLE.take() {
-                        let _ = UnhookWindowsHookEx(h);
+                    Err(error) => {
+                        crate::log_status(&format!("SetWindowsHookExW FAILED with error: {:?}", error));
                     }
-                    crate::log_status("Keyboard hook message loop terminated");
                 }
-                Err(e) => {
-                    crate::log_status(&format!("SetWindowsHookExW FAILED with error: {:?}", e));
-                }
+                HOOK_THREAD_ID.store(0, Ordering::SeqCst);
             }
         });
 
@@ -1338,10 +1352,30 @@ impl HotkeyListener {
     pub fn stop(&self) {
         self.running.store(false, Ordering::SeqCst);
         #[cfg(windows)]
-        unsafe {
-            if let Some(h) = HOOK_HANDLE.take() {
-                let _ = UnhookWindowsHookEx(h);
+        {
+            let thread_id = HOOK_THREAD_ID.load(Ordering::SeqCst);
+            if thread_id != 0 {
+                unsafe {
+                    let _ = PostThreadMessageW(thread_id, WM_QUIT, WPARAM(0), LPARAM(0));
+                }
             }
+        }
+        if let Ok(mut sender) = EVENT_SENDER.lock() {
+            *sender = None;
+        }
+        for callback in [
+            &KEY_CALLBACK_PRESS,
+            &KEY_CALLBACK_RELEASE,
+            &KEY_CALLBACK_TOGGLE,
+            &KEY_CALLBACK_SHOW_WIDGET,
+            &KEY_CALLBACK_AMBIENT,
+        ] {
+            if let Ok(mut current) = callback.lock() {
+                *current = None;
+            }
+        }
+        if let Ok(mut callback) = KEY_CALLBACK_CAPTURED.lock() {
+            *callback = None;
         }
         #[cfg(target_os = "macos")]
         unsafe {

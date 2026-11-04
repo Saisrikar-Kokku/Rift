@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React, { lazy, Suspense, useState } from 'react';
 import { useSettings } from '../../context/SettingsContext';
 import { useAuth } from '../../context/AuthContext';
 import { invokeTauri } from '../../lib/tauriBridge';
 import { AuroraBackground } from '../ui/AuroraBackground';
 import { SpotlightCard } from '../ui/SpotlightCard';
-import { AudioOrb } from '../ui/AudioOrb';
 import { Kbd } from '../ui/Kbd';
 import { Badge } from '../ui/Badge';
 import confetti from 'canvas-confetti';
@@ -19,6 +18,8 @@ import {
   Check,
   Zap,
 } from 'lucide-react';
+
+const AudioOrb = lazy(() => import('../ui/AudioOrb').then((module) => ({ default: module.AudioOrb })));
 
 interface OnboardingWizardProps {
   onComplete: () => void;
@@ -121,7 +122,9 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
         {step === 1 && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '16px' }}>
             <div style={{ position: 'relative', margin: '4px 0' }}>
-              <AudioOrb size={150} active={true} color="#c084fc" glowColor="#38bdf8" />
+              <Suspense fallback={<div aria-hidden="true" style={{ width: 150, height: 150 }} />}>
+                <AudioOrb size={150} active={true} color="#c084fc" glowColor="#38bdf8" />
+              </Suspense>
             </div>
 
             <div>

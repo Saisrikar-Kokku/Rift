@@ -1,11 +1,11 @@
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
-use std::sync::Mutex;
-use serde::{Deserialize, Serialize};
+use std::sync::{Arc, Mutex, Once};
 use tauri::AppHandle;
-use serde_json::json;
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -13,16 +13,37 @@ use std::os::windows::process::CommandExt;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-const ENGINE_ZIP_URL: &str = "https://github.com/ggml-org/whisper.cpp/releases/download/b4938/whisper-bin-x64.zip";
+const ENGINE_ZIP_URL: &str =
+    "https://github.com/ggml-org/whisper.cpp/releases/download/b4938/whisper-bin-x64.zip";
 
 struct ResidentServer {
     child: Child,
     model_path: PathBuf,
     port: u16,
+    last_used: std::time::Instant,
+    active_requests: usize,
 }
 
 static RESIDENT_SERVER: Mutex<Option<ResidentServer>> = Mutex::new(None);
+static RESIDENT_REAPER: Once = Once::new();
 const RESIDENT_PORT: u16 = 28492;
+const RESIDENT_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+const RESIDENT_REAPER_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+
+struct ResidentRequestLease {
+    port: u16,
+}
+
+impl Drop for ResidentRequestLease {
+    fn drop(&mut self) {
+        if let Ok(mut guard) = RESIDENT_SERVER.lock() {
+            if let Some(server) = guard.as_mut().filter(|server| server.port == self.port) {
+                server.active_requests = server.active_requests.saturating_sub(1);
+                server.last_used = std::time::Instant::now();
+            }
+        }
+    }
+}
 
 pub fn stop_resident_server() {
     if let Ok(mut guard) = RESIDENT_SERVER.lock() {
@@ -45,58 +66,184 @@ fn ensure_resident_server(model_path: &Path) -> Result<u16, String> {
     let mut guard = RESIDENT_SERVER.lock().map_err(|e| e.to_string())?;
 
     if let Some(ref mut s) = *guard {
-        if s.model_path == model_path {
-            match s.child.try_wait() {
-                Ok(None) => return Ok(s.port),
-                _ => {}
+        if s.model_path == model_path && matches!(s.child.try_wait(), Ok(None)) {
+            if wait_for_server_ready(&mut s.child, s.port, std::time::Duration::from_secs(2))
+                .is_ok()
+            {
+                s.last_used = std::time::Instant::now();
+                let port = s.port;
+                drop(guard);
+                start_resident_reaper();
+                return Ok(port);
             }
         }
-        let _ = s.child.kill();
-        let _ = s.child.wait();
+        if let Some(mut old_server) = guard.take() {
+            let _ = old_server.child.kill();
+            let _ = old_server.child.wait();
+        }
     }
-    *guard = None;
 
     let server_bin = get_server_engine_path();
     if !server_bin.exists() {
         return Err("whisper-server.exe not found".to_string());
     }
 
-    let threads = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(4)
-        .clamp(4, 8)
-        .to_string();
+    let threads = whisper_thread_count().to_string();
 
     let mut cmd = Command::new(&server_bin);
     cmd.args(&[
-        "--host", "127.0.0.1",
-        "--port", &RESIDENT_PORT.to_string(),
-        "-m", model_path.to_str().unwrap(),
-        "-t", &threads,
+        "--host",
+        "127.0.0.1",
+        "--port",
+        &RESIDENT_PORT.to_string(),
+        "-m",
+        model_path.to_str().unwrap(),
+        "-t",
+        &threads,
         "-fa",
         "-nt",
-        "-l", "auto",
+        "-l",
+        "auto",
     ]);
 
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
 
-    let child = cmd.spawn().map_err(|e| format!("Failed to spawn whisper-server: {}", e))?;
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to spawn whisper-server: {}", e))?;
     *guard = Some(ResidentServer {
         child,
         model_path: model_path.to_path_buf(),
         port: RESIDENT_PORT,
+        last_used: std::time::Instant::now(),
+        active_requests: 0,
     });
 
-    let start = std::time::Instant::now();
-    while start.elapsed() < std::time::Duration::from_millis(2000) {
-        if std::net::TcpStream::connect(("127.0.0.1", RESIDENT_PORT)).is_ok() {
-            return Ok(RESIDENT_PORT);
+    let readiness = {
+        let server = guard.as_mut().expect("resident server was just created");
+        wait_for_server_ready(
+            &mut server.child,
+            server.port,
+            std::time::Duration::from_secs(120),
+        )
+    };
+    if let Err(error) = readiness {
+        if let Some(mut server) = guard.take() {
+            let _ = server.child.kill();
+            let _ = server.child.wait();
         }
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        return Err(error);
     }
 
-    Ok(RESIDENT_PORT)
+    if let Some(server) = guard.as_mut() {
+        server.last_used = std::time::Instant::now();
+    }
+    let port = RESIDENT_PORT;
+    drop(guard);
+    start_resident_reaper();
+    Ok(port)
+}
+
+fn whisper_thread_count() -> usize {
+    std::thread::available_parallelism()
+        .map(|count| count.get())
+        .unwrap_or(2)
+        .saturating_sub(1)
+        .clamp(1, 4)
+}
+
+fn wait_for_server_ready(
+    child: &mut Child,
+    port: u16,
+    timeout: std::time::Duration,
+) -> Result<(), String> {
+    let deadline = std::time::Instant::now() + timeout;
+    while std::time::Instant::now() < deadline {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|error| format!("Could not check whisper-server status: {error}"))?
+        {
+            return Err(format!(
+                "whisper-server exited before becoming ready ({status})"
+            ));
+        }
+        if whisper_server_responds(port) {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    Err(format!(
+        "whisper-server did not become ready before the {} second timeout",
+        timeout.as_secs()
+    ))
+}
+
+fn whisper_server_responds(port: u16) -> bool {
+    use std::net::{SocketAddr, TcpStream};
+
+    let address = SocketAddr::from(([127, 0, 0, 1], port));
+    let Ok(mut stream) =
+        TcpStream::connect_timeout(&address, std::time::Duration::from_millis(200))
+    else {
+        return false;
+    };
+    let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(250)));
+    let _ = stream.set_write_timeout(Some(std::time::Duration::from_millis(250)));
+    if stream
+        .write_all(b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+        .is_err()
+    {
+        return false;
+    }
+
+    let mut reader = BufReader::new(stream);
+    let mut status_line = String::new();
+    if reader.read_line(&mut status_line).is_err() {
+        return false;
+    }
+    status_line.starts_with("HTTP/1.1 200") || status_line.starts_with("HTTP/1.0 200")
+}
+
+fn acquire_resident_request(port: u16) -> Option<ResidentRequestLease> {
+    let mut guard = RESIDENT_SERVER.lock().ok()?;
+    let server = guard.as_mut().filter(|server| server.port == port)?;
+    server.active_requests = server.active_requests.saturating_add(1);
+    server.last_used = std::time::Instant::now();
+    Some(ResidentRequestLease { port })
+}
+
+fn start_resident_reaper() {
+    RESIDENT_REAPER.call_once(|| {
+        if let Err(error) = std::thread::Builder::new()
+            .name("rift-whisper-idle-reaper".to_string())
+            .spawn(|| loop {
+                std::thread::sleep(RESIDENT_REAPER_INTERVAL);
+                if !crate::storage::settings::load_settings().local_whisper_unload_on_idle {
+                    continue;
+                }
+
+                let Ok(mut guard) = RESIDENT_SERVER.lock() else {
+                    continue;
+                };
+                let is_idle = guard.as_ref().is_some_and(|server| {
+                    server.active_requests == 0
+                        && server.last_used.elapsed() >= RESIDENT_IDLE_TIMEOUT
+                });
+                if is_idle {
+                    if let Some(mut server) = guard.take() {
+                        crate::log_status(
+                            "Unloading the idle local Whisper model after five minutes.",
+                        );
+                        let _ = server.child.kill();
+                        let _ = server.child.wait();
+                    }
+                }
+            })
+        {
+            log::error!("Could not start the local Whisper idle reaper: {error}");
+        }
+    });
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -179,28 +326,30 @@ pub fn get_supported_models() -> Vec<LocalModelInfo> {
 
     specs
         .into_iter()
-        .map(|(profile, display, id, filename, url, default_size, desc)| {
-            let file_path = models_dir.join(filename);
-            let downloaded = file_path.exists();
-            let size_mb = if downloaded {
-                fs::metadata(&file_path)
-                    .map(|m| m.len() / (1024 * 1024))
-                    .ok()
-            } else {
-                Some(default_size)
-            };
+        .map(
+            |(profile, display, id, filename, url, default_size, desc)| {
+                let file_path = models_dir.join(filename);
+                let downloaded = file_path.exists();
+                let size_mb = if downloaded {
+                    fs::metadata(&file_path)
+                        .map(|m| m.len() / (1024 * 1024))
+                        .ok()
+                } else {
+                    Some(default_size)
+                };
 
-            LocalModelInfo {
-                profile: profile.to_string(),
-                display_name: display.to_string(),
-                model_id: id.to_string(),
-                filename: filename.to_string(),
-                downloaded,
-                size_mb,
-                download_url: url.to_string(),
-                description: desc.to_string(),
-            }
-        })
+                LocalModelInfo {
+                    profile: profile.to_string(),
+                    display_name: display.to_string(),
+                    model_id: id.to_string(),
+                    filename: filename.to_string(),
+                    downloaded,
+                    size_mb,
+                    download_url: url.to_string(),
+                    description: desc.to_string(),
+                }
+            },
+        )
         .collect()
 }
 
@@ -245,21 +394,33 @@ pub async fn ensure_engine_installed(app: &AppHandle, profile: &str) -> Result<(
 
     let mut resp = client
         .get(ENGINE_ZIP_URL)
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) RiftDictation/1.0")
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) RiftDictation/1.0",
+        )
         .send()
         .await
         .map_err(|e| format!("Failed to download whisper engine: {}", e))?;
 
     if !resp.status().is_success() {
-        return Err(format!("Engine download failed with HTTP {}", resp.status()));
+        return Err(format!(
+            "Engine download failed with HTTP {}",
+            resp.status()
+        ));
     }
 
     let total_engine_bytes = resp.content_length().unwrap_or(8_361_840);
-    let mut file = File::create(&temp_zip).map_err(|e| format!("Failed to create engine zip: {}", e))?;
+    let mut file =
+        File::create(&temp_zip).map_err(|e| format!("Failed to create engine zip: {}", e))?;
     let mut downloaded: u64 = 0;
 
-    while let Some(chunk) = resp.chunk().await.map_err(|e| format!("Engine download stream error: {}", e))? {
-        file.write_all(&chunk).map_err(|e| format!("Failed to write engine chunk: {}", e))?;
+    while let Some(chunk) = resp
+        .chunk()
+        .await
+        .map_err(|e| format!("Engine download stream error: {}", e))?
+    {
+        file.write_all(&chunk)
+            .map_err(|e| format!("Failed to write engine chunk: {}", e))?;
         downloaded += chunk.len() as u64;
 
         let pct = (2 + ((downloaded as f64 / total_engine_bytes as f64) * 6.0) as u32).min(8);
@@ -300,11 +461,18 @@ pub async fn ensure_engine_installed(app: &AppHandle, profile: &str) -> Result<(
 
     // Unpack using Windows built-in tar (bsdtar)
     let mut cmd = Command::new("tar");
-    cmd.args(&["-xf", temp_zip.to_str().unwrap(), "-C", temp_extract.to_str().unwrap()]);
+    cmd.args(&[
+        "-xf",
+        temp_zip.to_str().unwrap(),
+        "-C",
+        temp_extract.to_str().unwrap(),
+    ]);
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
 
-    let output = cmd.output().map_err(|e| format!("Failed to extract engine with tar: {}", e))?;
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Failed to extract engine with tar: {}", e))?;
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr);
         return Err(format!("Tar extraction error: {}", err));
@@ -312,7 +480,11 @@ pub async fn ensure_engine_installed(app: &AppHandle, profile: &str) -> Result<(
 
     // Move release files to bin_dir
     let release_dir = temp_extract.join("Release");
-    let source_dir = if release_dir.exists() { release_dir } else { temp_extract.clone() };
+    let source_dir = if release_dir.exists() {
+        release_dir
+    } else {
+        temp_extract.clone()
+    };
 
     if let Ok(entries) = fs::read_dir(&source_dir) {
         for entry in entries.flatten() {
@@ -338,8 +510,14 @@ pub async fn ensure_engine_installed(app: &AppHandle, profile: &str) -> Result<(
 pub fn emit_to_frontend(app: &AppHandle, event_name: &str, payload: Option<serde_json::Value>) {
     use tauri::Manager;
     let js = match &payload {
-        Some(p) => format!("if (window.__rift_emit) window.__rift_emit({:?}, {});", event_name, p),
-        None => format!("if (window.__rift_emit) window.__rift_emit({:?});", event_name),
+        Some(p) => format!(
+            "if (window.__rift_emit) window.__rift_emit({:?}, {});",
+            event_name, p
+        ),
+        None => format!(
+            "if (window.__rift_emit) window.__rift_emit({:?});",
+            event_name
+        ),
     };
     for label in &["widget", "main"] {
         if let Some(w) = app.get_webview_window(label) {
@@ -382,22 +560,35 @@ pub async fn download_model_file(profile: &str, app: AppHandle) -> Result<(), St
 
     let mut resp = client
         .get(&model.download_url)
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) RiftDictation/1.0")
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) RiftDictation/1.0",
+        )
         .send()
         .await
         .map_err(|e| format!("Failed to connect to Hugging Face: {}", e))?;
 
     if !resp.status().is_success() {
-        return Err(format!("Download failed with HTTP status {}", resp.status()));
+        return Err(format!(
+            "Download failed with HTTP status {}",
+            resp.status()
+        ));
     }
 
-    let total_bytes = resp.content_length().unwrap_or(model.size_mb.unwrap_or(400) * 1024 * 1024);
-    let mut file = File::create(&part_path).map_err(|e| format!("Failed to create part file: {}", e))?;
+    let total_bytes = resp
+        .content_length()
+        .unwrap_or(model.size_mb.unwrap_or(400) * 1024 * 1024);
+    let mut file =
+        File::create(&part_path).map_err(|e| format!("Failed to create part file: {}", e))?;
 
     let mut downloaded_bytes: u64 = 0;
     let mut last_percent: u32 = 10;
 
-    while let Some(chunk) = resp.chunk().await.map_err(|e| format!("Download stream error: {}", e))? {
+    while let Some(chunk) = resp
+        .chunk()
+        .await
+        .map_err(|e| format!("Download stream error: {}", e))?
+    {
         file.write_all(&chunk)
             .map_err(|e| format!("Failed to write chunk to disk: {}", e))?;
 
@@ -447,7 +638,8 @@ pub async fn download_model_file(profile: &str, app: AppHandle) -> Result<(), St
     if final_path.exists() {
         let _ = fs::remove_file(&final_path);
     }
-    fs::rename(&part_path, &final_path).map_err(|e| format!("Failed to finalize model file: {}", e))?;
+    fs::rename(&part_path, &final_path)
+        .map_err(|e| format!("Failed to finalize model file: {}", e))?;
 
     let final_size_mb = fs::metadata(&final_path)
         .map(|m| m.len() / (1024 * 1024))
@@ -492,15 +684,20 @@ pub fn verify_local_model(profile: &str) -> Result<serde_json::Value, String> {
 
     let model_path = get_models_dir().join(&model.filename);
     if !model_path.exists() {
-        return Err(format!("Model file '{}' is not downloaded yet.", model.filename));
+        return Err(format!(
+            "Model file '{}' is not downloaded yet.",
+            model.filename
+        ));
     }
 
-    let metadata = fs::metadata(&model_path)
-        .map_err(|e| format!("Cannot read model file: {}", e))?;
+    let metadata =
+        fs::metadata(&model_path).map_err(|e| format!("Cannot read model file: {}", e))?;
     let size_mb = metadata.len() / (1024 * 1024);
 
     if size_mb == 0 {
-        return Err("Model file appears empty or corrupted. Please delete and re-download.".to_string());
+        return Err(
+            "Model file appears empty or corrupted. Please delete and re-download.".to_string(),
+        );
     }
 
     Ok(json!({
@@ -529,6 +726,13 @@ pub fn delete_local_model_file(profile: &str) -> Result<(), String> {
 /// Runs inference on captured WAV audio via resident whisper-server (in-memory model)
 /// with seamless fallback to whisper-cli.exe. Audio is 16kHz mono WAV format.
 pub fn transcribe_local(wav_bytes: &[u8], profile_or_id: &str) -> Result<String, String> {
+    transcribe_local_shared(Arc::from(wav_bytes), profile_or_id)
+}
+
+pub fn transcribe_local_shared(
+    wav_bytes: Arc<[u8]>,
+    profile_or_id: &str,
+) -> Result<String, String> {
     if !is_engine_available() && !is_server_engine_available() {
         return Err("Local Whisper engine not installed. Please download a model in Settings to initialize.".to_string());
     }
@@ -558,55 +762,62 @@ pub fn transcribe_local(wav_bytes: &[u8], profile_or_id: &str) -> Result<String,
     // Tier 1: Fast in-memory resident whisper-server (sub-300ms latency)
     if is_server_engine_available() {
         if let Ok(port) = ensure_resident_server(&model_path) {
-            let wav_copy = wav_bytes.to_vec();
-            let server_call = async move {
-                let client = reqwest::Client::builder()
-                    .timeout(std::time::Duration::from_secs(12))
-                    .build()
-                    .unwrap_or_default();
+            if let Some(_request_lease) = acquire_resident_request(port) {
+                let wav_for_server = Arc::clone(&wav_bytes);
+                let wav_length = wav_for_server.len() as u64;
+                let server_call = async move {
+                    let client = reqwest::Client::builder()
+                        .timeout(std::time::Duration::from_secs(900))
+                        .build()
+                        .unwrap_or_default();
 
-                let part = reqwest::multipart::Part::bytes(wav_copy)
+                    let part = reqwest::multipart::Part::stream_with_length(
+                        reqwest::Body::from(bytes::Bytes::from_owner(wav_for_server)),
+                        wav_length,
+                    )
                     .file_name("audio.wav")
                     .mime_str("audio/wav")
                     .map_err(|e| e.to_string())?;
 
-                let form = reqwest::multipart::Form::new()
-                    .part("file", part)
-                    .text("temperature", "0.0")
-                    .text("response_format", "json");
+                    let form = reqwest::multipart::Form::new()
+                        .part("file", part)
+                        .text("temperature", "0.0")
+                        .text("response_format", "json");
 
-                let resp = client
-                    .post(format!("http://127.0.0.1:{}/inference", port))
-                    .multipart(form)
-                    .send()
-                    .await
-                    .map_err(|e| format!("Server HTTP error: {}", e))?;
-
-                if resp.status().is_success() {
-                    let json_val: serde_json::Value = resp
-                        .json()
+                    let resp = client
+                        .post(format!("http://127.0.0.1:{}/inference", port))
+                        .multipart(form)
+                        .send()
                         .await
-                        .map_err(|e| format!("Server JSON parse error: {}", e))?;
-                    if let Some(text) = json_val.get("text").and_then(|t| t.as_str()) {
-                        let t = text.trim();
-                        if !t.is_empty() {
-                            return Ok(t.to_string());
+                        .map_err(|e| format!("Server HTTP error: {}", e))?;
+
+                    if resp.status().is_success() {
+                        let json_val: serde_json::Value = resp
+                            .json()
+                            .await
+                            .map_err(|e| format!("Server JSON parse error: {}", e))?;
+                        if let Some(text) = json_val.get("text").and_then(|t| t.as_str()) {
+                            let t = text.trim();
+                            if !t.is_empty() {
+                                return Ok(t.to_string());
+                            }
                         }
                     }
+                    Err("Empty inference result from server".to_string())
+                };
+
+                let inference_result: Result<String, String> =
+                    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                        tokio::task::block_in_place(|| handle.block_on(server_call))
+                    } else if let Ok(rt) = tokio::runtime::Runtime::new() {
+                        rt.block_on(server_call)
+                    } else {
+                        Err("Could not initialize async runtime for local server".to_string())
+                    };
+
+                if let Ok(text) = inference_result {
+                    return Ok(text);
                 }
-                Err("Empty inference result from server".to_string())
-            };
-
-            let inference_result: Result<String, String> = if let Ok(handle) = tokio::runtime::Handle::try_current() {
-                tokio::task::block_in_place(|| handle.block_on(server_call))
-            } else if let Ok(rt) = tokio::runtime::Runtime::new() {
-                rt.block_on(server_call)
-            } else {
-                Err("Could not initialize async runtime for local server".to_string())
-            };
-
-            if let Ok(text) = inference_result {
-                return Ok(text);
             }
         }
     }
@@ -621,11 +832,7 @@ pub fn transcribe_local(wav_bytes: &[u8], profile_or_id: &str) -> Result<String,
     fs::write(&temp_wav, wav_bytes)
         .map_err(|e| format!("Failed to write temporary wav file: {}", e))?;
 
-    let threads = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(4)
-        .clamp(4, 8)
-        .to_string();
+    let threads = whisper_thread_count().to_string();
 
     let mut cmd = Command::new(get_engine_path());
     cmd.args(&[
@@ -648,7 +855,9 @@ pub fn transcribe_local(wav_bytes: &[u8], profile_or_id: &str) -> Result<String,
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
 
-    let output = cmd.output().map_err(|e| format!("Failed to run whisper-cli: {}", e))?;
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Failed to run whisper-cli: {}", e))?;
 
     let mut transcribed_text = String::new();
 

@@ -37,6 +37,8 @@ extern "system" {
         Flags: u32,
     ) -> i32;
 
+    fn CredDeleteW(TargetName: *const u16, Type: u32, Flags: u32) -> i32;
+
     fn CredFree(Buffer: *mut std::ffi::c_void);
 }
 
@@ -62,12 +64,28 @@ impl CredentialsProvider {
             }
         }
 
-        // 2. Primary key file in %APPDATA%\Rift\.groq_key
+        // Prefer Windows Credential Manager; plaintext files below are legacy migration sources.
+        #[cfg(windows)]
+        for target in &["Rift", "groq_api_key@Rift"] {
+            if let Some(key) = Self::read_wincred(target) {
+                let trimmed = key.trim();
+                if !trimmed.is_empty() {
+                    let _ = Self::remove_legacy_groq_files();
+                    return Some(trimmed.to_string());
+                }
+            }
+        }
+
+        // 2. Legacy key file in %APPDATA%\Rift\.groq_key
         let path = Self::get_key_file();
         if path.exists() {
             if let Ok(key) = fs::read_to_string(&path) {
                 let trimmed = key.trim();
                 if !trimmed.is_empty() {
+                    #[cfg(windows)]
+                    if Self::write_wincred("Rift", "groq_api_key", trimmed).is_ok() {
+                        let _ = Self::remove_legacy_groq_files();
+                    }
                     return Some(trimmed.to_string());
                 }
             }
@@ -79,20 +97,12 @@ impl CredentialsProvider {
                 if let Ok(key) = fs::read_to_string(&local_path) {
                     let trimmed = key.trim();
                     if !trimmed.is_empty() {
+                    #[cfg(windows)]
+                    if Self::write_wincred("Rift", "groq_api_key", trimmed).is_ok() {
+                        let _ = Self::remove_legacy_groq_files();
+                    }
                         return Some(trimmed.to_string());
                     }
-                }
-            }
-        }
-
-        // 4. Windows Credential Manager (Target: "Rift" or "groq_api_key@Rift")
-        for target in &["Rift", "groq_api_key@Rift"] {
-            if let Some(key) = Self::read_wincred(target) {
-                let trimmed = key.trim();
-                if !trimmed.is_empty() {
-                    // Auto-sync to file for faster subsequent reads
-                    let _ = fs::write(&path, trimmed);
-                    return Some(trimmed.to_string());
                 }
             }
         }
@@ -100,30 +110,36 @@ impl CredentialsProvider {
         None
     }
 
-    pub fn set_api_key(api_key: &str) -> Result<(), std::io::Error> {
+    pub fn set_api_key(api_key: &str) -> Result<(), String> {
         let trimmed = api_key.trim();
-        let path = Self::get_key_file();
-        fs::write(&path, trimmed)?;
-
-        if let Some(local_path) = Self::get_local_program_key_file() {
-            let _ = fs::write(local_path, trimmed);
+        if trimmed.is_empty() || trimmed.len() > 4096 {
+            return Err("Groq API key must contain between 1 and 4096 bytes".to_string());
         }
-
-        // Also write to Windows Credential Manager
-        Self::write_wincred("Rift", "groq_api_key", trimmed);
+        #[cfg(windows)]
+        {
+            Self::write_wincred("Rift", "groq_api_key", trimmed)?;
+            Self::remove_legacy_groq_files()?;
+        }
+        #[cfg(not(windows))]
+        fs::write(Self::get_key_file(), trimmed)
+            .map_err(|error| format!("Could not save Groq API key: {error}"))?;
 
         Ok(())
     }
 
-    pub fn delete_api_key() -> Result<(), std::io::Error> {
-        let path = Self::get_key_file();
-        if path.exists() {
-            let _ = fs::remove_file(path);
+    pub fn delete_api_key() -> Result<(), String> {
+        #[cfg(windows)]
+        for target in &["Rift", "groq_api_key@Rift"] {
+            Self::delete_wincred(target)?;
         }
-        if let Some(local_path) = Self::get_local_program_key_file() {
-            if local_path.exists() {
-                let _ = fs::remove_file(local_path);
-            }
+        Self::remove_legacy_groq_files()?;
+        Ok(())
+    }
+
+    fn remove_legacy_groq_files() -> Result<(), String> {
+        Self::remove_legacy_file(&Self::get_key_file())?;
+        if let Some(path) = Self::get_local_program_key_file() {
+            Self::remove_legacy_file(&path)?;
         }
         Ok(())
     }
@@ -149,12 +165,28 @@ impl CredentialsProvider {
             }
         }
 
-        // 2. Primary key file in %APPDATA%\Rift\.openrouter_key
+        // Prefer Windows Credential Manager; plaintext files below are legacy migration sources.
+        #[cfg(windows)]
+        for target in &["Rift/OpenRouter", "openrouter_api_key@Rift"] {
+            if let Some(key) = Self::read_wincred(target) {
+                let trimmed = key.trim();
+                if !trimmed.is_empty() {
+                    let _ = Self::remove_legacy_openrouter_files();
+                    return Some(trimmed.to_string());
+                }
+            }
+        }
+
+        // 2. Legacy key file in %APPDATA%\Rift\.openrouter_key
         let path = Self::get_openrouter_key_file();
         if path.exists() {
             if let Ok(key) = fs::read_to_string(&path) {
                 let trimmed = key.trim();
                 if !trimmed.is_empty() {
+                    #[cfg(windows)]
+                    if Self::write_wincred("Rift/OpenRouter", "openrouter_api_key", trimmed).is_ok() {
+                        let _ = Self::remove_legacy_openrouter_files();
+                    }
                     return Some(trimmed.to_string());
                 }
             }
@@ -166,19 +198,12 @@ impl CredentialsProvider {
                 if let Ok(key) = fs::read_to_string(&local_path) {
                     let trimmed = key.trim();
                     if !trimmed.is_empty() {
+                    #[cfg(windows)]
+                    if Self::write_wincred("Rift/OpenRouter", "openrouter_api_key", trimmed).is_ok() {
+                        let _ = Self::remove_legacy_openrouter_files();
+                    }
                         return Some(trimmed.to_string());
                     }
-                }
-            }
-        }
-
-        // 4. Windows Credential Manager (Target: "Rift/OpenRouter" or "openrouter_api_key@Rift")
-        for target in &["Rift/OpenRouter", "openrouter_api_key@Rift"] {
-            if let Some(key) = Self::read_wincred(target) {
-                let trimmed = key.trim();
-                if !trimmed.is_empty() {
-                    let _ = fs::write(&path, trimmed);
-                    return Some(trimmed.to_string());
                 }
             }
         }
@@ -186,29 +211,44 @@ impl CredentialsProvider {
         None
     }
 
-    pub fn set_openrouter_api_key(api_key: &str) -> Result<(), std::io::Error> {
+    pub fn set_openrouter_api_key(api_key: &str) -> Result<(), String> {
         let trimmed = api_key.trim();
-        let path = Self::get_openrouter_key_file();
-        fs::write(&path, trimmed)?;
-
-        if let Some(local_path) = Self::get_local_program_openrouter_key_file() {
-            let _ = fs::write(local_path, trimmed);
+        if trimmed.is_empty() || trimmed.len() > 4096 {
+            return Err("OpenRouter API key must contain between 1 and 4096 bytes".to_string());
         }
-
-        Self::write_wincred("Rift/OpenRouter", "openrouter_api_key", trimmed);
+        #[cfg(windows)]
+        {
+            Self::write_wincred("Rift/OpenRouter", "openrouter_api_key", trimmed)?;
+            Self::remove_legacy_openrouter_files()?;
+        }
+        #[cfg(not(windows))]
+        fs::write(Self::get_openrouter_key_file(), trimmed)
+            .map_err(|error| format!("Could not save OpenRouter API key: {error}"))?;
 
         Ok(())
     }
 
-    pub fn delete_openrouter_api_key() -> Result<(), std::io::Error> {
-        let path = Self::get_openrouter_key_file();
-        if path.exists() {
-            let _ = fs::remove_file(path);
+    pub fn delete_openrouter_api_key() -> Result<(), String> {
+        #[cfg(windows)]
+        for target in &["Rift/OpenRouter", "openrouter_api_key@Rift"] {
+            Self::delete_wincred(target)?;
         }
-        if let Some(local_path) = Self::get_local_program_openrouter_key_file() {
-            if local_path.exists() {
-                let _ = fs::remove_file(local_path);
-            }
+        Self::remove_legacy_openrouter_files()?;
+        Ok(())
+    }
+
+    fn remove_legacy_openrouter_files() -> Result<(), String> {
+        Self::remove_legacy_file(&Self::get_openrouter_key_file())?;
+        if let Some(path) = Self::get_local_program_openrouter_key_file() {
+            Self::remove_legacy_file(&path)?;
+        }
+        Ok(())
+    }
+
+    fn remove_legacy_file(path: &PathBuf) -> Result<(), String> {
+        if path.exists() {
+            fs::remove_file(path)
+                .map_err(|error| format!("Could not remove legacy credential file: {error}"))?;
         }
         Ok(())
     }
@@ -250,7 +290,7 @@ impl CredentialsProvider {
     }
 
     #[cfg(windows)]
-    fn write_wincred(target_name: &str, user_name: &str, secret: &str) {
+    fn write_wincred(target_name: &str, user_name: &str, secret: &str) -> Result<(), String> {
         let mut target_wide: Vec<u16> = target_name.encode_utf16().chain(std::iter::once(0)).collect();
         let mut user_wide: Vec<u16> = user_name.encode_utf16().chain(std::iter::once(0)).collect();
         let mut secret_bytes = secret.as_bytes().to_vec();
@@ -270,11 +310,27 @@ impl CredentialsProvider {
             UserName: user_wide.as_mut_ptr(),
         };
 
-        unsafe {
-            CredWriteW(&cred, 0);
+        if unsafe { CredWriteW(&cred, 0) } == 0 {
+            return Err(format!("Windows Credential Manager write failed: {}", std::io::Error::last_os_error()));
         }
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    fn delete_wincred(target_name: &str) -> Result<(), String> {
+        let target_wide: Vec<u16> = target_name.encode_utf16().chain(std::iter::once(0)).collect();
+        if unsafe { CredDeleteW(target_wide.as_ptr(), 1, 0) } == 0 {
+            let error = std::io::Error::last_os_error();
+            // ERROR_NOT_FOUND is the expected result when a credential was never saved.
+            if error.raw_os_error() != Some(1168) {
+                return Err(format!("Windows Credential Manager delete failed: {error}"));
+            }
+        }
+        Ok(())
     }
 
     #[cfg(not(windows))]
-    fn write_wincred(_target_name: &str, _user_name: &str, _secret: &str) {}
+    fn write_wincred(_target_name: &str, _user_name: &str, _secret: &str) -> Result<(), String> {
+        Ok(())
+    }
 }

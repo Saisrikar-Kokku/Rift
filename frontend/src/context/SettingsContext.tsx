@@ -9,6 +9,7 @@ export interface AppSettings {
   microphone_device_id?: string | null;
   widget_visibility: string;
   widget_style: string;
+  widget_transcribing_style: string;
   follow_cursor_across_monitors: boolean;
   lock_widget_position: boolean;
   copy_instead_of_type: boolean;
@@ -18,6 +19,7 @@ export interface AppSettings {
   stt_provider: string;
   inference_model: string;
   local_inference_profile?: string;
+  local_whisper_unload_on_idle: boolean;
   recording_sounds: boolean;
   sound_volume: number;
   pause_other_audio_while_talking: boolean;
@@ -37,8 +39,9 @@ export interface AppSettings {
   tenglish_translit_engine: string;
   noise_cancellation_enabled: boolean;
   ambient_memory_enabled: boolean;
-  groq_api_key?: string;
-  openrouter_api_key?: string;
+  whisper_mode_enabled: boolean;
+  intent_router_enabled: boolean;
+  wake_word_enabled: boolean;
   [key: string]: any;
 }
 
@@ -50,6 +53,7 @@ const defaultSettings: AppSettings = {
   microphone_device_id: null,
   widget_visibility: 'always',
   widget_style: 'active_waveform',
+  widget_transcribing_style: 'orbit_pure',
   follow_cursor_across_monitors: false,
   lock_widget_position: false,
   copy_instead_of_type: false,
@@ -59,6 +63,7 @@ const defaultSettings: AppSettings = {
   stt_provider: 'groq',
   inference_model: 'whisper-large-v3-turbo',
   local_inference_profile: 'balanced',
+  local_whisper_unload_on_idle: true,
   recording_sounds: true,
   sound_volume: 0.6,
   pause_other_audio_while_talking: true,
@@ -78,6 +83,9 @@ const defaultSettings: AppSettings = {
   tenglish_translit_engine: 'gemini-flash',
   noise_cancellation_enabled: true,
   ambient_memory_enabled: false,
+  whisper_mode_enabled: false,
+  intent_router_enabled: true,
+  wake_word_enabled: false,
 };
 
 function normalizeIncomingSettings(raw: any, prev: AppSettings): AppSettings {
@@ -90,6 +98,7 @@ function normalizeIncomingSettings(raw: any, prev: AppSettings): AppSettings {
   const microphone_device_id = raw.microphoneDeviceId !== undefined ? raw.microphoneDeviceId : (raw.microphone_device_id !== undefined ? raw.microphone_device_id : prev.microphone_device_id);
   const widget_visibility = raw.widgetVisibility ?? raw.widget_visibility ?? prev.widget_visibility;
   const widget_style = raw.widgetStyle ?? raw.widget_style ?? prev.widget_style;
+  const widget_transcribing_style = raw.widgetTranscribingStyle ?? raw.widget_transcribing_style ?? prev.widget_transcribing_style ?? 'orbit_pure';
   const follow_cursor_across_monitors = raw.followCursorAcrossMonitors ?? raw.follow_cursor_across_monitors ?? prev.follow_cursor_across_monitors;
   const lock_widget_position = raw.lockWidgetPosition ?? raw.lock_widget_position ?? prev.lock_widget_position;
   const copy_instead_of_type = raw.copyInsteadOfType ?? raw.copy_instead_of_type ?? (raw.pasteDirectly !== undefined ? !raw.pasteDirectly : prev.copy_instead_of_type);
@@ -99,6 +108,8 @@ function normalizeIncomingSettings(raw: any, prev: AppSettings): AppSettings {
   const inference_model = raw.inferenceModel ?? raw.cloudModel ?? raw.inference_model ?? prev.inference_model;
   let stt_provider = raw.sttProvider ?? raw.stt_provider ?? prev.stt_provider;
   if (
+    inference_model?.startsWith('elevenlabs/') ||
+    inference_model?.includes('scribe') ||
     inference_model?.startsWith('microsoft/') ||
     inference_model?.startsWith('openai/') ||
     inference_model?.includes('mai-transcribe')
@@ -108,6 +119,7 @@ function normalizeIncomingSettings(raw: any, prev: AppSettings): AppSettings {
     stt_provider = 'groq';
   }
   const local_inference_profile = raw.localInferenceProfile ?? raw.localModelProfile ?? raw.inferenceProfile ?? raw.local_inference_profile ?? prev.local_inference_profile;
+  const local_whisper_unload_on_idle = raw.localWhisperUnloadOnIdle ?? raw.local_whisper_unload_on_idle ?? prev.local_whisper_unload_on_idle;
   const recording_sounds = raw.recordingSounds ?? raw.soundFeedback ?? raw.recording_sounds ?? prev.recording_sounds;
   const sound_volume = raw.soundVolume ?? raw.sound_volume ?? prev.sound_volume;
   const pause_other_audio_while_talking = raw.pauseOtherAudioWhileTalking ?? raw.pause_other_audio_while_talking ?? prev.pause_other_audio_while_talking;
@@ -127,8 +139,9 @@ function normalizeIncomingSettings(raw: any, prev: AppSettings): AppSettings {
   const tenglish_translit_engine = raw.tenglishTranslitEngine ?? raw.tenglish_translit_engine ?? prev.tenglish_translit_engine;
   const noise_cancellation_enabled = raw.noiseCancellationEnabled ?? raw.noise_cancellation_enabled ?? prev.noise_cancellation_enabled;
   const ambient_memory_enabled = raw.ambientMemoryEnabled ?? raw.ambient_memory_enabled ?? prev.ambient_memory_enabled;
-  const groq_api_key = raw.groq_api_key ?? raw.groqApiKey ?? prev.groq_api_key;
-  const openrouter_api_key = raw.openrouter_api_key ?? raw.openRouterApiKey ?? prev.openrouter_api_key;
+  const whisper_mode_enabled = raw.whisperModeEnabled ?? raw.whisper_mode_enabled ?? prev.whisper_mode_enabled;
+  const intent_router_enabled = raw.intentRouterEnabled ?? raw.intent_router_enabled ?? prev.intent_router_enabled;
+  const wake_word_enabled = raw.wakeWordEnabled ?? raw.wake_word_enabled ?? prev.wake_word_enabled;
 
   return {
     ...prev,
@@ -140,6 +153,7 @@ function normalizeIncomingSettings(raw: any, prev: AppSettings): AppSettings {
     microphone_device_id,
     widget_visibility,
     widget_style,
+    widget_transcribing_style,
     follow_cursor_across_monitors,
     lock_widget_position,
     copy_instead_of_type,
@@ -149,6 +163,7 @@ function normalizeIncomingSettings(raw: any, prev: AppSettings): AppSettings {
     stt_provider,
     inference_model,
     local_inference_profile,
+    local_whisper_unload_on_idle,
     recording_sounds,
     sound_volume,
     pause_other_audio_while_talking,
@@ -163,13 +178,16 @@ function normalizeIncomingSettings(raw: any, prev: AppSettings): AppSettings {
     quick_actions_enabled,
     clipboard_history_enabled,
     clipboard_max_items,
+    clipboardHistoryEnabled: clipboard_history_enabled,
+    clipboardMaxItems: clipboard_max_items,
     tenglish_mode_enabled,
     tenglish_stt_tier,
     tenglish_translit_engine,
     noise_cancellation_enabled,
     ambient_memory_enabled,
-    groq_api_key,
-    openrouter_api_key,
+    whisper_mode_enabled,
+    intent_router_enabled,
+    wake_word_enabled,
     // Also include camelCase mirrors
     pushToTalkKey: push_to_talk_key,
     pushToTalkMode: push_to_talk_mode,
@@ -178,6 +196,7 @@ function normalizeIncomingSettings(raw: any, prev: AppSettings): AppSettings {
     microphoneDeviceId: microphone_device_id,
     widgetVisibility: widget_visibility,
     widgetStyle: widget_style,
+    widgetTranscribingStyle: widget_transcribing_style,
     followCursorAcrossMonitors: follow_cursor_across_monitors,
     lockWidgetPosition: lock_widget_position,
     copyInsteadOfType: copy_instead_of_type,
@@ -201,11 +220,12 @@ function normalizeIncomingSettings(raw: any, prev: AppSettings): AppSettings {
     voiceCommandsEnabled: voice_commands_enabled,
     voiceSnippetsEnabled: voice_snippets_enabled,
     quickActionsEnabled: quick_actions_enabled,
+    whisperModeEnabled: whisper_mode_enabled,
+    intentRouterEnabled: intent_router_enabled,
+    wakeWordEnabled: wake_word_enabled,
     tenglishModeEnabled: tenglish_mode_enabled,
     tenglishSttTier: tenglish_stt_tier,
     tenglishTranslitEngine: tenglish_translit_engine,
-    groqApiKey: groq_api_key,
-    openRouterApiKey: openrouter_api_key,
   };
 }
 
@@ -219,6 +239,8 @@ function buildRustPatch(partial: Record<string, any>): Record<string, any> {
   if (partial.microphone_device_id !== undefined) patch.microphoneDeviceId = partial.microphone_device_id;
   if (partial.widget_visibility !== undefined) patch.widgetVisibility = partial.widget_visibility;
   if (partial.widget_style !== undefined) patch.widgetStyle = partial.widget_style;
+  if (partial.widget_transcribing_style !== undefined) patch.widgetTranscribingStyle = partial.widget_transcribing_style;
+  if (partial.widgetTranscribingStyle !== undefined) patch.widget_transcribing_style = partial.widgetTranscribingStyle;
   if (partial.follow_cursor_across_monitors !== undefined) patch.followCursorAcrossMonitors = partial.follow_cursor_across_monitors;
   if (partial.lock_widget_position !== undefined) patch.lockWidgetPosition = partial.lock_widget_position;
   if (partial.copy_instead_of_type !== undefined) {
@@ -240,6 +262,8 @@ function buildRustPatch(partial: Record<string, any>): Record<string, any> {
     patch.cloudModel = partial.inference_model;
     if (partial.stt_provider === undefined) {
       if (
+        partial.inference_model.startsWith('elevenlabs/') ||
+        partial.inference_model.includes('scribe') ||
         partial.inference_model.startsWith('microsoft/') ||
         partial.inference_model.startsWith('openai/') ||
         partial.inference_model.includes('mai-transcribe')
@@ -255,6 +279,9 @@ function buildRustPatch(partial: Record<string, any>): Record<string, any> {
     patch.inferenceProfile = partial.local_inference_profile;
     patch.localModelProfile = partial.local_inference_profile;
   }
+  if (partial.local_whisper_unload_on_idle !== undefined) {
+    patch.localWhisperUnloadOnIdle = partial.local_whisper_unload_on_idle;
+  }
   if (partial.recording_sounds !== undefined) {
     patch.recordingSounds = partial.recording_sounds;
     patch.soundFeedback = partial.recording_sounds;
@@ -268,9 +295,14 @@ function buildRustPatch(partial: Record<string, any>): Record<string, any> {
   if (partial.voice_commands_enabled !== undefined) patch.voiceCommandsEnabled = partial.voice_commands_enabled;
   if (partial.voice_snippets_enabled !== undefined) patch.voiceSnippetsEnabled = partial.voice_snippets_enabled;
   if (partial.quick_actions_enabled !== undefined) patch.quickActionsEnabled = partial.quick_actions_enabled;
+  if (partial.whisper_mode_enabled !== undefined) patch.whisperModeEnabled = partial.whisper_mode_enabled;
+  if (partial.intent_router_enabled !== undefined) patch.intentRouterEnabled = partial.intent_router_enabled;
+  if (partial.wake_word_enabled !== undefined) patch.wakeWordEnabled = partial.wake_word_enabled;
   if (partial.tenglish_mode_enabled !== undefined) patch.tenglishModeEnabled = partial.tenglish_mode_enabled;
   if (partial.tenglish_stt_tier !== undefined) patch.tenglishSttTier = partial.tenglish_stt_tier;
   if (partial.tenglish_translit_engine !== undefined) patch.tenglishTranslitEngine = partial.tenglish_translit_engine;
+  if (partial.clipboard_max_items !== undefined) patch.clipboardMaxItems = partial.clipboard_max_items;
+  if (partial.clipboard_history_enabled !== undefined) patch.clipboardHistoryEnabled = partial.clipboard_history_enabled;
 
   return patch;
 }
@@ -295,31 +327,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       // 1. Fetch settings from Rust getSettings
       const rawSettings = await invokeTauri<any>('getSettings');
       
-      // 2. Fetch API keys from CredentialsProvider
-      let groqKey: string | null = null;
-      let orKey: string | null = null;
-      try {
-        groqKey = await invokeTauri<string | null>('getApiKey');
-      } catch (err) {
-        // Ignored in browser mock
-      }
-      try {
-        orKey = await invokeTauri<string | null>('getOpenRouterApiKey');
-      } catch (err) {
-        // Ignored in browser mock
-      }
-
       setSettings((prev) => {
-        const normalized = normalizeIncomingSettings(rawSettings, prev);
-        if (groqKey) {
-          normalized.groq_api_key = groqKey;
-          normalized.groqApiKey = groqKey;
-        }
-        if (orKey) {
-          normalized.openrouter_api_key = orKey;
-          normalized.openRouterApiKey = orKey;
-        }
-        return normalized;
+        return normalizeIncomingSettings(rawSettings, prev);
       });
     } catch (e) {
       console.warn('[SettingsContext] Failed to load settings:', e);
@@ -339,24 +348,21 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   const updateSettings = async (partial: Partial<AppSettings>) => {
+    const previousSettings = settings;
     setSettings((prev) => normalizeIncomingSettings(partial, prev));
     try {
       const patch = buildRustPatch(partial);
       await invokeTauri('saveSettings', { patch });
-
-      // If groq_api_key or groqApiKey was updated, save it to CredentialsProvider
-      const newGroqKey = partial.groq_api_key ?? partial.groqApiKey;
-      if (typeof newGroqKey === 'string') {
-        await invokeTauri('saveGroqKey', { key: newGroqKey });
-      }
-
-      // If openrouter_api_key or openRouterApiKey was updated, save it
-      const newOrKey = partial.openrouter_api_key ?? partial.openRouterApiKey;
-      if (typeof newOrKey === 'string') {
-        await invokeTauri('saveOpenRouterKey', { key: newOrKey });
-      }
     } catch (err) {
       console.error('[SettingsContext] Failed to save settings:', err);
+      setSettings((current) => {
+        const rollback: Record<string, unknown> = {};
+        for (const key of Object.keys(partial)) {
+          rollback[key] = (previousSettings as any)[key];
+        }
+        return normalizeIncomingSettings(rollback, current);
+      });
+      throw err;
     }
   };
 

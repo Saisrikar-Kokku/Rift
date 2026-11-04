@@ -1,13 +1,35 @@
+use super::level::calculate_level;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Stream;
-use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
-use super::level::calculate_level;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
+use std::sync::Arc;
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 
 pub const SAMPLE_RATE: u32 = 16000;
 pub const MIN_RECORDING_DURATION_SEC: f64 = 0.25;
+pub const MAX_RECORDING_DURATION_SECONDS: u32 = 10 * 60;
+
+const AUDIO_QUEUE_CHUNKS: usize = 32;
+const MAX_INTERLEAVED_SAMPLES_PER_CHUNK: usize = 4096;
+
+enum AudioChunk {
+    I16(Vec<i16>),
+    F32(Vec<f32>),
+}
+
+#[derive(Clone, Copy)]
+pub enum CaptureStopReason {
+    MaximumDuration,
+    QueueOverflow,
+}
+
+struct AudioConsumerResult {
+    samples: Vec<i16>,
+    peak_level: u32,
+    queue_overflowed: bool,
+}
 
 pub struct AudioCaptureResult {
     pub wav_bytes: Vec<u8>,
@@ -15,13 +37,13 @@ pub struct AudioCaptureResult {
     pub peak_level: u32,
     pub is_silent: bool,
     pub is_short_press: bool,
+    pub error: Option<String>,
 }
 
 pub struct AudioRecorder {
     is_recording: Arc<AtomicBool>,
-    buffer: Arc<Mutex<Vec<i16>>>,
-    pre_roll: Arc<Mutex<VecDeque<i16>>>,
-    peak_level: Arc<AtomicU32>,
+    audio_worker: Option<JoinHandle<AudioConsumerResult>>,
+    queue_overflowed: Arc<AtomicBool>,
     start_time: Option<Instant>,
     stream: Option<Stream>,
     sample_rate: u32,
@@ -45,12 +67,12 @@ pub fn soft_limit_sample(x: f32) -> f32 {
     }
 }
 
-pub fn apply_high_pass_80hz(samples: &mut [i16], sample_rate: u32) {
+pub fn apply_high_pass_filter(samples: &mut [i16], sample_rate: u32, cutoff_hz: f32) {
     if samples.is_empty() || sample_rate == 0 {
         return;
     }
     let dt = 1.0f32 / sample_rate as f32;
-    let rc = 1.0f32 / (2.0f32 * std::f32::consts::PI * 80.0f32);
+    let rc = 1.0f32 / (2.0f32 * std::f32::consts::PI * cutoff_hz);
     let alpha = rc / (rc + dt);
 
     let mut prev_x = samples[0] as f32;
@@ -65,7 +87,32 @@ pub fn apply_high_pass_80hz(samples: &mut [i16], sample_rate: u32) {
     }
 }
 
+pub fn apply_high_pass_80hz(samples: &mut [i16], sample_rate: u32) {
+    apply_high_pass_filter(samples, sample_rate, 80.0);
+}
+
+/// First-order high-frequency formant pre-emphasis tailored for sub-vocal whispered speech.
+/// Boosts consonant energy (1.2kHz - 4.5kHz) where whispered sibilants and plosives reside.
+pub fn apply_whisper_pre_emphasis(samples: &mut [i16]) {
+    if samples.len() < 2 {
+        return;
+    }
+    let mut prev_x = samples[0] as f32;
+    for s in samples.iter_mut() {
+        let x = *s as f32;
+        let high_shelf = x - 0.84 * prev_x;
+        // Blend 60% original + 40% high-emphasized consonant energy (+5.5 dB consonant clarity)
+        let blended = 0.60 * x + 0.40 * high_shelf * 1.45;
+        prev_x = x;
+        *s = blended.round().clamp(i16::MIN as f32, i16::MAX as f32) as i16;
+    }
+}
+
 pub fn normalize_speech_agc(samples: &mut [i16]) {
+    normalize_speech_agc_with_mode(samples, false);
+}
+
+pub fn normalize_speech_agc_with_mode(samples: &mut [i16], whisper_mode: bool) {
     if samples.is_empty() {
         return;
     }
@@ -89,31 +136,42 @@ pub fn normalize_speech_agc(samples: &mut [i16]) {
 
     // 2. Identify noise floor & speech frames
     let mut sorted_rms = frame_rms_list.clone();
-    let noise_idx = ((sorted_rms.len() as f32 * 0.20) as usize).min(sorted_rms.len().saturating_sub(1));
-    let (_, noise_val, _) = sorted_rms.select_nth_unstable_by(noise_idx, |a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let noise_floor = (*noise_val).max(20.0);
-    let speech_threshold = (noise_floor * 2.0).max(70.0);
+    let noise_idx =
+        ((sorted_rms.len() as f32 * 0.20) as usize).min(sorted_rms.len().saturating_sub(1));
+    let (_, noise_val, _) = sorted_rms.select_nth_unstable_by(noise_idx, |a, b| {
+        a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let min_noise_floor = if whisper_mode { 8.0 } else { 20.0 };
+    let min_speech_thresh = if whisper_mode { 20.0 } else { 70.0 };
+    let noise_floor = (*noise_val).max(min_noise_floor);
+    let speech_threshold =
+        (noise_floor * if whisper_mode { 1.55 } else { 2.0 }).max(min_speech_thresh);
 
     // Filter frames that contain voice
-    let speech_frames: Vec<f64> = frame_rms_list.iter().copied().filter(|&r| r > speech_threshold).collect();
+    let speech_frames: Vec<f64> = frame_rms_list
+        .iter()
+        .copied()
+        .filter(|&r| r > speech_threshold)
+        .collect();
 
     // 3. Determine target gain based on speech RMS and peak headroom
     let max_abs = samples.iter().map(|&s| (s as i32).abs()).max().unwrap_or(0);
-    if max_abs < 35 {
+    let min_gate = if whisper_mode { 10 } else { 35 };
+    if max_abs < min_gate {
         return; // Pure digital silence / muted mic
     }
 
-    let target_peak = 26500.0f32;
+    let target_peak = if whisper_mode { 28000.0f32 } else { 26500.0f32 };
     let peak_gain = target_peak / (max_abs as f32);
+    let max_boost_cap = if whisper_mode { 36.0f32 } else { 16.0f32 };
 
     let final_gain = if !speech_frames.is_empty() {
         let avg_speech_rms = speech_frames.iter().sum::<f64>() / speech_frames.len() as f64;
-        let target_speech_rms = 4800.0f64; // ~ -16.5 dBFS optimal broadcast level
-        let rms_gain = (target_speech_rms / avg_speech_rms.max(10.0)) as f32;
-        // Balance RMS target and peak headroom, with a max boost of 16.0x for faint whisper/low mics
-        peak_gain.min(rms_gain).clamp(1.0, 16.0)
+        let target_speech_rms = if whisper_mode { 5600.0f64 } else { 4800.0f64 };
+        let rms_gain = (target_speech_rms / avg_speech_rms.max(6.0)) as f32;
+        peak_gain.min(rms_gain).clamp(1.0, max_boost_cap)
     } else {
-        peak_gain.clamp(1.0, 8.0)
+        peak_gain.clamp(1.0, if whisper_mode { 24.0 } else { 8.0 })
     };
 
     if (final_gain - 1.0).abs() > 0.05 {
@@ -125,13 +183,172 @@ pub fn normalize_speech_agc(samples: &mut [i16]) {
     }
 }
 
+fn enqueue_i16_chunks(
+    data: &[i16],
+    channels: usize,
+    sender: &SyncSender<AudioChunk>,
+    is_recording: &AtomicBool,
+    overflowed: &AtomicBool,
+    on_stop: &(dyn Fn(CaptureStopReason) + Send + Sync),
+) {
+    let chunk_size = (MAX_INTERLEAVED_SAMPLES_PER_CHUNK / channels.max(1)).max(1) * channels.max(1);
+    for chunk in data.chunks(chunk_size) {
+        if !is_recording.load(Ordering::Relaxed) {
+            break;
+        }
+        if let Err(error) = sender.try_send(AudioChunk::I16(chunk.to_vec())) {
+            match error {
+                TrySendError::Full(_) => {
+                    overflowed.store(true, Ordering::Release);
+                    if is_recording.swap(false, Ordering::AcqRel) {
+                        on_stop(CaptureStopReason::QueueOverflow);
+                    }
+                }
+                TrySendError::Disconnected(_) => {
+                    overflowed.store(true, Ordering::Release);
+                    if is_recording.swap(false, Ordering::AcqRel) {
+                        on_stop(CaptureStopReason::QueueOverflow);
+                    }
+                }
+            }
+            break;
+        }
+    }
+}
+
+fn enqueue_f32_chunks(
+    data: &[f32],
+    channels: usize,
+    sender: &SyncSender<AudioChunk>,
+    is_recording: &AtomicBool,
+    overflowed: &AtomicBool,
+    on_stop: &(dyn Fn(CaptureStopReason) + Send + Sync),
+) {
+    let chunk_size = (MAX_INTERLEAVED_SAMPLES_PER_CHUNK / channels.max(1)).max(1) * channels.max(1);
+    for chunk in data.chunks(chunk_size) {
+        if !is_recording.load(Ordering::Relaxed) {
+            break;
+        }
+        if let Err(error) = sender.try_send(AudioChunk::F32(chunk.to_vec())) {
+            match error {
+                TrySendError::Full(_) => {
+                    overflowed.store(true, Ordering::Release);
+                    if is_recording.swap(false, Ordering::AcqRel) {
+                        on_stop(CaptureStopReason::QueueOverflow);
+                    }
+                }
+                TrySendError::Disconnected(_) => {
+                    overflowed.store(true, Ordering::Release);
+                    if is_recording.swap(false, Ordering::AcqRel) {
+                        on_stop(CaptureStopReason::QueueOverflow);
+                    }
+                }
+            }
+            break;
+        }
+    }
+}
+
+fn append_i16_chunk(
+    data: &[i16],
+    channels: usize,
+    boost: f32,
+    level_scale: u32,
+    max_samples: usize,
+    samples: &mut Vec<i16>,
+    peak_level: &mut u32,
+    last_level_update: &mut Instant,
+    on_level: &(dyn Fn(u32) + Send + Sync),
+) -> bool {
+    let channels = channels.max(1);
+    let frame_count = data.len() / channels;
+    let remaining = max_samples.saturating_sub(samples.len());
+    let frames_to_take = frame_count.min(remaining);
+    let start = samples.len();
+    for frame in data[..frames_to_take * channels].chunks_exact(channels) {
+        let mono =
+            frame.iter().map(|sample| *sample as f32).sum::<f32>() / channels as f32 / 32768.0;
+        let limited = soft_limit_sample(mono * boost);
+        samples.push(
+            (limited * 32767.0)
+                .round()
+                .clamp(i16::MIN as f32, i16::MAX as f32) as i16,
+        );
+    }
+
+    publish_audio_level(
+        samples,
+        start,
+        level_scale,
+        peak_level,
+        last_level_update,
+        on_level,
+    );
+    samples.len() >= max_samples
+}
+
+fn append_f32_chunk(
+    data: &[f32],
+    channels: usize,
+    boost: f32,
+    level_scale: u32,
+    max_samples: usize,
+    samples: &mut Vec<i16>,
+    peak_level: &mut u32,
+    last_level_update: &mut Instant,
+    on_level: &(dyn Fn(u32) + Send + Sync),
+) -> bool {
+    let channels = channels.max(1);
+    let frame_count = data.len() / channels;
+    let remaining = max_samples.saturating_sub(samples.len());
+    let frames_to_take = frame_count.min(remaining);
+    let start = samples.len();
+    for frame in data[..frames_to_take * channels].chunks_exact(channels) {
+        let mono = frame.iter().copied().sum::<f32>() / channels as f32;
+        let limited = soft_limit_sample(mono * boost);
+        samples.push(
+            (limited * 32767.0)
+                .round()
+                .clamp(i16::MIN as f32, i16::MAX as f32) as i16,
+        );
+    }
+
+    publish_audio_level(
+        samples,
+        start,
+        level_scale,
+        peak_level,
+        last_level_update,
+        on_level,
+    );
+    samples.len() >= max_samples
+}
+
+fn publish_audio_level(
+    samples: &[i16],
+    start: usize,
+    level_scale: u32,
+    peak_level: &mut u32,
+    last_level_update: &mut Instant,
+    on_level: &(dyn Fn(u32) + Send + Sync),
+) {
+    if start == samples.len() {
+        return;
+    }
+    let level = (calculate_level(&samples[start..]) * level_scale).min(100);
+    *peak_level = (*peak_level).max(level);
+    if last_level_update.elapsed() >= Duration::from_millis(40) {
+        *last_level_update = Instant::now();
+        on_level(level);
+    }
+}
+
 impl AudioRecorder {
     pub fn new() -> Self {
         Self {
             is_recording: Arc::new(AtomicBool::new(false)),
-            buffer: Arc::new(Mutex::new(Vec::with_capacity(SAMPLE_RATE as usize * 10))),
-            pre_roll: Arc::new(Mutex::new(VecDeque::with_capacity(16000))),
-            peak_level: Arc::new(AtomicU32::new(0)),
+            audio_worker: None,
+            queue_overflowed: Arc::new(AtomicBool::new(false)),
             start_time: None,
             stream: None,
             sample_rate: SAMPLE_RATE,
@@ -140,7 +357,15 @@ impl AudioRecorder {
         }
     }
 
-    fn resolve_device_and_config(
+    pub fn is_recording(&self) -> bool {
+        self.is_recording.load(Ordering::SeqCst)
+    }
+
+    pub fn is_recording_arc(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.is_recording)
+    }
+
+    pub fn resolve_device_and_config(
         device_name: Option<&str>,
     ) -> Result<(cpal::Device, cpal::SupportedStreamConfig), String> {
         let host = cpal::default_host();
@@ -164,27 +389,27 @@ impl AudioRecorder {
     pub fn cancel(&mut self) {
         self.is_recording.store(false, Ordering::SeqCst);
         let _ = self.stream.take();
+        if let Some(worker) = self.audio_worker.take() {
+            let _ = worker.join();
+        }
         self.active_device = None;
         self.start_time.take();
-        self.buffer.lock().unwrap().clear();
-        self.pre_roll.lock().unwrap().clear();
-        self.peak_level.store(0, Ordering::SeqCst);
+        self.queue_overflowed.store(false, Ordering::SeqCst);
     }
 
-    pub fn start<F>(&mut self, device_name: Option<&str>, boost: f32, on_level: F) -> Result<(), String>
+    pub fn start<F, S>(
+        &mut self,
+        device_name: Option<&str>,
+        boost: f32,
+        on_level: F,
+        on_stop: S,
+    ) -> Result<(), String>
     where
         F: Fn(u32) + Send + Sync + 'static,
+        S: Fn(CaptureStopReason) + Send + Sync + 'static,
     {
-        // 1. Cleanly drop any previous stream to guarantee zero lingering handles
-        let _ = self.stream.take();
-        self.active_device = None;
-
-        {
-            let mut buf = self.buffer.lock().unwrap();
-            buf.clear();
-            self.pre_roll.lock().unwrap().clear();
-            self.peak_level.store(0, Ordering::SeqCst);
-        }
+        // A previous consumer must be joined before a new capture can start.
+        self.cancel();
 
         // 2. Acquire audio input device (instant from cache or fast query)
         let (device, config) = if let Some((cached_name, dev, cfg)) = &self.cached_device {
@@ -192,7 +417,8 @@ impl AudioRecorder {
                 (dev.clone(), cfg.clone())
             } else {
                 let (d, c) = Self::resolve_device_and_config(device_name)?;
-                self.cached_device = Some((device_name.map(|s| s.to_string()), d.clone(), c.clone()));
+                self.cached_device =
+                    Some((device_name.map(|s| s.to_string()), d.clone(), c.clone()));
                 (d, c)
             }
         } else {
@@ -201,42 +427,114 @@ impl AudioRecorder {
             (d, c)
         };
 
-        let buffer = Arc::clone(&self.buffer);
         let is_recording = Arc::clone(&self.is_recording);
-        let peak_level = Arc::clone(&self.peak_level);
+        let queue_overflowed = Arc::clone(&self.queue_overflowed);
 
-        is_recording.store(true, Ordering::SeqCst);
-        self.start_time = Some(Instant::now());
-
-        let channels = config.channels() as usize;
+        let channels = (config.channels() as usize).max(1);
         let s_rate = config.sample_rate().0;
         self.sample_rate = s_rate;
         self.active_device = device_name.map(|s| s.to_string());
 
-        let err_fn = |err| eprintln!("Audio stream error: {}", err);
+        let whisper_mode = crate::storage::settings::load_settings().whisper_mode_enabled;
+        let level_scale: u32 = if whisper_mode { 3 } else { 1 };
+        let effective_boost = if whisper_mode {
+            (boost * 1.45).min(4.0)
+        } else {
+            boost
+        };
+        let (sender, receiver) = sync_channel::<AudioChunk>(AUDIO_QUEUE_CHUNKS);
+        let consumer_is_recording = Arc::clone(&is_recording);
+        let consumer_overflowed = Arc::clone(&queue_overflowed);
+        let on_level = Arc::new(on_level);
+        let on_stop = Arc::new(on_stop);
+        let consumer_on_level = Arc::clone(&on_level);
+        let consumer_on_stop = Arc::clone(&on_stop);
+        let consumer = thread::Builder::new()
+            .name("rift-audio-consumer".to_string())
+            .spawn(move || {
+                let max_samples =
+                    (s_rate as usize).saturating_mul(MAX_RECORDING_DURATION_SECONDS as usize);
+                let initial_capacity = (s_rate as usize).saturating_mul(10).min(max_samples);
+                let mut samples = Vec::with_capacity(initial_capacity);
+                let mut peak_level = 0;
+                let mut last_level_update = Instant::now();
+
+                while let Ok(chunk) = receiver.recv() {
+                    let was_at_limit = match chunk {
+                        AudioChunk::I16(data) => append_i16_chunk(
+                            &data,
+                            channels,
+                            effective_boost,
+                            level_scale,
+                            max_samples,
+                            &mut samples,
+                            &mut peak_level,
+                            &mut last_level_update,
+                            consumer_on_level.as_ref(),
+                        ),
+                        AudioChunk::F32(data) => append_f32_chunk(
+                            &data,
+                            channels,
+                            effective_boost,
+                            level_scale,
+                            max_samples,
+                            &mut samples,
+                            &mut peak_level,
+                            &mut last_level_update,
+                            consumer_on_level.as_ref(),
+                        ),
+                    };
+
+                    if was_at_limit || samples.len() >= max_samples {
+                        if consumer_is_recording.swap(false, Ordering::SeqCst) {
+                            consumer_on_stop(CaptureStopReason::MaximumDuration);
+                        }
+                        break;
+                    }
+                }
+
+                AudioConsumerResult {
+                    samples,
+                    peak_level,
+                    queue_overflowed: consumer_overflowed.load(Ordering::SeqCst),
+                }
+            })
+            .map_err(|error| format!("Failed to start audio consumer: {error}"))?;
+
+        let sender_i16 = sender.clone();
+        let recording_i16 = Arc::clone(&is_recording);
+        let overflow_i16 = Arc::clone(&queue_overflowed);
+        let on_stop_i16 = Arc::clone(&on_stop);
+        let sender_f32 = sender.clone();
+        let recording_f32 = Arc::clone(&is_recording);
+        let overflow_f32 = Arc::clone(&queue_overflowed);
+        let on_stop_f32 = Arc::clone(&on_stop);
+        let error_recording = Arc::clone(&is_recording);
+        let error_overflowed = Arc::clone(&queue_overflowed);
+        let error_on_stop = Arc::clone(&on_stop);
+        let err_fn = move |err| {
+            eprintln!("Audio stream error: {}", err);
+            error_overflowed.store(true, Ordering::Release);
+            if error_recording.swap(false, Ordering::SeqCst) {
+                error_on_stop(CaptureStopReason::QueueOverflow);
+            }
+        };
 
         let stream = match config.sample_format() {
             cpal::SampleFormat::I16 => device.build_input_stream(
                 &config.into(),
                 move |data: &[i16], _: &_| {
-                    if !is_recording.load(Ordering::Relaxed) {
+                    if !recording_i16.load(Ordering::Relaxed) {
                         return;
                     }
-                    if let Ok(mut buf) = buffer.lock() {
-                        let start_idx = buf.len();
-                        let num_frames = data.len() / channels;
-                        buf.reserve(num_frames);
-                        for c in data.chunks(channels) {
-                            let avg: f32 = c.iter().map(|&s| s as f32).sum::<f32>() / channels as f32;
-                            let norm = avg / 32768.0;
-                            let boosted = norm * boost;
-                            let limited = soft_limit_sample(boosted);
-                            buf.push((limited * 32767.0).round().clamp(i16::MIN as f32, i16::MAX as f32) as i16);
-                        }
-                        let level = calculate_level(&buf[start_idx..]);
-                        peak_level.fetch_max(level, Ordering::Relaxed);
-                        on_level(level);
-                    }
+                    enqueue_i16_chunks(
+                        data,
+                        channels,
+                        &sender_i16,
+                        &recording_i16,
+                        &overflow_i16,
+                        on_stop_i16.as_ref(),
+                    );
                 },
                 err_fn,
                 None,
@@ -244,23 +542,17 @@ impl AudioRecorder {
             cpal::SampleFormat::F32 => device.build_input_stream(
                 &config.into(),
                 move |data: &[f32], _: &_| {
-                    if !is_recording.load(Ordering::Relaxed) {
+                    if !recording_f32.load(Ordering::Relaxed) {
                         return;
                     }
-                    if let Ok(mut buf) = buffer.lock() {
-                        let start_idx = buf.len();
-                        let num_frames = data.len() / channels;
-                        buf.reserve(num_frames);
-                        for c in data.chunks(channels) {
-                            let avg: f32 = c.iter().copied().sum::<f32>() / channels as f32;
-                            let boosted = avg * boost;
-                            let limited = soft_limit_sample(boosted);
-                            buf.push((limited * 32767.0).round().clamp(i16::MIN as f32, i16::MAX as f32) as i16);
-                        }
-                        let level = calculate_level(&buf[start_idx..]);
-                        peak_level.fetch_max(level, Ordering::Relaxed);
-                        on_level(level);
-                    }
+                    enqueue_f32_chunks(
+                        data,
+                        channels,
+                        &sender_f32,
+                        &recording_f32,
+                        &overflow_f32,
+                        on_stop_f32.as_ref(),
+                    );
                 },
                 err_fn,
                 None,
@@ -269,11 +561,22 @@ impl AudioRecorder {
         }
         .map_err(|e| format!("Failed to build audio stream: {}", e))?;
 
-        stream
-            .play()
-            .map_err(|e| format!("Failed to start audio stream: {}", e))?;
+        if let Err(error) = stream.play() {
+            drop(stream);
+            drop(sender);
+            let _ = consumer.join();
+            return Err(format!("Failed to start audio stream: {error}"));
+        }
+        // The stream callback owns the sender clones; close this extra handle so
+        // dropping the stream cleanly terminates the consumer after queued audio drains.
+        drop(sender);
 
+        // Publish recording state only after the device stream has actually started.
+        // Callers can safely report success and begin downstream work after this point.
+        is_recording.store(true, Ordering::SeqCst);
+        self.start_time = Some(Instant::now());
         self.stream = Some(stream);
+        self.audio_worker = Some(consumer);
         Ok(())
     }
 
@@ -282,7 +585,6 @@ impl AudioRecorder {
         // Explicitly drop and close the CPAL audio stream to immediately release the Windows microphone
         let _ = self.stream.take();
         self.active_device = None;
-        self.pre_roll.lock().unwrap().clear();
 
         let duration_seconds = self
             .start_time
@@ -290,56 +592,138 @@ impl AudioRecorder {
             .map(|t| t.elapsed().as_secs_f64())
             .unwrap_or(0.0);
 
-        let samples = {
-            let mut buf = self.buffer.lock().unwrap();
-            std::mem::take(&mut *buf)
+        let captured = self
+            .audio_worker
+            .take()
+            .and_then(|worker| worker.join().ok());
+        let Some(captured) = captured else {
+            return AudioCaptureResult {
+                wav_bytes: Vec::new(),
+                duration_seconds,
+                peak_level: 0,
+                is_silent: true,
+                is_short_press: false,
+                error: Some("The audio capture worker stopped unexpectedly.".to_string()),
+            };
         };
 
-        let peak_level = self.peak_level.load(Ordering::SeqCst);
+        let samples = captured.samples;
+        let peak_level = captured.peak_level;
+        let captured_seconds = samples.len() as f64 / self.sample_rate.max(1) as f64;
+        let estimated_audio_bytes = samples.len().saturating_mul(std::mem::size_of::<i16>());
+        log::debug!(
+            "Captured {:.1}s of mono audio at {} Hz ({} bytes of PCM; {:.1}s wall time)",
+            captured_seconds,
+            self.sample_rate,
+            estimated_audio_bytes,
+            duration_seconds
+        );
+
+        if captured.queue_overflowed {
+            return AudioCaptureResult {
+                wav_bytes: Vec::new(),
+                duration_seconds,
+                peak_level,
+                is_silent: true,
+                is_short_press: false,
+                error: Some("Audio capture could not keep up with the input device. Please retry the recording.".to_string()),
+            };
+        }
+
         let is_short_press = duration_seconds < MIN_RECORDING_DURATION_SEC;
 
-        let (wav_bytes, final_duration, is_silent) = if is_short_press {
-            (Vec::new(), duration_seconds, true)
-        } else {
-            let (mut resampled_samples, target_rate) = resample_to_16k(&samples, self.sample_rate);
-            // 1. Filter out sub-audible desk/AC rumble (< 80Hz)
-            apply_high_pass_80hz(&mut resampled_samples, target_rate);
-            // 2. Intelligent Noise Cancellation (keyboard click suppression & multi-band spectral subtraction)
-            let settings = crate::storage::settings::load_settings();
-            if settings.noise_cancellation_enabled {
-                super::denoise::denoise_audio_16k(&mut resampled_samples);
-            }
-            // 3. Normalize and elevate quiet speech/whispers
-            normalize_speech_agc(&mut resampled_samples);
-            // 4. Trim leading/trailing silence with generous margins
-            let trimmed_samples = trim_silence_16k(&resampled_samples);
-            let speech_dur = trimmed_samples.len() as f64 / target_rate as f64;
-            let silent = trimmed_samples.is_empty()
-                || trimmed_samples.iter().map(|&s| (s as i32).abs()).max().unwrap_or(0) < 40;
-            (encode_wav(&trimmed_samples, target_rate), speech_dur, silent)
-        };
-
-        AudioCaptureResult {
-            wav_bytes,
-            duration_seconds: final_duration,
-            peak_level,
-            is_silent,
-            is_short_press,
+        if is_short_press {
+            return AudioCaptureResult {
+                wav_bytes: Vec::new(),
+                duration_seconds,
+                peak_level,
+                is_silent: true,
+                is_short_press: true,
+                error: None,
+            };
         }
+
+        let (resampled_samples, _target_rate) = resample_to_16k(&samples, self.sample_rate);
+        let mut res = process_raw_16k_samples(resampled_samples);
+        res.peak_level = res.peak_level.max(peak_level);
+        res.error = None;
+        res
+    }
+}
+
+/// Runs the full studio DSP pipeline (High-Pass Filter, Denoise, Whisper Pre-Emphasis,
+/// Adaptive Speech AGC, Silence Trimming, and WAV encoding) on 16kHz mono PCM samples.
+pub fn process_raw_16k_samples(mut resampled_samples: Vec<i16>) -> AudioCaptureResult {
+    let target_rate = SAMPLE_RATE;
+    let raw_duration = resampled_samples.len() as f64 / target_rate as f64;
+    if raw_duration < MIN_RECORDING_DURATION_SEC {
+        return AudioCaptureResult {
+            wav_bytes: Vec::new(),
+            duration_seconds: raw_duration,
+            peak_level: 0,
+            is_silent: true,
+            is_short_press: true,
+            error: None,
+        };
+    }
+
+    let settings = crate::storage::settings::load_settings();
+    let whisper_mode = settings.whisper_mode_enabled;
+
+    // 1. Filter out sub-audible desk/AC rumble (< 80Hz normal, < 110Hz in Whisper Mode for breath plosives)
+    let cutoff_hz = if whisper_mode { 110.0 } else { 80.0 };
+    apply_high_pass_filter(&mut resampled_samples, target_rate, cutoff_hz);
+
+    // 2. Intelligent Noise Cancellation (keyboard click suppression & multi-band spectral subtraction)
+    if settings.noise_cancellation_enabled {
+        super::denoise::denoise_audio_16k(&mut resampled_samples);
+    }
+
+    // 3. Sub-Vocal Whisper Pre-Emphasis (1.2kHz-4.5kHz consonant formant shelf boost)
+    if whisper_mode {
+        apply_whisper_pre_emphasis(&mut resampled_samples);
+    }
+
+    // 4. Normalize and elevate quiet speech/whispers
+    normalize_speech_agc_with_mode(&mut resampled_samples, whisper_mode);
+
+    // 5. Trim leading/trailing silence with generous margins
+    let trimmed_samples = trim_silence_16k_with_mode(&resampled_samples, whisper_mode);
+    let speech_dur = trimmed_samples.len() as f64 / target_rate as f64;
+    let min_amp_gate = if whisper_mode { 22 } else { 40 };
+    let max_amp = trimmed_samples
+        .iter()
+        .map(|&s| (s as i32).abs())
+        .max()
+        .unwrap_or(0);
+    let silent = trimmed_samples.is_empty() || max_amp < min_amp_gate;
+    let peak_level = calculate_level(&trimmed_samples);
+
+    AudioCaptureResult {
+        wav_bytes: encode_wav(&trimmed_samples, target_rate),
+        duration_seconds: speech_dur,
+        peak_level,
+        is_silent: silent,
+        is_short_press: false,
+        error: None,
     }
 }
 
 /// Trims leading and trailing silence from 16kHz mono audio while preserving
 /// speech onset and trailing breath margins (250ms before, 350ms after).
 pub fn trim_silence_16k(samples: &[i16]) -> Vec<i16> {
+    trim_silence_16k_with_mode(samples, false)
+}
+
+pub fn trim_silence_16k_with_mode(samples: &[i16], whisper_mode: bool) -> Vec<i16> {
     if samples.len() < 3200 {
         return samples.to_vec();
     }
 
     let window_size = 160; // 10ms windows at 16kHz
-    let threshold: i32 = 75; // Whisper-sensitive threshold (catches faint speech)
-    let margin_start = 3600; // 225ms leading padding to preserve initial consonants with zero clipping
-    let margin_end = 4000;   // 250ms trailing padding to preserve word endings and breath margins
+    let threshold: i32 = if whisper_mode { 24 } else { 75 }; // Ultra-sensitive threshold in Whisper Mode
+    let margin_start = if whisper_mode { 4400 } else { 3600 }; // Extra leading padding in Whisper Mode
+    let margin_end = if whisper_mode { 4800 } else { 4000 }; // Extra trailing padding in Whisper Mode
 
     let mut first_speech = None;
     let mut last_speech = None;
@@ -410,7 +794,9 @@ pub fn resample_to_16k(samples: &[i16], from_rate: u32) -> (Vec<i16>, u32) {
             }
 
             let val = if total_weight > 0.0 {
-                (sum / total_weight).round().clamp(i16::MIN as f64, i16::MAX as f64) as i16
+                (sum / total_weight)
+                    .round()
+                    .clamp(i16::MIN as f64, i16::MAX as f64) as i16
             } else {
                 samples[start_idx.min(samples.len().saturating_sub(1))]
             };
@@ -513,4 +899,3 @@ mod tests {
         assert_eq!(s3, 32767);
     }
 }
-

@@ -237,6 +237,16 @@ impl DictionaryStore {
     }
 }
 
+use std::collections::HashMap;
+use std::sync::OnceLock;
+use parking_lot::RwLock;
+
+static REGEX_CACHE: OnceLock<RwLock<HashMap<String, regex::Regex>>> = OnceLock::new();
+
+fn get_regex_cache() -> &'static RwLock<HashMap<String, regex::Regex>> {
+    REGEX_CACHE.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
 pub fn apply_dictionary(text: &str, entries: &[DictionaryEntry]) -> String {
     let mut result = text.to_string();
     let mut lower_result = text.to_lowercase();
@@ -261,12 +271,29 @@ pub fn apply_dictionary(text: &str, entries: &[DictionaryEntry]) -> String {
             if last_is_word { r"\b" } else { "" }
         );
 
-        if let Ok(re) = regex::RegexBuilder::new(&pattern_str).case_insensitive(true).build() {
-            let replaced = re.replace_all(&result, entry.replacement.as_str()).to_string();
-            if replaced != result {
-                result = replaced;
-                lower_result = result.to_lowercase();
+        let cache = get_regex_cache();
+        let re_opt = {
+            let guard = cache.read();
+            guard.get(&pattern_str).cloned()
+        };
+
+        let re = match re_opt {
+            Some(compiled) => compiled,
+            None => {
+                if let Ok(compiled) = regex::RegexBuilder::new(&pattern_str).case_insensitive(true).build() {
+                    let mut guard = cache.write();
+                    guard.insert(pattern_str.clone(), compiled.clone());
+                    compiled
+                } else {
+                    continue;
+                }
             }
+        };
+
+        let replaced = re.replace_all(&result, entry.replacement.as_str()).to_string();
+        if replaced != result {
+            result = replaced;
+            lower_result = result.to_lowercase();
         }
     }
     result

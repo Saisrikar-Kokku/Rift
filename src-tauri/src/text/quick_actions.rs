@@ -503,7 +503,8 @@ pub fn execute_quick_action(
         QuickAction::RiftOpenSettings => {
             if let Some(app_handle) = app {
                 if let Some(main_win) = app_handle.get_webview_window("main") {
-                    let _ = main_win.eval("window.location.href = 'settings.html';");
+                    use tauri::Emitter;
+                    let _ = app_handle.emit("navigateTo", "settings");
                     crate::show_and_focus_window(&main_win);
                     "Opened Rift Settings".to_string()
                 } else {

@@ -106,7 +106,11 @@ html, body {
 /* Main Area Container */
 .rift-main-area {
   margin-left: 200px !important;
+  height: 100vh !important;
   min-height: 100vh !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior-y: contain;
   background-color: var(--bg-base) !important;
   padding-top: 68px !important;
   padding-bottom: 48px !important;

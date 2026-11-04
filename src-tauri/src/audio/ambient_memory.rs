@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Stream;
@@ -81,7 +82,7 @@ impl AmbientRecorder {
                             &config.into(),
                             move |data: &[i16], _| {
                                 if !is_running_clone.load(Ordering::Relaxed) { return; }
-                                if let Ok(mut b) = buf_clone.lock() {
+                                let mut b = buf_clone.lock(); {
                                     for chunk in data.chunks(channels) {
                                         let avg = chunk.iter().map(|&s| s as f32).sum::<f32>() / channels as f32;
                                         b.push(avg as i16);
@@ -97,7 +98,7 @@ impl AmbientRecorder {
                             &config.into(),
                             move |data: &[f32], _| {
                                 if !is_running_clone.load(Ordering::Relaxed) { return; }
-                                if let Ok(mut b) = buf_clone.lock() {
+                                let mut b = buf_clone.lock(); {
                                     for chunk in data.chunks(channels) {
                                         let avg = chunk.iter().copied().sum::<f32>() / channels as f32;
                                         b.push((avg * 32767.0) as i16);
@@ -127,7 +128,7 @@ impl AmbientRecorder {
                             &config.into(),
                             move |data: &[i16], _| {
                                 if !is_running_clone.load(Ordering::Relaxed) { return; }
-                                if let Ok(mut b) = buf_clone.lock() {
+                                let mut b = buf_clone.lock(); {
                                     for chunk in data.chunks(channels) {
                                         let avg = chunk.iter().map(|&s| s as f32).sum::<f32>() / channels as f32;
                                         b.push(avg as i16);
@@ -143,7 +144,7 @@ impl AmbientRecorder {
                             &config.into(),
                             move |data: &[f32], _| {
                                 if !is_running_clone.load(Ordering::Relaxed) { return; }
-                                if let Ok(mut b) = buf_clone.lock() {
+                                let mut b = buf_clone.lock(); {
                                     for chunk in data.chunks(channels) {
                                         let avg = chunk.iter().copied().sum::<f32>() / channels as f32;
                                         b.push((avg * 32767.0) as i16);
@@ -183,8 +184,8 @@ impl AmbientRecorder {
     }
 
     pub fn extract_wav_bytes(&self) -> Vec<u8> {
-        let mic_samples = if let Ok(b) = self.mic_buffer.lock() { b.get_samples() } else { Vec::new() };
-        let sys_samples = if let Ok(b) = self.sys_buffer.lock() { b.get_samples() } else { Vec::new() };
+        let mic_samples = self.mic_buffer.lock().get_samples();
+        let sys_samples = self.sys_buffer.lock().get_samples();
         
         let max_len = mic_samples.len().max(sys_samples.len());
         if max_len == 0 {

@@ -1,7 +1,18 @@
-use rusqlite::{params, Connection, Result};
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use super::search_index::{ensure_search_index, SearchIndex};
 use super::settings::get_app_data_dir;
+use chrono::Local;
+use rusqlite::{params, Connection, DatabaseName, Result};
+use serde::ser::{SerializeSeq, Serializer as _};
+use serde::{Deserialize, Serialize};
+use std::fs::{self, File};
+use std::io::{BufWriter, Write};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::thread;
+
+static BACKUP_REQUEST_VERSION: AtomicU64 = AtomicU64::new(0);
+static BACKUP_WORKER_ACTIVE: AtomicBool = AtomicBool::new(false);
+static BACKUP_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistoryEntry {
@@ -27,7 +38,9 @@ pub struct DashboardStats {
 
 pub fn get_user_backup_dir() -> PathBuf {
     if let Ok(userprofile) = std::env::var("USERPROFILE") {
-        let docs = PathBuf::from(userprofile).join("Documents").join("Rift Backups");
+        let docs = PathBuf::from(userprofile)
+            .join("Documents")
+            .join("Rift Backups");
         let _ = std::fs::create_dir_all(&docs);
         return docs;
     }
@@ -36,6 +49,15 @@ pub fn get_user_backup_dir() -> PathBuf {
     fallback
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct HistorySearchPage {
+    pub entries: Vec<HistoryEntry>,
+    pub total: usize,
+    pub limit: usize,
+    pub offset: usize,
+}
+
+#[derive(Clone)]
 pub struct HistoryStore {
     db_path: PathBuf,
 }
@@ -60,7 +82,10 @@ impl HistoryStore {
         )?;
 
         // Ensure columns exist if migrating from older schema
-        let _ = conn.execute("ALTER TABLE dictation_history ADD COLUMN words_count INTEGER NOT NULL DEFAULT 0", []);
+        let _ = conn.execute(
+            "ALTER TABLE dictation_history ADD COLUMN words_count INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
         let _ = conn.execute("ALTER TABLE dictation_history ADD COLUMN model TEXT", []);
         let _ = conn.execute("ALTER TABLE dictation_history ADD COLUMN engine TEXT", []);
 
@@ -106,7 +131,9 @@ impl HistoryStore {
         }
 
         // 2. Auto-restore from Documents\Rift Backups if dictation_history is completely empty
-        let current_count: i64 = conn.query_row("SELECT COUNT(*) FROM dictation_history", [], |r| r.get(0)).unwrap_or(0);
+        let current_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM dictation_history", [], |r| r.get(0))
+            .unwrap_or(0);
         if current_count == 0 {
             let backup_dir = get_user_backup_dir();
             let backup_json = backup_dir.join("history_backup.json");
@@ -126,16 +153,23 @@ impl HistoryStore {
         }
 
         // 3. Backfill word counts for legacy entries if needed
-        if let Ok(mut stmt) = conn.prepare("SELECT id, text FROM dictation_history WHERE words_count = 0 AND length(text) > 0") {
+        if let Ok(mut stmt) = conn.prepare(
+            "SELECT id, text FROM dictation_history WHERE words_count = 0 AND length(text) > 0",
+        ) {
             if let Ok(rows) = stmt.query_map([], |row| {
                 Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
             }) {
                 for item in rows.flatten() {
                     let wc = item.1.split_whitespace().count();
-                    let _ = conn.execute("UPDATE dictation_history SET words_count = ?1 WHERE id = ?2", params![wc, item.0]);
+                    let _ = conn.execute(
+                        "UPDATE dictation_history SET words_count = ?1 WHERE id = ?2",
+                        params![wc, item.0],
+                    );
                 }
             }
         }
+
+        ensure_search_index(&conn, SearchIndex::History)?;
 
         let store = Self { db_path };
         store.backup_to_safe_location();
@@ -143,42 +177,22 @@ impl HistoryStore {
     }
 
     pub fn backup_to_safe_location(&self) {
+        BACKUP_REQUEST_VERSION.fetch_add(1, Ordering::SeqCst);
+        if BACKUP_WORKER_ACTIVE
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return;
+        }
+
         let db_path = self.db_path.clone();
-        std::thread::spawn(move || {
-            let backup_dir = get_user_backup_dir();
-            let backup_db_file = backup_dir.join("history_backup.db");
-            let backup_json_file = backup_dir.join("history_backup.json");
-
-            // 1. Copy SQLite database file
-            let _ = std::fs::copy(&db_path, &backup_db_file);
-
-            // 2. Export complete human-readable JSON dump
-            if let Ok(conn) = Connection::open(&db_path) {
-                if let Ok(mut stmt) = conn.prepare(
-                    "SELECT id, timestamp, text, duration_seconds, char_count, words_count, target_app, model, engine
-                     FROM dictation_history ORDER BY id DESC LIMIT 5000",
-                ) {
-                    if let Ok(rows) = stmt.query_map([], |row| {
-                        Ok(HistoryEntry {
-                            id: row.get(0)?,
-                            timestamp: row.get(1)?,
-                            text: row.get(2)?,
-                            duration_seconds: row.get(3)?,
-                            char_count: row.get(4)?,
-                            words_count: row.get::<_, Option<usize>>(5)?.unwrap_or(0),
-                            target_app: row.get(6)?,
-                            model: row.get(7)?,
-                            engine: row.get(8)?,
-                        })
-                    }) {
-                        let entries: Vec<HistoryEntry> = rows.flatten().collect();
-                        if let Ok(json_str) = serde_json::to_string_pretty(&entries) {
-                            let _ = std::fs::write(&backup_json_file, json_str);
-                        }
-                    }
-                }
-            }
-        });
+        if let Err(error) = thread::Builder::new()
+            .name("rift-history-backup".to_string())
+            .spawn(move || run_history_backup_worker(db_path))
+        {
+            BACKUP_WORKER_ACTIVE.store(false, Ordering::SeqCst);
+            log::error!("Could not start history backup worker: {error}");
+        }
     }
 
     pub fn insert_entry(
@@ -190,7 +204,7 @@ impl HistoryStore {
         engine: Option<&str>,
     ) -> Result<i64> {
         let conn = Connection::open(&self.db_path)?;
-        let timestamp = chrono::Local::now().to_rfc3339();
+        let timestamp = chrono::Utc::now().to_rfc3339();
         let char_count = text.chars().count();
         let words_count = text.split_whitespace().count();
         conn.execute(
@@ -207,29 +221,96 @@ impl HistoryStore {
         let conn = Connection::open(&self.db_path)?;
         let mut stmt = conn.prepare(
             "SELECT id, timestamp, text, duration_seconds, char_count, words_count, target_app, model, engine
-             FROM dictation_history ORDER BY id DESC LIMIT ?1",
+             FROM dictation_history ORDER BY julianday(timestamp) DESC, id DESC LIMIT ?1",
         )?;
-        let rows = stmt.query_map(params![limit], |row| {
-            Ok(HistoryEntry {
-                id: row.get(0)?,
-                timestamp: row.get(1)?,
-                text: row.get(2)?,
-                duration_seconds: row.get(3)?,
-                char_count: row.get(4)?,
-                words_count: row.get::<_, Option<usize>>(5)?.unwrap_or(0),
-                target_app: row.get(6)?,
-                model: row.get(7)?,
-                engine: row.get(8)?,
-            })
-        })?;
+        let rows = stmt.query_map(params![limit], |row| history_entry_from_row(row))?;
 
-        let mut entries = Vec::new();
-        for row in rows {
-            if let Ok(entry) = row {
-                entries.push(entry);
-            }
+        rows.collect()
+    }
+
+    pub fn search_history(
+        &self,
+        query: &str,
+        filter: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<HistorySearchPage> {
+        if !matches!(filter, "all" | "today" | "week" | "cloud" | "local") {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "filter must be all, today, week, cloud, or local".to_string(),
+            ));
         }
-        Ok(entries)
+
+        let query: String = query.trim().chars().take(256).collect();
+        let week_start = (Local::now() - chrono::Duration::days(7)).to_rfc3339();
+        let limit = limit.clamp(1, 100);
+        let offset = offset.min(1_000_000);
+        let sql_limit = i64::try_from(limit).unwrap_or(100);
+        let sql_offset = i64::try_from(offset).unwrap_or(i64::MAX);
+        let conn = Connection::open(&self.db_path)?;
+        conn.busy_timeout(std::time::Duration::from_secs(2))?;
+
+        let (search_condition, search_params): (String, Vec<rusqlite::types::Value>) =
+            if query.is_empty() {
+                (String::new(), Vec::new())
+            } else if query.chars().count() >= 3 {
+                let phrase = format!("\"{}\"", query.replace('"', "\"\""));
+                (
+                    "id IN (SELECT rowid FROM dictation_history_fts WHERE text MATCH ?1) AND "
+                        .to_string(),
+                    vec![rusqlite::types::Value::Text(phrase)],
+                )
+            } else {
+                let escaped_query = query
+                    .replace('\\', "\\\\")
+                    .replace('%', "\\%")
+                    .replace('_', "\\_");
+                (
+                    "text LIKE ?1 ESCAPE char(92) AND ".to_string(),
+                    vec![rusqlite::types::Value::Text(format!("%{escaped_query}%"))],
+                )
+            };
+
+        let filter_index = search_params.len() + 1;
+        let week_index = filter_index + 1;
+        let limit_index = week_index + 1;
+        let offset_index = limit_index + 1;
+        let from_where = format!(
+            "FROM dictation_history WHERE {search_condition}(?{filter_index} = 'all' \
+                OR (?{filter_index} = 'today' AND date(timestamp, 'localtime') = date('now', 'localtime'))\
+                OR (?{filter_index} = 'week' AND julianday(timestamp) >= julianday(?{week_index}))\
+                OR (?{filter_index} = 'cloud' AND lower(COALESCE(engine, '')) <> 'local')\
+                OR (?{filter_index} = 'local' AND lower(COALESCE(engine, '')) = 'local'))"
+        );
+        let count_sql = format!("SELECT COUNT(*) {from_where}");
+        let mut params = search_params;
+        params.push(rusqlite::types::Value::Text(filter.to_string()));
+        params.push(rusqlite::types::Value::Text(week_start));
+        let total: i64 = conn.query_row(
+            &count_sql,
+            rusqlite::params_from_iter(params.iter()),
+            |row| row.get(0),
+        )?;
+
+        let page_sql = format!(
+            "SELECT id, timestamp, text, duration_seconds, char_count, words_count, target_app, model, engine
+             {from_where} ORDER BY julianday(timestamp) DESC, id DESC
+             LIMIT ?{limit_index} OFFSET ?{offset_index}"
+        );
+        params.push(rusqlite::types::Value::Integer(sql_limit));
+        params.push(rusqlite::types::Value::Integer(sql_offset));
+        let mut stmt = conn.prepare(&page_sql)?;
+        let rows = stmt.query_map(
+            rusqlite::params_from_iter(params.iter()),
+            history_entry_from_row,
+        )?;
+
+        Ok(HistorySearchPage {
+            entries: rows.collect::<Result<Vec<_>>>()?,
+            total: total.max(0) as usize,
+            limit,
+            offset,
+        })
     }
 
     pub fn get_dashboard_stats(&self) -> Result<DashboardStats> {
@@ -243,18 +324,14 @@ impl HistoryStore {
              FROM dictation_history",
         )?;
 
-        let (total_words, total_speaking_seconds, total_recordings): (i64, f64, i64) = stmt.query_row([], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-        })?;
+        let (total_words, total_speaking_seconds, total_recordings): (i64, f64, i64) =
+            stmt.query_row([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?;
 
         // Today's requests
-        let today_prefix = chrono::Local::now().format("%Y-%m-%d").to_string();
         let mut today_stmt = conn.prepare(
-            "SELECT COUNT(*) FROM dictation_history WHERE timestamp LIKE ?1",
+            "SELECT COUNT(*) FROM dictation_history WHERE date(timestamp, 'localtime') = date('now', 'localtime')",
         )?;
-        let today_requests: i64 = today_stmt
-            .query_row(params![format!("{}%", today_prefix)], |row| row.get(0))
-            .unwrap_or(0);
+        let today_requests: i64 = today_stmt.query_row([], |row| row.get(0)).unwrap_or(0);
 
         let total_words_u64 = total_words.max(0) as u64;
         let total_recordings_u64 = total_recordings.max(0) as u64;
@@ -292,16 +369,129 @@ impl HistoryStore {
 
     pub fn get_today_groq_audio_seconds(&self) -> Result<(f64, u64)> {
         let conn = Connection::open(&self.db_path)?;
-        let today_prefix = chrono::Local::now().format("%Y-%m-%d").to_string();
         let mut stmt = conn.prepare(
             "SELECT COALESCE(SUM(duration_seconds), 0.0), COUNT(*)
              FROM dictation_history 
-             WHERE timestamp LIKE ?1 AND (engine = 'groq' OR model LIKE '%groq%' OR (engine != 'openrouter' AND engine != 'local'))",
+             WHERE date(timestamp, 'localtime') = date('now', 'localtime')
+               AND (engine = 'groq' OR model LIKE '%groq%' OR (engine != 'openrouter' AND engine != 'local'))",
         )?;
-        let (total_secs, count): (f64, i64) = stmt.query_row(params![format!("{}%", today_prefix)], |row| {
-            Ok((row.get(0)?, row.get(1)?))
-        })?;
+        let (total_secs, count): (f64, i64) =
+            stmt.query_row([], |row| Ok((row.get(0)?, row.get(1)?)))?;
         Ok((total_secs, count.max(0) as u64))
     }
 }
 
+fn run_history_backup_worker(db_path: PathBuf) {
+    loop {
+        let version_being_saved = BACKUP_REQUEST_VERSION.load(Ordering::SeqCst);
+        if let Err(error) = write_history_backup(&db_path) {
+            log::error!("Could not create history backup: {error}");
+        }
+
+        if BACKUP_REQUEST_VERSION.load(Ordering::SeqCst) != version_being_saved {
+            continue;
+        }
+
+        BACKUP_WORKER_ACTIVE.store(false, Ordering::SeqCst);
+        if BACKUP_REQUEST_VERSION.load(Ordering::SeqCst) == version_being_saved
+            || BACKUP_WORKER_ACTIVE
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                .is_err()
+        {
+            return;
+        }
+    }
+}
+
+fn write_history_backup(db_path: &PathBuf) -> std::result::Result<(), String> {
+    let backup_dir = get_user_backup_dir();
+    fs::create_dir_all(&backup_dir)
+        .map_err(|error| format!("Could not create backup directory: {error}"))?;
+
+    let sequence = BACKUP_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let suffix = format!("{}.{}", std::process::id(), sequence);
+    let db_temp = backup_dir.join(format!("history_backup.db.tmp-{suffix}"));
+    let json_temp = backup_dir.join(format!("history_backup.json.tmp-{suffix}"));
+    let db_backup = backup_dir.join("history_backup.db");
+    let json_backup = backup_dir.join("history_backup.json");
+
+    let result = (|| {
+        let conn = Connection::open(db_path).map_err(|error| error.to_string())?;
+        conn.backup(DatabaseName::Main, &db_temp, None)
+            .map_err(|error| format!("SQLite backup failed: {error}"))?;
+
+        let mut writer = BufWriter::new(
+            File::create(&json_temp)
+                .map_err(|error| format!("Could not create JSON backup: {error}"))?,
+        );
+        {
+            let mut serializer = serde_json::Serializer::new(&mut writer);
+            let mut entries = serializer
+                .serialize_seq(None)
+                .map_err(|error| format!("Could not start JSON history export: {error}"))?;
+            let mut statement = conn
+                .prepare(
+                    "SELECT id, timestamp, text, duration_seconds, char_count, words_count, target_app, model, engine
+                     FROM dictation_history ORDER BY id DESC",
+                )
+                .map_err(|error| format!("Could not query history for backup: {error}"))?;
+            let rows = statement
+                .query_map([], |row| {
+                    Ok(HistoryEntry {
+                        id: row.get(0)?,
+                        timestamp: row.get(1)?,
+                        text: row.get(2)?,
+                        duration_seconds: row.get(3)?,
+                        char_count: row.get(4)?,
+                        words_count: row.get::<_, Option<usize>>(5)?.unwrap_or(0),
+                        target_app: row.get(6)?,
+                        model: row.get(7)?,
+                        engine: row.get(8)?,
+                    })
+                })
+                .map_err(|error| format!("Could not read history for backup: {error}"))?;
+
+            for row in rows {
+                let entry =
+                    row.map_err(|error| format!("Could not read history row for backup: {error}"))?;
+                entries
+                    .serialize_element(&entry)
+                    .map_err(|error| format!("Could not serialize history row: {error}"))?;
+            }
+            entries
+                .end()
+                .map_err(|error| format!("Could not finish JSON history export: {error}"))?;
+        }
+        writer
+            .flush()
+            .map_err(|error| format!("Could not flush JSON history backup: {error}"))?;
+
+        fs::rename(&db_temp, &db_backup).map_err(|error| {
+            format!("Could not atomically replace SQLite history backup: {error}")
+        })?;
+        fs::rename(&json_temp, &json_backup).map_err(|error| {
+            format!("Could not atomically replace JSON history backup: {error}")
+        })?;
+        Ok(())
+    })();
+
+    if result.is_err() {
+        let _ = fs::remove_file(&db_temp);
+        let _ = fs::remove_file(&json_temp);
+    }
+    result
+}
+
+fn history_entry_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<HistoryEntry> {
+    Ok(HistoryEntry {
+        id: row.get(0)?,
+        timestamp: row.get(1)?,
+        text: row.get(2)?,
+        duration_seconds: row.get(3)?,
+        char_count: row.get(4)?,
+        words_count: row.get::<_, Option<usize>>(5)?.unwrap_or(0),
+        target_app: row.get(6)?,
+        model: row.get(7)?,
+        engine: row.get(8)?,
+    })
+}

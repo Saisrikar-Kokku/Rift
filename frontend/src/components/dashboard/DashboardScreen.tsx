@@ -1,9 +1,8 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useSettings } from '../../context/SettingsContext';
 import { invokeTauri, listenTauriEvent } from '../../lib/tauriBridge';
 import { SpotlightCard } from '../ui/SpotlightCard';
 import { NumberTicker } from '../ui/NumberTicker';
-import { AudioOrb } from '../ui/AudioOrb';
 import { Badge } from '../ui/Badge';
 import { Kbd } from '../ui/Kbd';
 import { SimpleTooltip } from '../ui/Tooltip';
@@ -87,8 +86,8 @@ function resolveEngineDetails(
       providerName: 'OpenRouter Cloud',
       badgeText: '🇮🇳 Tenglish (Telugu → EN)',
       badgeVariant: 'openrouter',
-      modelId: 'microsoft/mai-transcribe-2',
-      latencyText: 'Studio Grade (~1.8s)',
+      modelId: 'elevenlabs/scribe-v2',
+      latencyText: 'Studio Grade (~2.0s)',
       latencyColor: '#818cf8',
       spotlightColor: 'rgba(99, 102, 241, 0.14)',
     };
@@ -97,17 +96,19 @@ function resolveEngineDetails(
   // OpenRouter models
   if (
     prov === 'openrouter' ||
+    m.includes('scribe') ||
+    m.startsWith('elevenlabs/') ||
     m.includes('mai-transcribe') ||
     m.startsWith('microsoft/') ||
     m.startsWith('openai/')
   ) {
-    if (m.includes('mai-transcribe')) {
+    if (m.includes('scribe') || m.startsWith('elevenlabs/') || m.includes('mai-transcribe')) {
       return {
         providerName: 'OpenRouter Cloud',
-        badgeText: '🏆 OpenRouter Cloud',
+        badgeText: '🏆 ElevenLabs Scribe v2',
         badgeVariant: 'openrouter',
-        modelId: 'microsoft/mai-transcribe-2',
-        latencyText: 'Studio Grade (~1.8s)',
+        modelId: 'elevenlabs/scribe-v2',
+        latencyText: 'Studio Grade (~2.0s)',
         latencyColor: '#818cf8',
         spotlightColor: 'rgba(99, 102, 241, 0.14)',
       };
@@ -161,10 +162,10 @@ function resolveEngineDetails(
 }
 
 interface DashboardScreenProps {
-  onNavigateToHistory: () => void;
+  onNavigateToLibrary: () => void;
 }
 
-export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigateToHistory }) => {
+export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigateToLibrary }) => {
   const { settings } = useSettings();
   const [stats, setStats] = useState<DashboardStatsData>({
     totalWords: 0,
@@ -179,13 +180,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigateToHi
   });
   const [recentList, setRecentList] = useState<HistoryEntry[]>([]);
   const [copiedId, setCopiedId] = useState<string | number | null>(null);
-
-  // Live Mic Test State for 3D Audio Orb
-  const [isMicTesting, setIsMicTesting] = useState(false);
-  const [liveAudioLevel, setLiveAudioLevel] = useState(0);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const animFrameRef = useRef<number | null>(null);
 
   function formatSpeakingTime(seconds: number) {
     if (!seconds || seconds <= 0) return '0s';
@@ -243,57 +237,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigateToHi
     };
   }, [refreshAll, settings?.inference_model, settings?.stt_provider, settings?.transcription_mode, settings?.tenglish_mode_enabled]);
 
-  // Start / Stop Microphone Test for 3D Visualizer
-  const toggleMicTest = async () => {
-    if (isMicTesting) {
-      setIsMicTesting(false);
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-        audioContextRef.current = null;
-      }
-      setLiveAudioLevel(0);
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 64;
-      const source = audioCtx.createMediaStreamSource(stream);
-      source.connect(analyser);
-
-      audioContextRef.current = audioCtx;
-      analyserRef.current = analyser;
-      setIsMicTesting(true);
-
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      const updateLevel = () => {
-        if (!analyserRef.current) return;
-        analyserRef.current.getByteFrequencyData(dataArray);
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i];
-        }
-        const avg = sum / dataArray.length;
-        setLiveAudioLevel(avg / 128); // 0.0 to 1.0 approx
-        animFrameRef.current = requestAnimationFrame(updateLevel);
-      };
-      updateLevel();
-    } catch (e) {
-      console.warn('Microphone access for visualizer test unavailable:', e);
-      setIsMicTesting(false);
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      if (audioContextRef.current) audioContextRef.current.close();
-    };
-  }, []);
-
   const handleCopyText = (id: string | number, text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
@@ -313,7 +256,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigateToHi
 
   const remainingTimeStr = stats.remainingUsage?.formattedTime || (engineDetails.badgeVariant === 'violet' ? 'Unlimited' : '--');
   const quotaSubtext = stats.remainingUsage?.subtext || (
-    engineDetails.badgeVariant === 'openrouter' ? `${engineDetails.modelId.includes('mai-transcribe') ? 'MAI-Transcribe 2' : 'OpenRouter Cloud'} · Ready` :
+    engineDetails.badgeVariant === 'openrouter' ? `${engineDetails.modelId.includes('scribe') ? 'ElevenLabs Scribe v2' : 'OpenRouter Cloud'} · Ready` :
     engineDetails.badgeVariant === 'violet' ? 'Offline Local Whisper' : 'Groq Cloud Tier'
   );
   const quotaDotColor = stats.remainingUsage?.dotColor || (
@@ -358,45 +301,25 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigateToHi
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
-                <button
-                  type="button"
-                  onClick={toggleMicTest}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '7px',
-                    padding: '7px 14px',
-                    borderRadius: '8px',
-                    backgroundColor: isMicTesting ? 'rgba(239, 68, 68, 0.15)' : 'rgba(168, 85, 247, 0.15)',
-                    border: `1px solid ${isMicTesting ? 'rgba(239, 68, 68, 0.35)' : 'rgba(168, 85, 247, 0.35)'}`,
-                    color: isMicTesting ? '#f87171' : '#c084fc',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  <Mic style={{ width: '14px', height: '14px' }} />
-                  {isMicTesting ? 'Stop Mic Test' : 'Test Live Audio Wave'}
-                </button>
-
-                {isMicTesting && (
-                  <span style={{ fontSize: '11px', color: '#45dfa9', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <span className="live-pulse-dot" style={{ backgroundColor: '#45dfa9' }} />
-                    Live Input Active
-                  </span>
-                )}
+                <span style={{ fontSize: '12px', color: '#9c97aa', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                  <Mic style={{ width: '14px', height: '14px', color: '#8b8499' }} />
+                  Microphone starts only while you hold {pttKey}.
+                </span>
               </div>
             </div>
 
-            {/* 3D WebGL Sphere Visualizer */}
+            {/* Decorative idle visualization: this UI does not request microphone access. */}
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <AudioOrb
-                size={175}
-                active={isMicTesting}
-                audioLevel={liveAudioLevel}
-                color="#a855f7"
-                glowColor="#38bdf8"
+              <div
+                role="img"
+                aria-label="Microphone is idle until recording starts"
+                style={{
+                  width: 175,
+                  height: 175,
+                  borderRadius: '50%',
+                  background: 'radial-gradient(circle at 38% 32%, rgba(192,132,252,0.22), rgba(56,189,248,0.08) 42%, transparent 72%)',
+                  boxShadow: 'inset 0 0 28px rgba(168,85,247,0.1)',
+                }}
               />
             </div>
           </SpotlightCard>
@@ -521,7 +444,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigateToHi
 
             <button
               type="button"
-              onClick={onNavigateToHistory}
+              onClick={onNavigateToLibrary}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -534,7 +457,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigateToHi
                 cursor: 'pointer',
               }}
             >
-              View Full History <ChevronRight style={{ width: '15px', height: '15px' }} />
+              Search Library <ChevronRight style={{ width: '15px', height: '15px' }} />
             </button>
           </div>
 

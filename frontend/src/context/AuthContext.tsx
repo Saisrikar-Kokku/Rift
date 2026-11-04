@@ -54,18 +54,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    // 1. Initial Session Check
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
-      }
-      setLoading(false);
-    });
-
-    // 2. Auth State Change Listener
+    let active = true;
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!active) return;
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -76,7 +67,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     });
 
+    // Session restoration can fail (for example, if local storage is unavailable).
+    // Always release the loading gate and leave the app in a signed-out state.
+    void supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        if (!active) return;
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) void fetchProfile(session.user.id);
+      })
+      .catch((error) => {
+        console.warn('[AuthContext] Failed to restore session:', error);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
     return () => {
+      active = false;
       subscription.unsubscribe();
     };
   }, []);

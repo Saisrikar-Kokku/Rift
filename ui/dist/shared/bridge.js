@@ -50,15 +50,19 @@
     }
   }
 
-  const activeTauriListeners = new Set();
+  const activeTauriListeners = new Map();
 
   function listenTauriEvent(ev) {
     if (activeTauriListeners.has(ev)) return;
     if (window.__TAURI__ && window.__TAURI__.event && typeof window.__TAURI__.event.listen === 'function') {
-      activeTauriListeners.add(ev);
-      window.__TAURI__.event.listen(ev, (e) => {
-        window.__rift_emit(ev, e.payload);
-      });
+      try {
+        const p = window.__TAURI__.event.listen(ev, (e) => {
+          window.__rift_emit(ev, e.payload);
+        }).catch(() => {});
+        activeTauriListeners.set(ev, p);
+      } catch (err) {
+        // Ignore if Tauri IPC permissions are restricted in this window
+      }
     }
   }
 
@@ -71,7 +75,8 @@
         'audioLevel', 'transcriptionSuccess', 'transcriptionError', 'transcriptionComplete',
         'repositionWidget', 'targetCaptured', 'settingsChanged', 'widgetConfigChanged',
         'hotkeyCaptured', 'hotkeyVerified', 'clipboardChanged', 'toast',
-        'ambientMemoryStarted', 'ambientMemoryResult', 'transcriptionProgress'
+        'ambientMemoryStarted', 'ambientMemoryResult', 'transcriptionProgress',
+        'appendScratchpadNote'
       ];
       for (const ev of events) {
         listenTauriEvent(ev);
@@ -150,7 +155,18 @@
 
     off: function (eventName, callback) {
       if (pendingSignalListeners.has(eventName)) {
-        pendingSignalListeners.get(eventName).delete(callback);
+        const set = pendingSignalListeners.get(eventName);
+        set.delete(callback);
+        if (set.size === 0) {
+          pendingSignalListeners.delete(eventName);
+          if (activeTauriListeners.has(eventName)) {
+            const p = activeTauriListeners.get(eventName);
+            activeTauriListeners.delete(eventName);
+            Promise.resolve(p).then(unlisten => {
+              if (typeof unlisten === 'function') unlisten();
+            }).catch(() => {});
+          }
+        }
       }
     }
   };
@@ -171,7 +187,6 @@
     testOpenRouterKey: ['key'],
     saveOpenRouterKey: ['key'],
     deleteOpenRouterKey: [],
-    getOpenRouterApiKey: [],
     saveOpenRouterApiKey: ['key'],
     getSettings: [],
     openOnboardingWindow: [],
@@ -200,6 +215,7 @@
     stopRecording: [],
     toggleRecording: [],
     getHistory: ['filter'],
+    searchHistory: ['query', 'filter', 'limit', 'offset'],
     clearHistory: [],
     getDashboardStats: [],
     getModelRemainingUsage: [],
@@ -215,6 +231,9 @@
     saveCurrentWidgetPosition: [],
     resetWidgetPosition: [],
     insertScratchpadText: ['text'],
+    drainScratchpadInbox: [],
+    getScratchpadDraft: [],
+    saveScratchpadDraft: ['content'],
     polishSelectedText: [],
     openSpotlightWindow: [],
     closeSpotlightWindow: [],

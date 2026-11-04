@@ -1,25 +1,36 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use parking_lot::Mutex;
 use tauri::{AppHandle, Emitter};
 #[cfg(windows)]
 use windows::core::w;
 #[cfg(windows)]
 use windows::Win32::Foundation::HWND;
 #[cfg(windows)]
+use windows::Win32::System::Threading::GetCurrentThreadId;
+#[cfg(windows)]
 use windows::Win32::System::DataExchange::{AddClipboardFormatListener, RemoveClipboardFormatListener};
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DestroyWindow, DispatchMessageW, GetForegroundWindow,
     GetMessageW, GetWindowThreadProcessId, TranslateMessage,
-    HWND_MESSAGE, MSG, WINDOW_EX_STYLE, WINDOW_STYLE, WM_CLIPBOARDUPDATE,
+    HWND_MESSAGE, MSG, WINDOW_EX_STYLE, WINDOW_STYLE, WM_CLIPBOARDUPDATE, WM_QUIT,
+    PM_NOREMOVE, PeekMessageW, PostThreadMessageW,
 };
+#[cfg(windows)]
+use windows::Win32::Foundation::{LPARAM, WPARAM};
 
 use crate::storage::clipboard::ClipboardStore;
 use crate::text::injector::TextInjector;
 
-static LISTENER_RUNNING: AtomicBool = AtomicBool::new(false);
+#[cfg(windows)]
+static LISTENER_STOP_REQUESTED: AtomicBool = AtomicBool::new(false);
+#[cfg(windows)]
+static LISTENER_THREAD_ID: AtomicU32 = AtomicU32::new(0);
+#[cfg(windows)]
+static LISTENER_THREAD: Mutex<Option<thread::JoinHandle<()>>> = Mutex::new(None);
 
 /// Convert an executable name like "code.exe" or "chrome.exe" to a friendly label
 fn friendly_app_name(proc_name: &str) -> String {
@@ -157,17 +168,38 @@ pub fn start_clipboard_listener(
     store: Arc<ClipboardStore>,
     is_internal_pasting: Arc<AtomicBool>,
     app_handle: AppHandle,
-) {
-    if LISTENER_RUNNING.swap(true, Ordering::SeqCst) {
-        return; // Already running
+    max_unpinned_items: usize,
+) -> Result<(), String> {
+    let mut current_thread = LISTENER_THREAD.lock();
+    if let Some(handle) = current_thread.as_ref() {
+        if LISTENER_STOP_REQUESTED.load(Ordering::SeqCst) || handle.is_finished() {
+            LISTENER_STOP_REQUESTED.store(true, Ordering::SeqCst);
+            post_listener_quit();
+            if let Some(finished) = current_thread.take() {
+                let _ = finished.join();
+            }
+        } else {
+            return Ok(());
+        }
     }
 
-    thread::Builder::new()
+    LISTENER_STOP_REQUESTED.store(false, Ordering::SeqCst);
+    let handle = thread::Builder::new()
         .name("rift-clipboard-listener".to_string())
         .spawn(move || {
             log::info!("Starting Rift Win32 Clipboard Listener");
 
             unsafe {
+                // Create the thread message queue before publishing the id so stop can
+                // always wake GetMessageW, including during a fast enable/disable race.
+                let mut bootstrap_message = MSG::default();
+                let _ = PeekMessageW(&mut bootstrap_message, None, 0, 0, PM_NOREMOVE);
+                let thread_id = GetCurrentThreadId();
+                LISTENER_THREAD_ID.store(thread_id, Ordering::SeqCst);
+                if LISTENER_STOP_REQUESTED.load(Ordering::SeqCst) {
+                    post_listener_quit();
+                }
+
                 let hwnd: HWND = match CreateWindowExW(
                     WINDOW_EX_STYLE(0),
                     w!("STATIC"),
@@ -185,7 +217,7 @@ pub fn start_clipboard_listener(
                     Ok(h) if !h.0.is_null() => h,
                     _ => {
                         log::error!("Failed to create message-only window for clipboard listener");
-                        LISTENER_RUNNING.store(false, Ordering::SeqCst);
+                        LISTENER_THREAD_ID.store(0, Ordering::SeqCst);
                         return;
                     }
                 };
@@ -194,7 +226,7 @@ pub fn start_clipboard_listener(
                 if AddClipboardFormatListener(hwnd).is_err() {
                     log::error!("Failed to register AddClipboardFormatListener");
                     let _ = DestroyWindow(hwnd);
-                    LISTENER_RUNNING.store(false, Ordering::SeqCst);
+                    LISTENER_THREAD_ID.store(0, Ordering::SeqCst);
                     return;
                 }
 
@@ -242,7 +274,7 @@ pub fn start_clipboard_listener(
                                 let category = categorize_clip(trimmed);
 
                                 // 5. Insert into SQLite store
-                                match store.insert_clip(trimmed, source_app.as_deref(), category) {
+                                match store.insert_clip(trimmed, source_app.as_deref(), category, max_unpinned_items) {
                                     Ok(Some(new_id)) => {
                                         log::info!(
                                             "New clip #{}: [{}] {} chars from {:?}",
@@ -280,11 +312,38 @@ pub fn start_clipboard_listener(
 
                 let _ = RemoveClipboardFormatListener(hwnd);
                 let _ = DestroyWindow(hwnd);
-                LISTENER_RUNNING.store(false, Ordering::SeqCst);
+                LISTENER_THREAD_ID.store(0, Ordering::SeqCst);
                 log::info!("Clipboard listener message loop exited.");
             }
         })
-        .expect("Failed to spawn clipboard listener thread");
+        .map_err(|error| {
+            format!("Failed to spawn clipboard listener thread: {error}")
+        })?;
+    *current_thread = Some(handle);
+    Ok(())
+}
+
+#[cfg(windows)]
+pub fn stop_clipboard_listener() -> Result<(), String> {
+    let mut current_thread = LISTENER_THREAD.lock();
+    let Some(handle) = current_thread.take() else {
+        LISTENER_STOP_REQUESTED.store(true, Ordering::SeqCst);
+        return Ok(());
+    };
+
+    LISTENER_STOP_REQUESTED.store(true, Ordering::SeqCst);
+    post_listener_quit();
+    handle.join().map_err(|_| "Clipboard listener thread panicked".to_string())
+}
+
+#[cfg(windows)]
+fn post_listener_quit() {
+    let thread_id = LISTENER_THREAD_ID.load(Ordering::SeqCst);
+    if thread_id != 0 {
+        unsafe {
+            let _ = PostThreadMessageW(thread_id, WM_QUIT, WPARAM(0), LPARAM(0));
+        }
+    }
 }
 
 #[cfg(not(windows))]
@@ -292,5 +351,12 @@ pub fn start_clipboard_listener(
     _store: Arc<ClipboardStore>,
     _is_internal_pasting: Arc<AtomicBool>,
     _app_handle: AppHandle,
-) {
+    _max_unpinned_items: usize,
+) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(not(windows))]
+pub fn stop_clipboard_listener() -> Result<(), String> {
+    Ok(())
 }

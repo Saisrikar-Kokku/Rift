@@ -1,6 +1,10 @@
+use reqwest::multipart::{Form, Part};
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::Value;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Deserialize)]
 pub struct OpenRouterTranscriptionResponse {
@@ -8,32 +12,6 @@ pub struct OpenRouterTranscriptionResponse {
     #[serde(default)]
     pub usage: Option<Value>,
 }
-
-const B64_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-pub fn to_base64(data: &[u8]) -> String {
-    let mut out = String::with_capacity((data.len() + 2) / 3 * 4);
-    for chunk in data.chunks(3) {
-        let b0 = chunk[0];
-        let b1 = if chunk.len() > 1 { chunk[1] } else { 0 };
-        let b2 = if chunk.len() > 2 { chunk[2] } else { 0 };
-        out.push(B64_CHARS[(b0 >> 2) as usize] as char);
-        out.push(B64_CHARS[(((b0 & 0x03) << 4) | (b1 >> 4)) as usize] as char);
-        if chunk.len() > 1 {
-            out.push(B64_CHARS[(((b1 & 0x0f) << 2) | (b2 >> 6)) as usize] as char);
-        } else {
-            out.push('=');
-        }
-        if chunk.len() > 2 {
-            out.push(B64_CHARS[(b2 & 0x3f) as usize] as char);
-        } else {
-            out.push('=');
-        }
-    }
-    out
-}
-
-use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Default)]
 pub struct OpenRouterCreditInfo {
@@ -47,26 +25,7 @@ pub struct OpenRouterCreditInfo {
 pub struct OpenRouterClient {
     client: Client,
     credit_info: Arc<Mutex<OpenRouterCreditInfo>>,
-}
-
-#[derive(serde::Serialize)]
-struct InputAudioPayload<'a> {
-    data: &'a str,
-    format: &'static str,
-}
-
-#[derive(serde::Serialize)]
-struct OpenRouterAudioPayload<'a> {
-    model: &'a str,
-    input_audio: InputAudioPayload<'a>,
-    response_format: &'static str,
-    temperature: f32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    language: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    prompt: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    provider: Option<Value>,
+    last_used: Arc<AtomicU64>,
 }
 
 impl OpenRouterClient {
@@ -81,6 +40,7 @@ impl OpenRouterClient {
                 .build()
                 .unwrap_or_default(),
             credit_info: Arc::new(Mutex::new(OpenRouterCreditInfo::default())),
+            last_used: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -92,6 +52,16 @@ impl OpenRouterClient {
         if api_key.trim().is_empty() {
             return;
         }
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let last = self.last_used.load(Ordering::Relaxed);
+        if now.saturating_sub(last) < 25 {
+            // Connection is already active and warm inside the pool
+            return;
+        }
+
         let client = self.client.clone();
         let key = api_key.trim().to_string();
         tauri::async_runtime::spawn(async move {
@@ -109,27 +79,18 @@ impl OpenRouterClient {
     pub async fn transcribe(
         &self,
         api_key: &str,
-        wav_bytes: Vec<u8>,
+        wav_bytes: Arc<[u8]>,
         model: &str,
         phrases: Option<&[String]>,
         language: Option<&str>,
     ) -> Result<String, String> {
         let url = "https://openrouter.ai/api/v1/audio/transcriptions";
 
-        let base64_audio = to_base64(&wav_bytes);
-
-        // Unlock Model Capabilities:
-        // 1. Microsoft AI MAI-Transcribe 2: "Verbatim" transcribeStyle & "phraseList"
-        // 2. OpenAI Whisper (including Turbo): "prompt" vocabulary biasing
-        let mut azure_options = serde_json::json!({
-            "enhancedMode": {
-                "modelOptions": {
-                    "transcribeStyle": "Verbatim"
-                }
-            }
-        });
-
+        // Vocabulary biasing:
+        // OpenAI Whisper models: "prompt" field
+        // Microsoft MAI-Transcribe 2: optional "phraseList" (without enhancedMode to avoid Azure batch queue delays)
         let mut whisper_prompt: Option<String> = None;
+        let mut azure_phrases: Option<Vec<&str>> = None;
 
         if let Some(list) = phrases {
             let valid_phrases: Vec<&str> = list
@@ -141,20 +102,21 @@ impl OpenRouterClient {
 
             if !valid_phrases.is_empty() {
                 if model.contains("mai-transcribe") || model.contains("microsoft") {
-                    azure_options["phraseList"] = serde_json::json!({
-                        "phrases": valid_phrases
-                    });
+                    azure_phrases = Some(valid_phrases);
                 } else {
-                    // OpenAI Whisper vocabulary biasing via prompt
                     whisper_prompt = Some(valid_phrases.join(", "));
                 }
             }
         }
 
-        let provider_val = if model.contains("mai-transcribe") || model.contains("microsoft") {
+        let provider_val = if let Some(phrases_vec) = azure_phrases {
             Some(serde_json::json!({
                 "options": {
-                    "azure": azure_options
+                    "azure": {
+                        "phraseList": {
+                            "phrases": phrases_vec
+                        }
+                    }
                 }
             }))
         } else {
@@ -163,21 +125,40 @@ impl OpenRouterClient {
 
         let lang_val = language.and_then(|l| {
             let tr = l.trim();
-            if !tr.is_empty() { Some(tr) } else { None }
+            if !tr.is_empty() {
+                Some(tr)
+            } else {
+                None
+            }
         });
 
-        let payload = OpenRouterAudioPayload {
-            model,
-            input_audio: InputAudioPayload {
-                data: &base64_audio,
-                format: "wav",
-            },
-            response_format: "json",
-            temperature: 0.0,
-            language: lang_val,
-            prompt: whisper_prompt,
-            provider: provider_val,
-        };
+        // High-Speed Binary Streaming Multipart Upload:
+        // Avoids in-process Base64 encoding overhead (saves ~80-200ms & 33% payload size)
+        let file_part = Part::stream_with_length(
+            reqwest::Body::from(bytes::Bytes::from_owner(wav_bytes.clone())),
+            wav_bytes.len() as u64,
+        )
+        .file_name("audio.wav")
+        .mime_str("audio/wav")
+        .map_err(|e| format!("Failed to create audio multipart: {}", e))?;
+
+        let mut form = Form::new()
+            .part("file", file_part)
+            .text("model", model.to_string())
+            .text("response_format", "json")
+            .text("temperature", "0.0");
+
+        if let Some(ref prov) = provider_val {
+            form = form.text("provider", prov.to_string());
+        }
+
+        if let Some(ref p) = whisper_prompt {
+            form = form.text("prompt", p.clone());
+        }
+
+        if let Some(l) = lang_val {
+            form = form.text("language", l.to_string());
+        }
 
         let response = self
             .client
@@ -185,11 +166,17 @@ impl OpenRouterClient {
             .header("Authorization", format!("Bearer {}", api_key.trim()))
             .header("HTTP-Referer", "https://rift.ai")
             .header("X-Title", "Rift Voice Dictation")
-            .header("Content-Type", "application/json")
-            .json(&payload)
+            .multipart(form)
             .send()
             .await
             .map_err(|e| format!("Network request to OpenRouter failed: {}", e))?;
+
+        // Update connection liveness timestamp
+        let now_sec = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        self.last_used.store(now_sec, Ordering::Relaxed);
 
         if !response.status().is_success() {
             let status = response.status();
@@ -206,10 +193,17 @@ impl OpenRouterClient {
             Ok(txt.to_string())
         } else if let Some(txt) = raw_json.get("transcript").and_then(|v| v.as_str()) {
             Ok(txt.to_string())
-        } else if let Some(err) = raw_json.get("error").and_then(|v| v.get("message")).and_then(|m| m.as_str()) {
+        } else if let Some(err) = raw_json
+            .get("error")
+            .and_then(|v| v.get("message"))
+            .and_then(|m| m.as_str())
+        {
             Err(format!("OpenRouter error: {}", err))
         } else {
-            Err(format!("Unexpected OpenRouter response structure: {}", raw_json))
+            Err(format!(
+                "Unexpected OpenRouter response structure: {}",
+                raw_json
+            ))
         }
     }
 
@@ -241,7 +235,10 @@ impl OpenRouterClient {
     }
 
     pub fn get_cached_credits(&self) -> OpenRouterCreditInfo {
-        self.credit_info.lock().map(|l| l.clone()).unwrap_or_default()
+        self.credit_info
+            .lock()
+            .map(|l| l.clone())
+            .unwrap_or_default()
     }
 
     pub fn deduct_credits_local(&self, duration_seconds: f64, price_per_minute: f64) {
@@ -273,7 +270,10 @@ impl OpenRouterClient {
         if !response.status().is_success() {
             let status = response.status();
             let err_body = response.text().await.unwrap_or_default();
-            return Err(format!("OpenRouter credits error ({}): {}", status, err_body));
+            return Err(format!(
+                "OpenRouter credits error ({}): {}",
+                status, err_body
+            ));
         }
 
         let data: Value = response
@@ -369,7 +369,8 @@ CRITICAL RULES:\n\
                 "max_tokens": max_tokens
             });
 
-            let req_future = self.client
+            let req_future = self
+                .client
                 .post("https://openrouter.ai/api/v1/chat/completions")
                 .header("Authorization", format!("Bearer {}", api_key.trim()))
                 .header("HTTP-Referer", "https://rift.ai")
@@ -384,17 +385,21 @@ CRITICAL RULES:\n\
             } else {
                 ((2500 + words_count * 15).min(8000)) as u64
             };
-            match tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), req_future).await {
+            match tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), req_future)
+                .await
+            {
                 Ok(Ok(response)) => {
                     if response.status().is_success() {
                         if let Ok(data) = response.json::<Value>().await {
-                            if let Some(content) = data["choices"][0]["message"]["content"].as_str() {
+                            if let Some(content) = data["choices"][0]["message"]["content"].as_str()
+                            {
                                 let mut text_val = content.trim().to_string();
                                 // Strip accidental markdown fences
                                 if text_val.starts_with("```") && text_val.ends_with("```") {
                                     let lines: Vec<&str> = text_val.lines().collect();
                                     if lines.len() >= 2 {
-                                        text_val = lines[1..lines.len() - 1].join("\n").trim().to_string();
+                                        text_val =
+                                            lines[1..lines.len() - 1].join("\n").trim().to_string();
                                     }
                                 }
                                 // Strip enclosing quotes
@@ -402,7 +407,8 @@ CRITICAL RULES:\n\
                                     || (text_val.starts_with('\'') && text_val.ends_with('\''))
                                 {
                                     if text_val.len() >= 2 {
-                                        text_val = text_val[1..text_val.len() - 1].trim().to_string();
+                                        text_val =
+                                            text_val[1..text_val.len() - 1].trim().to_string();
                                     }
                                 }
                                 let cleaned = text_val.trim();

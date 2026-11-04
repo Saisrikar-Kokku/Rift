@@ -3,7 +3,7 @@ import { useSettings } from '../../context/SettingsContext';
 import { listenTauriEvent } from '../../lib/tauriBridge';
 import { Kbd } from '../ui/Kbd';
 import { SimpleTooltip } from '../ui/Tooltip';
-import { Mic, Zap, Check } from 'lucide-react';
+import { Mic, Zap, Check, AlertCircle } from 'lucide-react';
 
 interface HeaderProps {
   onOpenSettings: () => void;
@@ -11,12 +11,13 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onOpenSettings }) => {
   const { settings } = useSettings();
-  const [recordingState, setRecordingState] = useState<'idle' | 'recording' | 'transcribing' | 'success'>('idle');
+  const [recordingState, setRecordingState] = useState<'idle' | 'recording' | 'transcribing' | 'success' | 'error'>('idle');
   const [transcribeInfo, setTranscribeInfo] = useState<string>('');
 
   useEffect(() => {
     const unlistens = [
       listenTauriEvent('recordingStarted', () => {
+        setTranscribeInfo('');
         setRecordingState('recording');
       }),
       listenTauriEvent('recordingStopped', () => {
@@ -51,6 +52,18 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings }) => {
       listenTauriEvent('transcriptionError', () => {
         setRecordingState('idle');
       }),
+      listenTauriEvent<any>('recordingError', (payload) => {
+        let error = payload;
+        if (typeof payload === 'string') {
+          try {
+            error = JSON.parse(payload);
+          } catch {
+            error = { message: payload };
+          }
+        }
+        setTranscribeInfo(error?.message || 'Could not start microphone recording. Check your audio device and try again.');
+        setRecordingState('error');
+      }),
     ];
 
     return () => {
@@ -63,7 +76,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings }) => {
   const isLocal = modeStr === 'local' || modelStr.startsWith('local');
   const isOpenRouter =
     !isLocal &&
-    (modelStr.includes('mai-transcribe') ||
+    (modelStr.includes('scribe') ||
+      modelStr.startsWith('elevenlabs/') ||
+      modelStr.includes('mai-transcribe') ||
       modelStr.startsWith('microsoft/') ||
       modelStr.startsWith('openai/') ||
       settings?.stt_provider === 'openrouter');
@@ -78,9 +93,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings }) => {
     engineSub = '• On-Device';
     iconColor = 'text-purple-400';
   } else if (isOpenRouter) {
-    if (modelStr.includes('mai-transcribe')) {
-      engineName = 'MAI-Transcribe 2';
-      engineSub = '• Studio Grade';
+    if (modelStr.includes('scribe') || modelStr.startsWith('elevenlabs/')) {
+      engineName = 'ElevenLabs Scribe v2';
+      engineSub = '• Studio Grade ⚡';
       iconColor = 'text-indigo-400';
     } else if (modelStr.includes('turbo')) {
       engineName = 'OpenAI Turbo';
@@ -235,6 +250,31 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings }) => {
           >
             <Check className="w-3.5 h-3.5 text-emerald-400" />
             <span style={{ fontWeight: 600 }}>Pasted & Saved</span>
+          </div>
+        )}
+
+        {recordingState === 'error' && (
+          <div
+            role="status"
+            title={transcribeInfo}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '7px',
+              maxWidth: '280px',
+              padding: '4px 12px',
+              borderRadius: '9999px',
+              backgroundColor: 'rgba(248, 113, 113, 0.12)',
+              border: '1px solid rgba(248, 113, 113, 0.3)',
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: '11.5px',
+              color: '#fca5a5',
+            }}
+          >
+            <AlertCircle className="w-3.5 h-3.5" />
+            <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {transcribeInfo || 'Microphone unavailable'}
+            </span>
           </div>
         )}
 

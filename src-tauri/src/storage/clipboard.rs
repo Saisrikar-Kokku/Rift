@@ -2,6 +2,7 @@ use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use super::settings::get_app_data_dir;
+use super::search_index::{ensure_search_index, SearchIndex};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClipboardEntry {
@@ -54,6 +55,8 @@ impl ClipboardStore {
             [],
         );
 
+        ensure_search_index(&conn, SearchIndex::Clipboard)?;
+
         Ok(Self { db_path })
     }
 
@@ -87,17 +90,19 @@ impl ClipboardStore {
         content: &str,
         source_app: Option<&str>,
         category: &str,
+        max_unpinned_items: usize,
     ) -> Result<Option<i64>> {
         let trimmed = content.trim();
         if trimmed.is_empty() {
             return Ok(None);
         }
 
-        // Truncate overly massive text clips (safety limit: 200,000 characters)
-        let safe_content = if trimmed.len() > 200_000 {
-            &trimmed[..200_000]
-        } else {
-            trimmed
+        // Truncate overly massive text clips by character boundary. Byte slicing can
+        // panic when the limit lands in the middle of a multi-byte UTF-8 character.
+        const MAX_CLIP_CHARS: usize = 200_000;
+        let safe_content = match trimmed.char_indices().nth(MAX_CLIP_CHARS) {
+            Some((byte_index, _)) => &trimmed[..byte_index],
+            None => trimmed,
         };
 
         let hash = Self::compute_hash(safe_content);
@@ -118,7 +123,7 @@ impl ClipboardStore {
             }
         }
 
-        let timestamp = chrono::Local::now().to_rfc3339();
+        let timestamp = chrono::Utc::now().to_rfc3339();
         let char_count = safe_content.chars().count();
         let preview = Self::generate_preview(safe_content);
 
@@ -138,8 +143,8 @@ impl ClipboardStore {
 
         let new_id = conn.last_insert_rowid();
 
-        // Auto-prune unpinned clips to keep maximum 50 unpinned
-        let _ = Self::prune_internal(&mut conn, 50);
+        // Retain the configured number of unpinned clips; pinned clips are preserved.
+        Self::prune_internal(&mut conn, max_unpinned_items.max(1))?;
 
         Ok(Some(new_id))
     }

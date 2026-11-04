@@ -4,3 +4,4 @@ pub mod denoise;
 pub mod level;
 pub mod mute;
 pub mod ambient_memory;
+pub mod wake_word;

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
 
-export type NavigationTab = 'home' | 'history' | 'dictionary' | 'shortcuts' | 'settings';
+export type NavigationTab = 'home' | 'library' | 'history' | 'dictionary' | 'shortcuts' | 'settings';
 
 interface SidebarProps {
   currentTab: NavigationTab;
@@ -13,6 +13,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab }) => 
 
   const navItems: { id: NavigationTab; label: string; icon: string }[] = [
     { id: 'home', label: 'Home', icon: 'home' },
+    { id: 'library', label: 'Library', icon: 'search' },
     { id: 'history', label: 'History', icon: 'schedule' },
     { id: 'dictionary', label: 'Dictionary', icon: 'book_2' },
     { id: 'shortcuts', label: 'Shortcuts', icon: 'keyboard' },
@@ -39,12 +40,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab }) => 
         </div>
 
         {/* Navigation Items */}
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <nav aria-label="Main navigation" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           {navItems.map((item) => {
             const isActive = currentTab === item.id;
             return (
               <button
                 key={item.id}
+                aria-current={isActive ? 'page' : undefined}
                 onClick={() => onSelectTab(item.id)}
                 style={{
                   display: 'flex',

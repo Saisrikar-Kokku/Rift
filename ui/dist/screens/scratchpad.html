@@ -1031,6 +1031,7 @@
 
       let isPinned = true;
       let isRecording = false;
+      let isClosePending = false;
       let prePolishBackup = null;
       let activeTab = 'notes';
 
@@ -1063,15 +1064,68 @@
 
       // 2. Persistent Draft Auto-Save & Load (Notes)
       const DRAFT_KEY = 'rift_scratchpad_draft';
-      const savedDraft = localStorage.getItem(DRAFT_KEY);
-      if (savedDraft) {
+      const DRAFT_UPDATED_AT_KEY = 'rift_scratchpad_draft_updated_at';
+      let savedDraft = null;
+      let savedDraftAt = 0;
+      try {
+        savedDraft = localStorage.getItem(DRAFT_KEY);
+        savedDraftAt = Number(localStorage.getItem(DRAFT_UPDATED_AT_KEY)) || 0;
+      } catch (err) {
+        console.warn('[Scratchpad] Local draft load failed:', err);
+      }
+      if (savedDraft !== null) {
         scratchArea.value = savedDraft;
       }
+
+      function rememberDraftServerTimestamp(updatedAt) {
+        if (typeof updatedAt !== 'string') return;
+        const timestamp = Date.parse(updatedAt);
+        if (!Number.isFinite(timestamp)) return;
+        try {
+          localStorage.setItem(DRAFT_UPDATED_AT_KEY, String(timestamp));
+          savedDraftAt = timestamp;
+        } catch (err) {}
+      }
+      let draftEdited = false;
+      let draftSaveTimer = null;
       updateCounters();
 
-      scratchArea.addEventListener('input', () => {
-        localStorage.setItem(DRAFT_KEY, scratchArea.value);
+      function saveScratch() {
+        const content = scratchArea.value;
+        const editedAt = Date.now();
+        try {
+          localStorage.setItem(DRAFT_KEY, content);
+          localStorage.setItem(DRAFT_UPDATED_AT_KEY, String(editedAt));
+          savedDraft = content;
+          savedDraftAt = editedAt;
+        } catch (err) {
+          console.warn('[Scratchpad] Local draft save failed:', err);
+        }
         updateCounters();
+        window.clearTimeout(draftSaveTimer);
+        draftSaveTimer = window.setTimeout(() => {
+          if (window.rift && typeof window.rift.saveScratchpadDraft === 'function') {
+            window.rift.saveScratchpadDraft(content)
+              .then((updatedAt) => {
+                if (scratchArea.value !== content || typeof updatedAt !== 'string') return;
+                rememberDraftServerTimestamp(updatedAt);
+              })
+              .catch(err => console.warn('[Scratchpad] Draft sync failed:', err));
+          }
+        }, 200);
+      }
+
+      async function flushScratchpadDraft() {
+        window.clearTimeout(draftSaveTimer);
+        if (window.rift && typeof window.rift.saveScratchpadDraft === 'function') {
+          const updatedAt = await window.rift.saveScratchpadDraft(scratchArea.value);
+          rememberDraftServerTimestamp(updatedAt);
+        }
+      }
+
+      scratchArea.addEventListener('input', () => {
+        draftEdited = true;
+        saveScratch();
       });
 
       function updateCounters() {
@@ -1086,6 +1140,38 @@
         toast.textContent = msg;
         toast.classList.add('show');
         setTimeout(() => toast.classList.remove('show'), 2200);
+      }
+
+      async function flushAndCloseScratchpad() {
+        if (isClosePending) return;
+        isClosePending = true;
+
+        try {
+          await flushScratchpadDraft();
+        } catch (err) {
+          console.error('[Scratchpad] Could not save the draft before closing:', err);
+          showToast('Could not save notes. Scratchpad is still open.');
+          isClosePending = false;
+          return;
+        }
+
+        if (isRecording) {
+          isRecording = false;
+          setRecordingState(false);
+          try {
+            await window.rift.stopRecording();
+          } catch (err) {
+            console.warn('[Scratchpad] Failed to stop recording while closing:', err);
+          }
+        }
+
+        try {
+          await window.rift.closeScratchpadWindow();
+        } catch (err) {
+          console.error('[Scratchpad] Could not close the window:', err);
+          showToast('Could not close Scratchpad. Please try again.');
+          isClosePending = false;
+        }
       }
 
       function escapeHtml(str) {
@@ -1144,22 +1230,7 @@
       }
 
       if (btnClose) {
-        btnClose.addEventListener('click', async () => {
-          if (isRecording) {
-            isRecording = false;
-            setRecordingState(false);
-            try {
-              await window.rift.stopRecording();
-            } catch (err) {}
-          }
-          try {
-            await window.rift.closeScratchpadWindow();
-          } catch (e) {
-            if (window.__TAURI__ && window.__TAURI__.window) {
-              window.__TAURI__.window.getCurrentWindow().hide();
-            }
-          }
-        });
+        btnClose.addEventListener('click', () => { void flushAndCloseScratchpad(); });
       }
 
       // 4. Notes Actions (Clear, Undo, Copy, Insert, Polish)
@@ -1169,8 +1240,7 @@
           if (confirm('Clear all notes in the Scratch Pad?')) {
             prePolishBackup = scratchArea.value;
             scratchArea.value = '';
-            localStorage.removeItem(DRAFT_KEY);
-            updateCounters();
+            saveScratch();
             btnUndo.classList.add('visible');
             showToast('Notes cleared');
           }
@@ -1181,8 +1251,7 @@
         btnUndo.addEventListener('click', () => {
           if (prePolishBackup !== null) {
             scratchArea.value = prePolishBackup;
-            localStorage.setItem(DRAFT_KEY, scratchArea.value);
-            updateCounters();
+            saveScratch();
             prePolishBackup = null;
             btnUndo.classList.remove('visible');
             showToast('Reverted to raw notes');
@@ -1216,7 +1285,8 @@
             return;
           }
           try {
-            window.rift.closeScratchpadWindow();
+            await flushScratchpadDraft();
+            await window.rift.closeScratchpadWindow();
             setTimeout(async () => {
               try {
                 await window.rift.insertScratchpadText(text);
@@ -1254,8 +1324,7 @@
 
             if (enhanced && enhanced.trim()) {
               scratchArea.value = enhanced.trim();
-              localStorage.setItem(DRAFT_KEY, scratchArea.value);
-              updateCounters();
+              saveScratch();
               btnUndo.classList.add('visible');
               showToast('Notes polished with AI ✨');
             } else {
@@ -1402,7 +1471,8 @@
           pasteBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
             try {
-              window.rift.closeScratchpadWindow();
+              await flushScratchpadDraft();
+              await window.rift.closeScratchpadWindow();
               setTimeout(async () => {
                 try {
                   await window.rift.pasteClipById(clip.id);
@@ -1619,6 +1689,34 @@
       // 7. Initialize Bridge and Event Listeners
       window.rift.ready(async () => {
         try {
+          const draft = await window.rift.getScratchpadDraft();
+          if (!draftEdited && draft && typeof draft.content === 'string' && draft.updated_at) {
+            const persistedAt = Date.parse(draft.updated_at) || 0;
+            if (savedDraft !== null && savedDraftAt > persistedAt) {
+              scratchArea.value = savedDraft;
+              const updatedAt = await window.rift.saveScratchpadDraft(savedDraft);
+              rememberDraftServerTimestamp(updatedAt);
+            } else {
+              scratchArea.value = draft.content;
+              try {
+                localStorage.setItem(DRAFT_KEY, draft.content);
+                localStorage.setItem(DRAFT_UPDATED_AT_KEY, String(persistedAt || Date.now()));
+                savedDraft = draft.content;
+                savedDraftAt = persistedAt || Date.now();
+              } catch (err) {}
+            }
+            updateCounters();
+          } else if (!draftEdited && savedDraft !== null) {
+            scratchArea.value = savedDraft;
+            updateCounters();
+            const updatedAt = await window.rift.saveScratchpadDraft(savedDraft);
+            rememberDraftServerTimestamp(updatedAt);
+          }
+        } catch (err) {
+          console.warn('[Scratchpad] Persistent draft load failed:', err);
+        }
+
+        try {
           const cfg = await window.rift.getSettings();
           if (cfg) {
             if (cfg.recordingSounds !== undefined) earcons.enabled = !!cfg.recordingSounds;
@@ -1628,6 +1726,50 @@
 
         // Initial clipboard counts
         refreshClipboardCounts();
+
+        // Sync any background voice notes ("Note to self...", "Add to scratchpad...")
+        async function syncScratchpadInbox() {
+          try {
+            if (typeof window.rift.drainScratchpadInbox !== 'function') return;
+            const res = await window.rift.drainScratchpadInbox();
+            const notes = (res && Array.isArray(res.notes)) ? res.notes : [];
+            if (notes.length > 0) {
+              const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              const formattedNotes = notes.map(n => `• [${timeStr}] ${String(n).trim()}`).join('\n');
+              const val = scratchArea.value;
+              const prefix = (val && !val.endsWith('\n')) ? '\n' : '';
+              scratchArea.value = (val ? val + prefix : '') + formattedNotes;
+              saveScratch();
+              showToast('Voice note added to Scratchpad 📝');
+            }
+          } catch (err) {
+            console.warn('[Scratchpad] Inbox sync error:', err);
+          }
+        }
+
+        await syncScratchpadInbox();
+        window.addEventListener('focus', () => {
+          syncScratchpadInbox();
+        });
+
+        window.rift.on('appendScratchpadNote', (payload) => {
+          try {
+            const data = typeof payload === 'string' ? JSON.parse(payload) : payload;
+            if (data && data.persisted !== false && typeof data.text === 'string') {
+              const val = scratchArea.value;
+              const prefix = (val && !val.endsWith('\n')) ? '\n' : '';
+              const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              scratchArea.value = (val ? val + prefix : '') + `• [${timeStr}] ${data.text.trim()}`;
+              saveScratch();
+              showToast('Voice note added to Scratchpad 📝');
+            } else {
+              syncScratchpadInbox();
+            }
+          } catch (err) {
+            console.warn('[Scratchpad] Voice note sync failed:', err);
+            syncScratchpadInbox();
+          }
+        });
 
         // Listen for live background clipboard changes from Win32 listener!
         window.rift.on('clipboardChanged', () => {
@@ -1705,6 +1847,13 @@
           setRecordingState(false);
           try {
             const data = typeof payloadStr === 'string' ? JSON.parse(payloadStr) : payloadStr;
+            if (data && data.targetApp === 'Scratchpad (Background)') {
+              // Handled via appendScratchpadNote / syncScratchpadInbox
+              return;
+            }
+            if (!document.hasFocus()) {
+              return;
+            }
             const text = (data && data.text) ? data.text : (typeof payloadStr === 'string' && !payloadStr.startsWith('{') ? payloadStr : '');
             if (text && text.trim()) {
               if (activeTab !== 'notes') {
@@ -1722,8 +1871,7 @@
                 scratchArea.value = (val ? val + separator : '') + text.trim();
                 scratchArea.selectionStart = scratchArea.selectionEnd = scratchArea.value.length;
               }
-              localStorage.setItem(DRAFT_KEY, scratchArea.value);
-              updateCounters();
+              saveScratch();
               showToast('Voice note transcribed 🎙️');
             }
           } catch (e) {
