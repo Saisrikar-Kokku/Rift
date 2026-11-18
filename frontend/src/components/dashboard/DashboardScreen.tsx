@@ -66,7 +66,7 @@ function resolveEngineDetails(
   const mode = (modeStr || '').toLowerCase();
   const rawModel = (modelStr || remainingUsage?.model || '').trim();
   const m = rawModel.toLowerCase();
-  const prov = (remainingUsage?.provider || providerStr || '').toLowerCase();
+  const prov = (providerStr || remainingUsage?.provider || '').toLowerCase();
 
   if (mode === 'local' || m.startsWith('local')) {
     const prof = localProfile || 'tiny';
@@ -246,10 +246,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigateToLi
   const pttKey = settings?.push_to_talk_key || 'Right Alt';
 
   const engineDetails = resolveEngineDetails(
-    stats.currentModel || settings?.inference_model || (settings as any)?.inferenceModel,
+    settings?.inference_model || (settings as any)?.inferenceModel || stats.currentModel,
     settings?.stt_provider || (stats as any)?.sttProvider,
-    stats.transcriptionMode || settings?.transcription_mode,
-    (stats as any)?.localInferenceProfile || settings?.local_inference_profile,
+    settings?.transcription_mode || stats.transcriptionMode,
+    settings?.local_inference_profile || (stats as any)?.localInferenceProfile,
     stats.remainingUsage,
     settings?.tenglish_mode_enabled
   );

@@ -1257,6 +1257,7 @@ fn saveSettings(app: AppHandle, state: State<'_, Arc<AppState>>, patch: Value) -
         }
     }
     emit_to_frontend(&app, "widgetConfigChanged", Some(cfg));
+    emit_to_frontend(&app, "usageUpdated", None);
     emit_to_frontend(&app, "settingsChanged", Some(json!({
         "inferenceModel": settings.inference_model,
         "cloudModel": settings.inference_model,
@@ -1441,16 +1442,21 @@ fn getGroqKeyStatus() -> Value {
 
 #[tauri::command]
 async fn testGroqKey(key: String) -> Value {
-    let key = key.trim();
-    if key.is_empty() {
+    let clean_key = CredentialsProvider::sanitize_key(&key);
+    if clean_key.is_empty() {
         return json!({ "success": false, "valid": false, "latencyMs": 0, "message": "API key cannot be empty" });
     }
 
     let start = std::time::Instant::now();
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .tcp_nodelay(true)
+        .timeout(std::time::Duration::from_secs(12))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
     let resp = client
         .get("https://api.groq.com/openai/v1/models")
-        .bearer_auth(key)
+        .bearer_auth(&clean_key)
         .send()
         .await;
 
@@ -1462,15 +1468,23 @@ async fn testGroqKey(key: String) -> Value {
                 "success": true,
                 "valid": true,
                 "latencyMs": latency_ms,
-                "message": "Groq API key is valid and connected!"
+                "message": format!("Groq API key is valid and connected! ({}ms)", latency_ms)
             })
         }
         Ok(res) => {
+            let status = res.status();
+            let msg = if status == reqwest::StatusCode::UNAUTHORIZED {
+                "Invalid API Key. Please verify your key at console.groq.com/keys".to_string()
+            } else if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                "Rate limit exceeded on Groq Cloud. Please try again shortly.".to_string()
+            } else {
+                format!("Groq API error ({})", status)
+            };
             json!({
                 "success": false,
                 "valid": false,
                 "latencyMs": latency_ms,
-                "message": format!("Groq API error: {}", res.status())
+                "message": msg
             })
         }
         Err(e) => {
@@ -1544,14 +1558,14 @@ fn getOpenRouterKeyStatus() -> Value {
 
 #[tauri::command]
 async fn testOpenRouterKey(key: String) -> Value {
-    let key = key.trim();
-    if key.is_empty() {
+    let clean_key = CredentialsProvider::sanitize_key(&key);
+    if clean_key.is_empty() {
         return json!({ "success": false, "valid": false, "latencyMs": 0, "message": "API key cannot be empty" });
     }
 
     let start = std::time::Instant::now();
     let or_client = OpenRouterClient::new();
-    match or_client.verify_key(key).await {
+    match or_client.verify_key(&clean_key).await {
         Ok(data) => {
             let latency_ms = start.elapsed().as_millis() as u64;
             let usage = data.get("data").and_then(|d| d.get("usage")).and_then(|u| u.as_f64());
@@ -1560,7 +1574,7 @@ async fn testOpenRouterKey(key: String) -> Value {
 
             let mut details = format!("OpenRouter key connected ({}ms)!", latency_ms);
             let mut balance_val = None;
-            if let Ok(cinfo) = or_client.fetch_credits(key).await {
+            if let Ok(cinfo) = or_client.fetch_credits(&clean_key).await {
                 balance_val = Some(cinfo.remaining_balance);
                 details = format!("Connected! Credits remaining: ${:.2} (Used: ${:.2} / Total: ${:.2})", cinfo.remaining_balance, cinfo.total_usage, cinfo.total_credits);
             } else if let (Some(u), Some(l)) = (usage, limit) {
@@ -1818,8 +1832,13 @@ fn compute_remaining_usage(state: &AppState, settings: &crate::storage::settings
 
     if primary_is_groq {
         let (used_secs, used_reqs) = state.history.get_today_groq_audio_seconds().unwrap_or((0.0, 0));
+        let memory_requests = state.whisper_requests_today.load(std::sync::atomic::Ordering::Relaxed) as u64;
+        let total_used_reqs = used_reqs.max(memory_requests);
         let rate_info = state.groq.get_rate_limit_info();
-        let remaining_requests = rate_info.remaining_requests.unwrap_or_else(|| 2000u64.saturating_sub(used_reqs));
+        let remaining_requests = match rate_info.remaining_requests {
+            Some(r) => r.min(2000u64.saturating_sub(total_used_reqs)),
+            None => 2000u64.saturating_sub(total_used_reqs),
+        };
         let daily_limit_seconds = 28800.0; // 8 hours daily limit
         let remaining_seconds = (daily_limit_seconds - used_secs).max(0.0);
 
